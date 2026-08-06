@@ -5,6 +5,10 @@ on:
     branches: ['**']
   pull_request:
     branches: [main]
+  # Lets a run be started by hand from the Actions tab, without an empty
+  # commit — useful when a run needs retrying for a reason that has nothing
+  # to do with the code.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
