@@ -1,0 +1,213 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+import { z } from 'zod'
+
+import { requireSession, scoped } from '@/lib/tenancy'
+import type { ContactRow, LifecycleStage } from '@/lib/database.types'
+
+const lifecycleStages = ['lead', 'qualified', 'customer', 'other'] as const
+
+const contactSchema = z.object({
+  first_name: z.string().trim().max(120).default(''),
+  last_name: z.string().trim().max(120).default(''),
+  email: z.string().trim().email().or(z.literal('')).default(''),
+  phone: z.string().trim().max(60).default(''),
+  company_id: z.string().uuid().or(z.literal('')).default(''),
+  owner_id: z.string().uuid().or(z.literal('')).default(''),
+  lifecycle_stage: z.enum(lifecycleStages).default('lead'),
+  source: z.string().trim().max(120).default(''),
+})
+
+export type ActionState = { ok?: boolean; error?: string; duplicates?: ContactRow[]; id?: string }
+
+function readCustomFields(formData: FormData): Record<string, string> {
+  const custom: Record<string, string> = {}
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith('custom.') && typeof value === 'string' && value.trim() !== '') {
+      custom[key.slice('custom.'.length)] = value.trim()
+    }
+  }
+  return custom
+}
+
+/**
+ * Duplicate detection on save (acceptance criterion 6.2): a matching email, or
+ * matching name + phone, comes back as a merge suggestion instead of silently
+ * creating a second record. `force` is the user saying "no, these are
+ * different people".
+ */
+export async function createContact(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const context = await requireSession()
+
+  const parsed = contactSchema.safeParse(Object.fromEntries(formData))
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid contact details' }
+  }
+  const input = parsed.data
+  const force = formData.get('force') === 'true'
+
+  if (!force) {
+    const { data: duplicates } = await context.supabase.rpc('find_duplicate_contacts', {
+      p_email: input.email || null,
+      p_first_name: input.first_name || null,
+      p_last_name: input.last_name || null,
+      p_phone: input.phone || null,
+      p_exclude_id: null,
+    })
+
+    if (duplicates && duplicates.length > 0) {
+      return { duplicates }
+    }
+  }
+
+  // No explicit owner? Routing rules decide (6.5), falling back to the creator.
+  let ownerId: string | null = input.owner_id || null
+  if (!ownerId) {
+    const { data: assignee } = await context.supabase.rpc('next_assignee', {
+      p_source: input.source || null,
+    })
+    ownerId = assignee ?? context.user.id
+  }
+
+  const { data, error } = await scoped(context, 'contacts')
+    .insert({
+      first_name: input.first_name,
+      last_name: input.last_name,
+      email: input.email || null,
+      phone: input.phone || null,
+      company_id: input.company_id || null,
+      owner_id: ownerId,
+      lifecycle_stage: input.lifecycle_stage as LifecycleStage,
+      source: input.source || null,
+      custom_fields: readCustomFields(formData),
+    })
+    .select('id')
+    .single()
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/contacts')
+  redirect(`/contacts/${data.id}`)
+}
+
+export async function updateContact(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Missing contact id' }
+
+  const parsed = contactSchema.safeParse(Object.fromEntries(formData))
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid contact details' }
+  }
+  const input = parsed.data
+
+  const { error } = await scoped(context, 'contacts')
+    .update({
+      first_name: input.first_name,
+      last_name: input.last_name,
+      email: input.email || null,
+      phone: input.phone || null,
+      company_id: input.company_id || null,
+      owner_id: input.owner_id || null,
+      lifecycle_stage: input.lifecycle_stage as LifecycleStage,
+      source: input.source || null,
+      custom_fields: readCustomFields(formData),
+    })
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/contacts')
+  revalidatePath(`/contacts/${id}`)
+  return { ok: true }
+}
+
+export async function deleteContact(formData: FormData) {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await scoped(context, 'contacts').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/contacts')
+  redirect('/contacts')
+}
+
+/** POST /contacts/{id}/merge, as a server action for the in-app merge flow. */
+export async function mergeContactsAction(formData: FormData) {
+  const context = await requireSession()
+  const targetId = String(formData.get('target_id') ?? '')
+  const sourceId = String(formData.get('source_id') ?? '')
+
+  const { error } = await context.supabase.rpc('merge_contacts', {
+    p_target_id: targetId,
+    p_source_id: sourceId,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/contacts')
+  redirect(`/contacts/${targetId}?merged=1`)
+}
+
+export async function setContactTags(formData: FormData) {
+  const context = await requireSession()
+  const contactId = String(formData.get('contact_id') ?? '')
+  const tagIds = formData.getAll('tag_ids').map(String).filter(Boolean)
+
+  await context.supabase
+    .from('contact_tags')
+    .delete()
+    .eq('organization_id', context.organizationId)
+    .eq('contact_id', contactId)
+
+  if (tagIds.length > 0) {
+    await scoped(context, 'contact_tags').insert(
+      tagIds.map((tagId) => ({ contact_id: contactId, tag_id: tagId })),
+    )
+  }
+
+  revalidatePath(`/contacts/${contactId}`)
+}
+
+const savedFilterSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  entity_type: z.enum(['contact', 'company', 'deal', 'campaign']).default('contact'),
+  filter_json: z.string(),
+  is_shared: z.boolean().default(false),
+})
+
+export async function saveFilter(formData: FormData) {
+  const context = await requireSession()
+
+  const parsed = savedFilterSchema.safeParse({
+    name: formData.get('name'),
+    entity_type: formData.get('entity_type') ?? 'contact',
+    filter_json: formData.get('filter_json') ?? '{}',
+    is_shared: formData.get('is_shared') === 'on',
+  })
+
+  if (!parsed.success) throw new Error('A saved filter needs a name')
+
+  const { error } = await scoped(context, 'saved_filters').insert({
+    name: parsed.data.name,
+    entity_type: parsed.data.entity_type,
+    filter_json: JSON.parse(parsed.data.filter_json),
+    is_shared: parsed.data.is_shared,
+    user_id: context.user.id,
+  })
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/contacts')
+}
+
+export async function deleteSavedFilter(formData: FormData) {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+  const returnTo = String(formData.get('return_to') ?? '/contacts')
+
+  await scoped(context, 'saved_filters').delete().eq('id', id)
+  revalidatePath(returnTo)
+}

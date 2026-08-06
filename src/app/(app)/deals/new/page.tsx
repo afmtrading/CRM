@@ -1,0 +1,51 @@
+import { requireSession, scoped } from '@/lib/tenancy'
+import { contactName } from '@/lib/format'
+import type { ContactRow, PipelineRow, StageRow, UserRow } from '@/lib/database.types'
+import { PageHeader } from '@/components/ui'
+
+import { createDeal } from '../actions'
+import { DealForm } from '../deal-form'
+
+export const metadata = { title: 'New deal · FLO CRM' }
+
+export default async function NewDealPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ contact_id?: string }>
+}) {
+  const { contact_id: contactId } = await searchParams
+  const context = await requireSession()
+
+  const [{ data: pipelines }, { data: stages }, { data: contacts }, { data: companies }, { data: owners }] =
+    await Promise.all([
+      scoped(context, 'pipelines').select('*').order('name'),
+      scoped(context, 'stages').select('*').order('order'),
+      scoped(context, 'contacts')
+        .select('id, first_name, last_name, email')
+        .is('duplicate_of_id', null)
+        .order('last_name')
+        .limit(500),
+      scoped(context, 'companies').select('id, name').order('name').limit(500),
+      scoped(context, 'users').select('*').eq('status', 'active').order('name'),
+    ])
+
+  return (
+    <>
+      <PageHeader title="New deal" />
+      <DealForm
+        action={createDeal}
+        pipelines={(pipelines ?? []) as PipelineRow[]}
+        stages={(stages ?? []) as StageRow[]}
+        contacts={((contacts ?? []) as ContactRow[]).map((contact) => ({
+          id: contact.id,
+          label: contactName(contact),
+        }))}
+        companies={(companies ?? []) as { id: string; name: string }[]}
+        owners={(owners ?? []) as UserRow[]}
+        defaultCurrency={context.organization.default_currency}
+        defaultContactId={contactId}
+        submitLabel="Create deal"
+      />
+    </>
+  )
+}
