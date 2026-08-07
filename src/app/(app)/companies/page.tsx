@@ -5,7 +5,7 @@ import { applyFilter, fieldsFor, filterFromSearchParams, groupRows, parseFilterC
 import { formatDate } from '@/lib/format'
 import type { CompanyRow, CustomFieldDefinitionRow, SavedFilterRow, UserRow } from '@/lib/database.types'
 import { FilterBar } from '@/components/filter-bar'
-import { EmptyState, PageHeader } from '@/components/ui'
+import { Avatar, EmptyState, PageHeader } from '@/components/ui'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 
@@ -88,7 +88,7 @@ export default async function CompaniesPage({
           {groups.map((group) => (
             <div key={group.key ?? 'all'} className="card overflow-hidden">
               {config.groupBy && (
-                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
                   <h2 className="text-sm font-semibold text-slate-800">{group.label}</h2>
                   <span className="text-xs text-slate-500">{group.rows.length}</span>
                 </div>
@@ -106,14 +106,17 @@ export default async function CompaniesPage({
                 </thead>
                 <tbody>
                   {group.rows.map((company) => (
-                    <tr key={company.id} className="hover:bg-slate-50">
+                    <tr key={company.id} className="transition-colors hover:bg-slate-50/70">
                       <td>
-                        <Link
-                          href={`/companies/${company.id}`}
-                          className="font-medium text-brand-700 hover:underline"
-                        >
-                          {company.name}
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Avatar name={company.name} className="h-9 w-9 rounded-xl" />
+                          <Link
+                            href={`/companies/${company.id}`}
+                            className="font-medium text-slate-900 hover:text-brand-700"
+                          >
+                            {company.name}
+                          </Link>
+                        </div>
                       </td>
                       <td className="text-slate-600">{company.domain ?? '—'}</td>
                       <td className="text-slate-600">{company.industry ?? '—'}</td>

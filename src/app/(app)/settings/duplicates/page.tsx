@@ -58,7 +58,7 @@ export default async function DuplicatesPage() {
 
             return (
               <div key={`${group.match_type}-${group.match_key}`} className="card overflow-hidden">
-                <header className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
+                <header className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
                   <h2 className="text-sm font-medium text-slate-800">
                     {group.match_type === 'email' ? 'Same email' : 'Same name and phone'} ·{' '}
                     <code className="rounded bg-white px-1 text-xs">{group.match_key}</code>

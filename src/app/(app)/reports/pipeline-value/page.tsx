@@ -153,7 +153,7 @@ export default async function PipelineValueReport({
       ) : (
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="card overflow-hidden lg:col-span-2">
-            <header className="border-b border-slate-200 px-4 py-3">
+            <header className="border-b border-slate-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-slate-800">By stage</h2>
             </header>
             <table className="table">
@@ -204,7 +204,7 @@ export default async function PipelineValueReport({
           </div>
 
           <div className="card overflow-hidden">
-            <header className="border-b border-slate-200 px-4 py-3">
+            <header className="border-b border-slate-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-slate-800">By owner</h2>
             </header>
             {byOwner.size === 0 ? (

@@ -1,11 +1,21 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-brand-50: #f0fdfa;
-  --color-brand-100: #ccfbf1;
-  --color-brand-500: #14b8a6;
-  --color-brand-600: #0d9488;
-  --color-brand-700: #0f766e;
+  /*
+   * Brand green. The app reads as one product across organizations, so the
+   * accent is fixed here; an organization's own primary_color is only used for
+   * its logo chip.
+   */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+
+  /* Cards float on a soft grey canvas rather than sitting on flat white. */
+  --color-canvas: #f4f5f7;
+
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -14,7 +24,7 @@
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-canvas text-slate-900 antialiased;
 }
 
 /*
@@ -24,49 +34,81 @@ body {
  * do with btn.
  */
 @utility card {
-  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+  @apply rounded-2xl border border-slate-200/80 bg-white;
+  box-shadow:
+    0 1px 2px rgb(16 24 40 / 0.04),
+    0 1px 3px rgb(16 24 40 / 0.06);
+}
+
+/* Lifts on hover — for cards that are themselves links. */
+@utility card-interactive {
+  @apply card transition-all duration-200 hover:-translate-y-0.5;
+
+  &:hover {
+    box-shadow:
+      0 4px 6px -1px rgb(16 24 40 / 0.07),
+      0 2px 4px -2px rgb(16 24 40 / 0.05);
+  }
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium
-         transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium
+         whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 @utility btn-primary {
-  @apply btn bg-brand-700 text-white hover:bg-brand-600;
+  @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700;
 }
 
 @utility btn-secondary {
-  @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  @apply btn border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50;
+}
+
+@utility btn-ghost {
+  @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900;
 }
 
 @utility btn-danger {
-  @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50;
+  @apply btn border border-red-200 bg-white text-red-600 hover:bg-red-50;
 }
 
 @utility input {
-  @apply w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900
-         placeholder:text-slate-400 focus:border-brand-600 focus:ring-1 focus:ring-brand-600
-         focus:outline-none;
+  @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900
+         transition-colors placeholder:text-slate-400 focus:border-brand-500
+         focus:ring-2 focus:ring-brand-500/20 focus:outline-none;
 }
 
 @utility label {
-  @apply mb-1 block text-xs font-medium text-slate-600;
+  @apply mb-1.5 block text-xs font-medium text-slate-600;
 }
 
 @utility badge {
-  @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+/* The rounded, tinted square that carries a stat card's icon. */
+@utility icon-chip {
+  @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl;
+}
+
+/* Circular monogram used wherever a person or company is listed. */
+@utility avatar {
+  @apply flex shrink-0 items-center justify-center rounded-full text-xs font-semibold;
 }
 
 @utility table {
   @apply w-full border-collapse text-sm;
 
   & th {
-    @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold
-           tracking-wide text-slate-600 uppercase;
+    @apply border-b border-slate-200 bg-slate-50/70 px-4 py-3 text-left text-xs font-semibold
+           tracking-wide text-slate-500 uppercase;
   }
 
   & td {
-    @apply border-b border-slate-100 px-3 py-2 align-middle text-slate-700;
+    @apply border-b border-slate-100 px-4 py-3 align-middle text-slate-700;
+  }
+
+  & tbody tr:last-child td {
+    @apply border-b-0;
   }
 }

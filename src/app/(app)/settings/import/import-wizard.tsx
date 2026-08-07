@@ -146,7 +146,7 @@ export function ImportWizard({ customFields }: { customFields: CustomFieldDefini
 
         {jobErrors.length > 0 && (
           <div className="card overflow-hidden">
-            <header className="border-b border-slate-200 px-4 py-3">
+            <header className="border-b border-slate-100 px-5 py-4">
               <h3 className="text-sm font-semibold text-slate-800">Rows that did not import</h3>
             </header>
             <table className="table">
@@ -243,7 +243,7 @@ export function ImportWizard({ customFields }: { customFields: CustomFieldDefini
       {step === 'map' && (
         <>
           <div className="card overflow-hidden">
-            <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-slate-800">Map the columns</h2>
               <span className="text-xs text-slate-500">
                 {rows.length} row{rows.length === 1 ? '' : 's'} in {fileName}
@@ -286,7 +286,7 @@ export function ImportWizard({ customFields }: { customFields: CustomFieldDefini
           </div>
 
           <div className="card overflow-hidden">
-            <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-slate-800">Preview</h2>
               <span className="text-xs text-slate-500">
                 {invalidCount === 0

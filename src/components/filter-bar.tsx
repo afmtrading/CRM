@@ -14,6 +14,7 @@ import {
   type FilterConfig,
 } from '@/lib/filters'
 import type { SavedFilterRow } from '@/lib/database.types'
+import { ExportIcon, FilterIcon, SearchIcon } from '@/components/icons'
 
 /**
  * The filter / group / save UI behind PRD 6.6. It owns no data: it edits a
@@ -68,21 +69,28 @@ export function FilterBar({
   exportParams.set('entity', entityType)
 
   return (
-    <div className="card mb-4">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-3">
-        <input
-          type="search"
-          placeholder="Search…"
-          className="input max-w-xs"
-          value={config.search ?? ''}
-          onChange={(event) => setConfig({ ...config, search: event.target.value })}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') apply(config)
-          }}
-        />
+    <div className="card mb-5">
+      <div className="flex flex-wrap items-center gap-2 p-3">
+        <div className="relative max-w-xs flex-1">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            placeholder="Search…"
+            className="input pl-9"
+            value={config.search ?? ''}
+            onChange={(event) => setConfig({ ...config, search: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') apply(config)
+            }}
+          />
+        </div>
 
         <button type="button" className="btn-secondary" onClick={() => setOpen(!open)}>
-          Filters{config.conditions.length > 0 ? ` (${config.conditions.length})` : ''}
+          <FilterIcon className="h-4 w-4" />
+          Filters
+          {config.conditions.length > 0 && (
+            <span className="badge bg-brand-100 px-1.5 text-brand-700">{config.conditions.length}</span>
+          )}
         </button>
 
         <select
@@ -126,6 +134,7 @@ export function FilterBar({
 
         <div className="ml-auto flex items-center gap-2">
           <Link className="btn-secondary" href={`/api/export?${exportParams.toString()}`} prefetch={false}>
+            <ExportIcon className="h-4 w-4" />
             Export CSV
           </Link>
           <button type="button" className="btn-secondary" onClick={() => setSaving(!saving)}>
@@ -135,7 +144,7 @@ export function FilterBar({
       </div>
 
       {open && (
-        <div className="space-y-2 border-b border-slate-200 p-3">
+        <div className="space-y-2 border-t border-slate-100 p-3">
           <div className="flex items-center gap-2 text-sm text-slate-600">
             Match
             <select
@@ -264,7 +273,7 @@ export function FilterBar({
       )}
 
       {saving && (
-        <form action={saveAction} className="flex flex-wrap items-end gap-2 border-b border-slate-200 p-3">
+        <form action={saveAction} className="flex flex-wrap items-end gap-2 border-t border-slate-100 p-3">
           <input type="hidden" name="entity_type" value={entityType} />
           <input type="hidden" name="filter_json" value={JSON.stringify(config)} />
           <div>

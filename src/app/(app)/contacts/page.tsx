@@ -17,13 +17,36 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { FilterBar } from '@/components/filter-bar'
-import { EmptyState, LifecycleBadge, PageHeader } from '@/components/ui'
+import {
+  Avatar,
+  EmptyState,
+  LifecycleBadge,
+  PageHeader,
+  ScoreMeter,
+  StatCard,
+  StatGrid,
+} from '@/components/ui'
+import {
+  AlertIcon,
+  AwardIcon,
+  ContactsIcon,
+  ImportIcon,
+  MailIcon,
+  PhoneIcon,
+  PlusIcon,
+  TrendingUpIcon,
+} from '@/components/icons'
 
 import { deleteSavedFilter, saveFilter } from './actions'
 
 export const metadata = { title: 'Contacts · FLO CRM' }
 
 const PAGE_SIZE = 200
+
+/** Filter conditions travel in the URL as a JSON `f` param (see filterToSearchParams). */
+const UNASSIGNED_VIEW = `/contacts?f=${encodeURIComponent(
+  JSON.stringify([{ field: 'owner_id', operator: 'is_empty', value: '' }]),
+)}`
 
 export default async function ContactsPage({
   searchParams,
@@ -40,6 +63,21 @@ export default async function ContactsPage({
       scoped(context, 'users').select('*').order('name'),
       scoped(context, 'companies').select('id, name').order('name'),
     ])
+
+  // Headline counts describe the whole book of contacts, not the filtered view,
+  // so they stay stable while someone narrows the list below. Started here and
+  // awaited after the list query so the two run concurrently.
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+
+  const live = () => scoped(context, 'contacts').select('id', { count: 'exact', head: true }).is('duplicate_of_id', null)
+  const statsPromise = Promise.all([
+    live(),
+    live().gte('created_at', monthStart.toISOString()),
+    live().eq('lifecycle_stage', 'customer'),
+    live().is('owner_id', null),
+  ])
 
   // A ?view=<id> link replays a saved filter; anything else comes from the URL.
   const viewId = typeof params.view === 'string' ? params.view : null
@@ -81,6 +119,7 @@ export default async function ContactsPage({
   query = applyFilter(query as any, config, 'contact') as any
 
   const { data: contacts, count, error } = await query.limit(PAGE_SIZE)
+  const [totalStat, newThisMonth, customers, unassigned] = await statsPromise
 
   const rows = (contacts ?? []) as (ContactRow & { companies: { id: string; name: string } | null })[]
 
@@ -98,17 +137,48 @@ export default async function ContactsPage({
     <>
       <PageHeader
         title="Contacts"
-        description={
-          count !== null && count !== undefined
-            ? `${count} contact${count === 1 ? '' : 's'}${count > PAGE_SIZE ? ` · showing first ${PAGE_SIZE}` : ''}`
-            : undefined
-        }
+        description="Manage your contacts"
         actions={
-          <Link href="/contacts/new" className="btn-primary">
-            New contact
-          </Link>
+          <>
+            <Link href="/settings/import" className="btn-secondary">
+              <ImportIcon className="h-4 w-4" />
+              Import
+            </Link>
+            <Link href="/contacts/new" className="btn-primary">
+              <PlusIcon className="h-4 w-4" />
+              New contact
+            </Link>
+          </>
         }
       />
+
+      <StatGrid>
+        <StatCard
+          label="Total contacts"
+          value={String(totalStat.count ?? 0)}
+          icon={ContactsIcon}
+          tone="blue"
+        />
+        <StatCard
+          label="New this month"
+          value={String(newThisMonth.count ?? 0)}
+          icon={TrendingUpIcon}
+          tone="brand"
+          trend={
+            (newThisMonth.count ?? 0) > 0
+              ? { label: `+${newThisMonth.count}`, direction: 'up' }
+              : undefined
+          }
+        />
+        <StatCard label="Customers" value={String(customers.count ?? 0)} icon={AwardIcon} tone="amber" />
+        <StatCard
+          label="Unassigned"
+          value={String(unassigned.count ?? 0)}
+          icon={AlertIcon}
+          tone={(unassigned.count ?? 0) > 0 ? 'red' : 'violet'}
+          href={(unassigned.count ?? 0) > 0 ? UNASSIGNED_VIEW : undefined}
+        />
+      </StatGrid>
 
       <FilterBar
         fields={fields}
@@ -123,6 +193,15 @@ export default async function ContactsPage({
       {error && (
         <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error.message}
+        </p>
+      )}
+
+      {/* Keeps the truncation warning visible: the list stops at PAGE_SIZE, and
+          silently showing 200 of 900 would misrepresent the view. */}
+      {count !== null && count !== undefined && rows.length > 0 && (
+        <p className="mb-3 text-xs text-slate-500">
+          {count} contact{count === 1 ? '' : 's'} match this view
+          {count > PAGE_SIZE ? ` · showing the first ${PAGE_SIZE}` : ''}
         </p>
       )}
 
@@ -141,61 +220,100 @@ export default async function ContactsPage({
           {groups.map((group) => (
             <div key={group.key ?? 'all'} className="card overflow-hidden">
               {config.groupBy && (
-                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
-                  <h2 className="text-sm font-semibold text-slate-800">{group.label}</h2>
-                  <span className="text-xs text-slate-500">{group.rows.length}</span>
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                  <h2 className="text-sm font-semibold text-slate-900">{group.label}</h2>
+                  <span className="badge bg-slate-100 text-slate-600">{group.rows.length}</span>
                 </div>
               )}
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Company</th>
-                    <th>Stage</th>
-                    <th>Score</th>
-                    <th>Owner</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.rows.map((contact) => (
-                    <tr key={contact.id} className="hover:bg-slate-50">
-                      <td>
-                        <Link
-                          href={`/contacts/${contact.id}`}
-                          className="font-medium text-brand-700 hover:underline"
-                        >
-                          {contactName(contact)}
-                        </Link>
-                      </td>
-                      <td className="text-slate-600">{contact.email ?? '—'}</td>
-                      <td className="text-slate-600">{contact.phone ?? '—'}</td>
-                      <td className="text-slate-600">
-                        {contact.companies ? (
-                          <Link
-                            href={`/companies/${contact.companies.id}`}
-                            className="hover:text-brand-700 hover:underline"
-                          >
-                            {contact.companies.name}
-                          </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td>
-                        <LifecycleBadge stage={contact.lifecycle_stage} />
-                      </td>
-                      <td className="font-medium text-slate-700">{contact.lead_score}</td>
-                      <td className="text-slate-600">
-                        {contact.owner_id ? (ownerNames.get(contact.owner_id) ?? '—') : '—'}
-                      </td>
-                      <td className="text-slate-500">{formatDate(contact.created_at)}</td>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Company</th>
+                      <th>Stage</th>
+                      <th>Score</th>
+                      <th>Owner</th>
+                      <th>Created</th>
+                      <th className="text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {group.rows.map((contact) => {
+                      const name = contactName(contact)
+                      return (
+                        <tr key={contact.id} className="transition-colors hover:bg-slate-50/70">
+                          {/* Email and phone ride under the name rather than
+                              taking their own columns — the row stays scannable
+                              and the contact details stay together. */}
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <Avatar name={name} />
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/contacts/${contact.id}`}
+                                  className="block truncate font-medium text-slate-900 hover:text-brand-700"
+                                >
+                                  {name}
+                                </Link>
+                                <span className="block truncate text-xs text-slate-500">
+                                  {contact.email ?? contact.phone ?? 'No contact details'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="text-slate-600">
+                            {contact.companies ? (
+                              <Link
+                                href={`/companies/${contact.companies.id}`}
+                                className="hover:text-brand-700 hover:underline"
+                              >
+                                {contact.companies.name}
+                              </Link>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td>
+                            <LifecycleBadge stage={contact.lifecycle_stage} />
+                          </td>
+                          <td>
+                            <ScoreMeter score={contact.lead_score} />
+                          </td>
+                          <td className="text-slate-600">
+                            {contact.owner_id ? (ownerNames.get(contact.owner_id) ?? '—') : '—'}
+                          </td>
+                          <td className="text-slate-500">{formatDate(contact.created_at)}</td>
+                          <td>
+                            <div className="flex items-center justify-end gap-1">
+                              {contact.phone && (
+                                <a
+                                  href={`tel:${contact.phone}`}
+                                  aria-label={`Call ${name}`}
+                                  title={contact.phone}
+                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                >
+                                  <PhoneIcon className="h-4 w-4" />
+                                </a>
+                              )}
+                              {contact.email && (
+                                <a
+                                  href={`mailto:${contact.email}`}
+                                  aria-label={`Email ${name}`}
+                                  title={contact.email}
+                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                >
+                                  <MailIcon className="h-4 w-4" />
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </div>

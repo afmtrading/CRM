@@ -107,7 +107,7 @@ export function Kanban({
                       setDragging(null)
                       setHoverStage(null)
                     }}
-                    className={`cursor-grab rounded-md border border-slate-200 bg-white p-2.5 shadow-sm active:cursor-grabbing ${
+                    className={`cursor-grab rounded-xl border border-slate-200 bg-white p-3 shadow-sm active:cursor-grabbing ${
                       dragging === deal.id ? 'opacity-50' : ''
                     }`}
                   >
