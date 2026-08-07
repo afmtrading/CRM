@@ -1,5 +1,6 @@
 import { requireAdmin, scoped } from '@/lib/tenancy'
 import type { CustomFieldDefinitionRow } from '@/lib/database.types'
+import { CONTACT_CARDS, CONTACT_CARD_LABELS } from '@/lib/field-options'
 import { PageHeader, Section } from '@/components/ui'
 
 import { createCustomField, deleteCustomField } from '../actions'
@@ -36,6 +37,7 @@ export default async function CustomFieldsPage() {
                     <th>Label</th>
                     <th>Key</th>
                     <th>Type</th>
+                    <th>Card</th>
                     <th>Options</th>
                     <th />
                   </tr>
@@ -49,6 +51,15 @@ export default async function CustomFieldsPage() {
                         <code className="rounded bg-slate-100 px-1 text-xs">{field.key}</code>
                       </td>
                       <td className="text-slate-600">{field.field_type}</td>
+                      <td className="text-slate-600">
+                        {field.entity_type === 'contact' ? (
+                          <span className="badge bg-slate-100 text-slate-600">
+                            {CONTACT_CARD_LABELS[field.card] ?? field.card}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td className="text-slate-500">
                         {Array.isArray(field.options) && field.options.length > 0
                           ? (field.options as string[]).join(', ')
@@ -111,7 +122,24 @@ export default async function CustomFieldsPage() {
                 <option value="date">Date</option>
                 <option value="boolean">Yes / no</option>
                 <option value="select">Select</option>
+                <option value="multiselect">Multi-select</option>
               </select>
+            </div>
+
+            <div>
+              <label className="label" htmlFor="field-card">
+                Card
+              </label>
+              <select id="field-card" name="card" className="input" defaultValue="additional">
+                {CONTACT_CARDS.map((card) => (
+                  <option key={card.key} value={card.key}>
+                    {card.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Which card the field appears on, for contacts.
+              </p>
             </div>
 
             <div>
@@ -119,7 +147,9 @@ export default async function CustomFieldsPage() {
                 Options
               </label>
               <input id="field-options" name="options" className="input" placeholder="Gold, Silver, Bronze" />
-              <p className="mt-1 text-xs text-slate-400">Comma separated. Select fields only.</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Comma separated. Select and multi-select fields only.
+              </p>
             </div>
 
             <button type="submit" className="btn-primary w-full">

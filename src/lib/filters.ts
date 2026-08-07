@@ -131,7 +131,12 @@ export function fieldsFor(
     .map((definition) => ({
       key: `custom_fields.${definition.key}`,
       label: definition.label,
-      type: definition.field_type === 'select' ? 'enum' : definition.field_type,
+      // Both select flavours filter as an enum: a multiselect stores an array,
+      // but the question a filter asks of it is still "is this one of these".
+      type:
+        definition.field_type === 'select' || definition.field_type === 'multiselect'
+          ? 'enum'
+          : definition.field_type,
       groupable: true,
       sortable: false,
       options: Array.isArray(definition.options)

@@ -1,5 +1,5 @@
 import { requireSession, scoped } from '@/lib/tenancy'
-import type { CustomFieldDefinitionRow, UserRow } from '@/lib/database.types'
+import type { CustomFieldDefinitionRow, FieldOptionRow, UserRow } from '@/lib/database.types'
 import { PageHeader } from '@/components/ui'
 
 import { createContact } from '../actions'
@@ -10,11 +10,13 @@ export const metadata = { title: 'New contact · FLO CRM' }
 export default async function NewContactPage() {
   const context = await requireSession()
 
-  const [{ data: companies }, { data: owners }, { data: customFields }] = await Promise.all([
-    scoped(context, 'companies').select('id, name').order('name'),
-    scoped(context, 'users').select('*').eq('status', 'active').order('name'),
-    scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
-  ])
+  const [{ data: companies }, { data: owners }, { data: customFields }, { data: fieldOptions }] =
+    await Promise.all([
+      scoped(context, 'companies').select('id, name').order('name'),
+      scoped(context, 'users').select('*').eq('status', 'active').order('name'),
+      scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
+      scoped(context, 'field_options').select('*').order('order'),
+    ])
 
   return (
     <>
@@ -24,6 +26,7 @@ export default async function NewContactPage() {
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
+        fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
         submitLabel="Create contact"
       />
     </>

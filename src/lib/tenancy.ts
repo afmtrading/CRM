@@ -123,6 +123,7 @@ export type TenantTable =
   | 'lead_score_rules'
   | 'assignment_rules'
   | 'custom_field_definitions'
+  | 'field_options'
   | 'users'
 
 /**

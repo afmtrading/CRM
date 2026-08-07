@@ -46,6 +46,7 @@ const ADMIN_NAV = [
   { href: '/settings/lead-scoring', label: 'Lead scoring', icon: <ScoringIcon className={ICON} /> },
   { href: '/settings/assignment', label: 'Assignment', icon: <AssignmentIcon className={ICON} /> },
   { href: '/settings/fields', label: 'Custom fields', icon: <FieldsIcon className={ICON} /> },
+  { href: '/settings/field-options', label: 'Field options', icon: <TagIcon className={ICON} /> },
   { href: '/settings/tags', label: 'Tags', icon: <TagIcon className={ICON} /> },
   { href: '/settings/import', label: 'Import', icon: <ImportIcon className={ICON} /> },
   { href: '/settings/duplicates', label: 'Duplicates', icon: <DuplicatesIcon className={ICON} /> },

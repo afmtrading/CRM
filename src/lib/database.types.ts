@@ -37,7 +37,34 @@ export type ScoreCondition =
   | 'greater_than'
   | 'less_than'
 export type AssignmentStrategy = 'round_robin' | 'by_source' | 'fixed_user'
-export type CustomFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select'
+export type CustomFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'multiselect'
+
+/** Which card on the contact record a field is rendered under. */
+export type ContactCard = 'details' | 'influence' | 'additional' | 'digital'
+
+/** Palette a select option's colour is drawn from (mapped to classes in lib/field-options.ts). */
+export type OptionColor =
+  | 'slate'
+  | 'blue'
+  | 'green'
+  | 'amber'
+  | 'red'
+  | 'violet'
+  | 'cyan'
+  | 'rose'
+  | 'orange'
+  | 'teal'
+
+/** The five option lists an organization configures for its contacts. */
+export type OptionFieldKey =
+  | 'specialty_market'
+  | 'customer_type'
+  | 'role_type'
+  | 'priority'
+  | 'credibility'
+
+/** A named link on the Digital card, beyond the known social networks. */
+export type ContactLink = { label: string; url: string }
 
 type Row<T> = T
 type Insert<T, Optional extends keyof T> = Omit<T, Optional> & Partial<Pick<T, Optional>>
@@ -79,8 +106,36 @@ export type ContactRow = {
   custom_fields: Record<string, Json>
   lead_score: number
   duplicate_of_id: string | null
+  job_title: string | null
+  office_phone: string | null
+  specialty_market: string[]
+  customer_type: string[]
+  role_type: string[]
+  priority: string | null
+  credibility: string | null
+  birthday: string | null
+  /** Markdown, rendered through renderMarkdown() — never raw HTML. */
+  notes: string | null
+  website: string | null
+  facebook: string | null
+  instagram: string | null
+  tiktok: string | null
+  x_twitter: string | null
+  links: ContactLink[]
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
+}
+
+export type FieldOptionRow = {
+  id: string
+  organization_id: string
+  field_key: OptionFieldKey
+  value: string
+  color: OptionColor
+  order: number
+  created_at: string
 }
 
 export type CompanyRow = {
@@ -225,6 +280,7 @@ export type CustomFieldDefinitionRow = {
   field_type: CustomFieldType
   options: Json
   order: number
+  card: ContactCard
   created_at: string
 }
 
@@ -280,6 +336,23 @@ export interface Database {
         | 'custom_fields'
         | 'lead_score'
         | 'duplicate_of_id'
+        | 'job_title'
+        | 'office_phone'
+        | 'specialty_market'
+        | 'customer_type'
+        | 'role_type'
+        | 'priority'
+        | 'credibility'
+        | 'birthday'
+        | 'notes'
+        | 'website'
+        | 'facebook'
+        | 'instagram'
+        | 'tiktok'
+        | 'x_twitter'
+        | 'links'
+        | 'created_by'
+        | 'updated_by'
         | 'created_at'
         | 'updated_at'
       >
@@ -363,8 +436,9 @@ export interface Database {
       >
       custom_field_definitions: TableDef<
         CustomFieldDefinitionRow,
-        'id' | 'entity_type' | 'field_type' | 'options' | 'order' | 'created_at'
+        'id' | 'entity_type' | 'field_type' | 'options' | 'order' | 'card' | 'created_at'
       >
+      field_options: TableDef<FieldOptionRow, 'id' | 'color' | 'order' | 'created_at'>
     }
     Views: Record<string, never>
     Functions: {
@@ -386,6 +460,7 @@ export interface Database {
         Args: { p_pipeline_id?: string | null; p_owner_id?: string | null }
         Returns: PipelineValueReportRow[]
       }
+      create_birthday_reminders: { Args: { p_days_ahead?: number }; Returns: number }
       current_org_id: { Args: Record<string, never>; Returns: string }
       is_org_admin: { Args: Record<string, never>; Returns: boolean }
     }

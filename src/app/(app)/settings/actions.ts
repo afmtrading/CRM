@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
+import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
+import type { OptionColor } from '@/lib/database.types'
 
 // -----------------------------------------------------------------------------
 // Pipelines and stages (PRD 6.3)
@@ -342,6 +344,8 @@ export async function createCustomField(formData: FormData) {
     label,
     field_type: String(formData.get('field_type') ?? 'text') as never,
     options,
+    // Which card on the contact record this field is rendered under.
+    card: String(formData.get('card') ?? 'additional') as never,
   })
 
   if (error) {
@@ -417,4 +421,83 @@ export async function updateOrganization(formData: FormData) {
 
   if (error) throw new Error(error.message)
   revalidatePath('/', 'layout')
+}
+
+// -----------------------------------------------------------------------------
+// Select field options
+//
+// The values behind Specialty market, Customer type, Role type, Priority and
+// Credibility, each with its own colour. An organization owns its own lists —
+// editing one never touches another's.
+// -----------------------------------------------------------------------------
+
+export async function createFieldOption(formData: FormData) {
+  const context = await requireAdmin()
+
+  const fieldKey = String(formData.get('field_key') ?? '')
+  const value = String(formData.get('value') ?? '').trim()
+  const color = String(formData.get('color') ?? 'slate')
+
+  if (!OPTION_FIELDS.some((field) => field.key === fieldKey)) {
+    throw new Error('Unknown field')
+  }
+  if (!value) throw new Error('An option needs a value')
+  if (!OPTION_COLORS.includes(color as OptionColor)) throw new Error('Unknown colour')
+
+  // Appended to the end of its own list.
+  const { data: existing } = await scoped(context, 'field_options')
+    .select('order')
+    .eq('field_key', fieldKey)
+    .order('order', { ascending: false })
+    .limit(1)
+
+  const nextOrder = ((existing ?? []) as { order: number }[])[0]?.order ?? 0
+
+  const { error } = await scoped(context, 'field_options').insert({
+    field_key: fieldKey as never,
+    value,
+    color: color as never,
+    order: nextOrder + 1,
+  })
+
+  if (error) {
+    throw new Error(
+      error.message.includes('duplicate key')
+        ? `"${value}" is already an option for that field.`
+        : error.message,
+    )
+  }
+
+  revalidatePath('/settings/field-options')
+}
+
+export async function updateFieldOptionColor(formData: FormData) {
+  const context = await requireAdmin()
+
+  const id = String(formData.get('id') ?? '')
+  const color = String(formData.get('color') ?? '')
+  if (!OPTION_COLORS.includes(color as OptionColor)) throw new Error('Unknown colour')
+
+  const { error } = await scoped(context, 'field_options')
+    .update({ color: color as never })
+    .eq('id', id)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/settings/field-options')
+}
+
+/**
+ * Deleting an option leaves it on any contact already holding it: the value is
+ * stored on the record, not as a foreign key. Those contacts keep showing the
+ * old value in a neutral colour until they are edited, which is better than
+ * silently rewriting history.
+ */
+export async function deleteFieldOption(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await scoped(context, 'field_options').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/field-options')
 }

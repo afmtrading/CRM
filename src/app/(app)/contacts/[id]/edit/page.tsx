@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import type { ContactRow, CustomFieldDefinitionRow, UserRow } from '@/lib/database.types'
+import type { ContactRow, CustomFieldDefinitionRow, FieldOptionRow, UserRow } from '@/lib/database.types'
 import { contactName } from '@/lib/format'
 import { PageHeader } from '@/components/ui'
 
@@ -18,11 +18,13 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
 
   if (!contact) notFound()
 
-  const [{ data: companies }, { data: owners }, { data: customFields }] = await Promise.all([
-    scoped(context, 'companies').select('id, name').order('name'),
-    scoped(context, 'users').select('*').eq('status', 'active').order('name'),
-    scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
-  ])
+  const [{ data: companies }, { data: owners }, { data: customFields }, { data: fieldOptions }] =
+    await Promise.all([
+      scoped(context, 'companies').select('id, name').order('name'),
+      scoped(context, 'users').select('*').eq('status', 'active').order('name'),
+      scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
+      scoped(context, 'field_options').select('*').order('order'),
+    ])
 
   return (
     <>
@@ -33,6 +35,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
+        fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
         submitLabel="Save changes"
       />
     </>
