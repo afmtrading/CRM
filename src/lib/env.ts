@@ -13,13 +13,19 @@ function read(name: string): string | undefined {
 }
 
 export function supabaseUrl(): string {
-  const value = read('NEXT_PUBLIC_SUPABASE_URL')
+  // Static property access, not read(): Next.js only inlines NEXT_PUBLIC_*
+  // vars into the browser bundle when the reference is a literal like
+  // `process.env.NEXT_PUBLIC_SUPABASE_URL`. This function is called from
+  // client components (src/lib/supabase/client.ts), so a dynamic
+  // `process.env[name]` lookup would resolve to undefined in the browser
+  // even though the value is set.
+  const value = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!value) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set')
   return value
 }
 
 export function supabaseAnonKey(): string {
-  const value = read('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  const value = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!value) throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not set')
   return value
 }
