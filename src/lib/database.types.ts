@@ -133,7 +133,9 @@ export type ContactRow = {
 export type FieldOptionRow = {
   id: string
   organization_id: string
-  field_key: OptionFieldKey
+  entity_type: FilterEntityType
+  /** A built-in OptionFieldKey, or a custom field's own key. */
+  field_key: string
   value: string
   color: OptionColor
   order: number
@@ -478,7 +480,7 @@ export interface Database {
         CustomFieldDefinitionRow,
         'id' | 'entity_type' | 'field_type' | 'options' | 'order' | 'card' | 'created_at'
       >
-      field_options: TableDef<FieldOptionRow, 'id' | 'color' | 'order' | 'created_at'>
+      field_options: TableDef<FieldOptionRow, 'id' | 'entity_type' | 'color' | 'order' | 'created_at'>
     }
     Views: Record<string, never>
     Functions: {

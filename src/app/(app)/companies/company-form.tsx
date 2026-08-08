@@ -122,7 +122,11 @@ export function CompanyForm({
           <span className="label">Addresses</span>
           <AddressesEditor defaultValue={addresses} />
         </div>
-        <CustomFieldInputs fields={customByCard('details')} values={custom} />
+        <CustomFieldInputs
+          fields={customByCard('details')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
       </FormCard>
 
       <FormCard title={COMPANY_CARDS[1].label} description={COMPANY_CARDS[1].description}>
@@ -139,7 +143,11 @@ export function CompanyForm({
             ))}
           </select>
         </div>
-        <CustomFieldInputs fields={customByCard('additional')} values={custom} />
+        <CustomFieldInputs
+          fields={customByCard('additional')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
         <div className="sm:col-span-2">
           <span className="label">Notes</span>
           <NotesEditor defaultValue={company?.notes ?? ''} id="company-notes" />
@@ -177,7 +185,11 @@ export function CompanyForm({
           </label>
           <input id="x_twitter" name="x_twitter" className="input" placeholder="handle or URL" defaultValue={company?.x_twitter ?? ''} />
         </div>
-        <CustomFieldInputs fields={customByCard('digital')} values={custom} />
+        <CustomFieldInputs
+          fields={customByCard('digital')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
         <div className="sm:col-span-2">
           <span className="label">Other links</span>
           <p className="mb-2 text-xs text-slate-400">

@@ -170,7 +170,11 @@ export function ContactForm({
             defaultValue={contact?.office_phone ?? ''}
           />
         </div>
-        <CustomFieldInputs fields={customByCard('details')} values={custom} />
+        <CustomFieldInputs
+          fields={customByCard('details')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
       </FormCard>
 
       <FormCard title={CONTACT_CARDS[1].label} description={CONTACT_CARDS[1].description}>
@@ -190,7 +194,11 @@ export function ContactForm({
             selected={contact?.credibility ?? null}
           />
         </div>
-        <CustomFieldInputs fields={customByCard('influence')} values={custom} />
+        <CustomFieldInputs
+          fields={customByCard('influence')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
       </FormCard>
 
       <FormCard title={CONTACT_CARDS[2].label} description={CONTACT_CARDS[2].description}>
@@ -249,7 +257,11 @@ export function ContactForm({
           />
           <p className="mt-1 text-xs text-slate-400">A reminder task appears three days before.</p>
         </div>
-        <CustomFieldInputs fields={customByCard('additional')} values={custom} />
+        <CustomFieldInputs
+          fields={customByCard('additional')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
         <div className="sm:col-span-2">
           <span className="label">Notes</span>
           <NotesEditor defaultValue={contact?.notes ?? ''} />
@@ -299,7 +311,11 @@ export function ContactForm({
           </label>
           <input id="x_twitter" name="x_twitter" className="input" placeholder="handle or URL" defaultValue={contact?.x_twitter ?? ''} />
         </div>
-        <CustomFieldInputs fields={customByCard('digital')} values={custom} />
+        <CustomFieldInputs
+          fields={customByCard('digital')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
         <div className="sm:col-span-2">
           <span className="label">Other links</span>
           <LinksEditor defaultValue={links} />

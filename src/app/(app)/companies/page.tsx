@@ -31,10 +31,11 @@ export default async function CompaniesPage({
       scoped(context, 'saved_filters').select('*').eq('entity_type', 'company'),
       scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company'),
       scoped(context, 'users').select('*').order('name'),
-      scoped(context, 'field_options').select('*').eq('field_key', 'specialty_market').order('order'),
+      scoped(context, 'field_options').select('*').order('order'),
     ])
 
-  const marketOptions = (fieldOptions ?? []) as FieldOptionRow[]
+  const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
+  const marketOptions = allOptions.filter((option) => option.field_key === 'specialty_market')
 
   const viewId = typeof params.view === 'string' ? params.view : null
   const savedView = viewId
@@ -43,7 +44,11 @@ export default async function CompaniesPage({
   const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
 
   const ownerList = (owners ?? []) as UserRow[]
-  const fields = fieldsFor('company', (customFields ?? []) as CustomFieldDefinitionRow[]).map((field) =>
+  const fields = fieldsFor(
+    'company',
+    (customFields ?? []) as CustomFieldDefinitionRow[],
+    allOptions,
+  ).map((field) =>
     field.key === 'owner_id'
       ? { ...field, options: ownerList.map((u) => ({ value: u.id, label: u.name || u.email })) }
       : field,

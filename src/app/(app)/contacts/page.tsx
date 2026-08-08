@@ -1,22 +1,23 @@
-import Link from 'next/link'
+import Link from "next/link";
 
-import { requireSession, scoped } from '@/lib/tenancy'
+import { requireSession, scoped } from "@/lib/tenancy";
 import {
   applyFilter,
   fieldsFor,
   filterFromSearchParams,
   groupRows,
   parseFilterConfig,
-} from '@/lib/filters'
-import { contactName, formatDate } from '@/lib/format'
+} from "@/lib/filters";
+import { contactName, formatDate } from "@/lib/format";
 import type {
+  FieldOptionRow,
   ContactRow,
   CompanyRow,
   CustomFieldDefinitionRow,
   SavedFilterRow,
   UserRow,
-} from '@/lib/database.types'
-import { FilterBar } from '@/components/filter-bar'
+} from "@/lib/database.types";
+import { FilterBar } from "@/components/filter-bar";
 import {
   Avatar,
   EmptyState,
@@ -25,7 +26,7 @@ import {
   ScoreMeter,
   StatCard,
   StatGrid,
-} from '@/components/ui'
+} from "@/components/ui";
 import {
   AlertIcon,
   AwardIcon,
@@ -35,103 +36,135 @@ import {
   PhoneIcon,
   PlusIcon,
   TrendingUpIcon,
-} from '@/components/icons'
+} from "@/components/icons";
 
-import { deleteSavedFilter, saveFilter } from './actions'
+import { deleteSavedFilter, saveFilter } from "./actions";
 
-export const metadata = { title: 'Contacts · FLO CRM' }
+export const metadata = { title: "Contacts · FLO CRM" };
 
-const PAGE_SIZE = 200
+const PAGE_SIZE = 200;
 
 /** Filter conditions travel in the URL as a JSON `f` param (see filterToSearchParams). */
 const UNASSIGNED_VIEW = `/contacts?f=${encodeURIComponent(
-  JSON.stringify([{ field: 'owner_id', operator: 'is_empty', value: '' }]),
-)}`
+  JSON.stringify([{ field: "owner_id", operator: "is_empty", value: "" }]),
+)}`;
 
 export default async function ContactsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams
-  const context = await requireSession()
+  const params = await searchParams;
+  const context = await requireSession();
 
-  const [{ data: savedFilters }, { data: customFields }, { data: owners }, { data: companies }] =
-    await Promise.all([
-      scoped(context, 'saved_filters').select('*').eq('entity_type', 'contact'),
-      scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact'),
-      scoped(context, 'users').select('*').order('name'),
-      scoped(context, 'companies').select('id, name').order('name'),
-    ])
+  const [
+    { data: savedFilters },
+    { data: customFields },
+    { data: owners },
+    { data: companies },
+    { data: contactFieldOptions },
+  ] = await Promise.all([
+    scoped(context, "saved_filters").select("*").eq("entity_type", "contact"),
+    scoped(context, "custom_field_definitions")
+      .select("*")
+      .eq("entity_type", "contact"),
+    scoped(context, "users").select("*").order("name"),
+    scoped(context, "companies").select("id, name").order("name"),
+    scoped(context, "field_options")
+      .select("*")
+      .eq("entity_type", "contact")
+      .order("order"),
+  ]);
 
   // Headline counts describe the whole book of contacts, not the filtered view,
   // so they stay stable while someone narrows the list below. Started here and
   // awaited after the list query so the two run concurrently.
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  monthStart.setHours(0, 0, 0, 0)
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
 
-  const live = () => scoped(context, 'contacts').select('id', { count: 'exact', head: true }).is('duplicate_of_id', null)
+  const live = () =>
+    scoped(context, "contacts")
+      .select("id", { count: "exact", head: true })
+      .is("duplicate_of_id", null);
   const statsPromise = Promise.all([
     live(),
-    live().gte('created_at', monthStart.toISOString()),
-    live().eq('lifecycle_stage', 'customer'),
-    live().is('owner_id', null),
-  ])
+    live().gte("created_at", monthStart.toISOString()),
+    live().eq("lifecycle_stage", "customer"),
+    live().is("owner_id", null),
+  ]);
 
   // A ?view=<id> link replays a saved filter; anything else comes from the URL.
-  const viewId = typeof params.view === 'string' ? params.view : null
+  const viewId = typeof params.view === "string" ? params.view : null;
   const savedView = viewId
-    ? ((savedFilters ?? []) as SavedFilterRow[]).find((filter) => filter.id === viewId)
-    : undefined
+    ? ((savedFilters ?? []) as SavedFilterRow[]).find(
+        (filter) => filter.id === viewId,
+      )
+    : undefined;
 
   const config = savedView
     ? parseFilterConfig(savedView.filter_json)
-    : filterFromSearchParams(params)
+    : filterFromSearchParams(params);
 
-  const ownerList = (owners ?? []) as UserRow[]
-  const companyList = (companies ?? []) as Pick<CompanyRow, 'id' | 'name'>[]
+  const ownerList = (owners ?? []) as UserRow[];
+  const companyList = (companies ?? []) as Pick<CompanyRow, "id" | "name">[];
 
-  const fields = fieldsFor('contact', (customFields ?? []) as CustomFieldDefinitionRow[]).map(
-    (field) => {
-      if (field.key === 'owner_id') {
-        return {
-          ...field,
-          options: ownerList.map((user) => ({ value: user.id, label: user.name || user.email })),
-        }
-      }
-      if (field.key === 'company_id') {
-        return {
-          ...field,
-          options: companyList.map((company) => ({ value: company.id, label: company.name })),
-        }
-      }
-      return field
-    },
-  )
+  const fields = fieldsFor(
+    "contact",
+    (customFields ?? []) as CustomFieldDefinitionRow[],
+    (contactFieldOptions ?? []) as FieldOptionRow[],
+  ).map((field) => {
+    if (field.key === "owner_id") {
+      return {
+        ...field,
+        options: ownerList.map((user) => ({
+          value: user.id,
+          label: user.name || user.email,
+        })),
+      };
+    }
+    if (field.key === "company_id") {
+      return {
+        ...field,
+        options: companyList.map((company) => ({
+          value: company.id,
+          label: company.name,
+        })),
+      };
+    }
+    return field;
+  });
 
-  let query = scoped(context, 'contacts')
-    .select('*, companies(id, name)', { count: 'exact' })
+  let query = scoped(context, "contacts")
+    .select("*, companies(id, name)", { count: "exact" })
     // Merged-away records stay in the table as tombstones; the list shows survivors.
-    .is('duplicate_of_id', null)
+    .is("duplicate_of_id", null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query = applyFilter(query as any, config, 'contact') as any
+  query = applyFilter(query as any, config, "contact") as any;
 
-  const { data: contacts, count, error } = await query.limit(PAGE_SIZE)
-  const [totalStat, newThisMonth, customers, unassigned] = await statsPromise
+  const { data: contacts, count, error } = await query.limit(PAGE_SIZE);
+  const [totalStat, newThisMonth, customers, unassigned] = await statsPromise;
 
-  const rows = (contacts ?? []) as (ContactRow & { companies: { id: string; name: string } | null })[]
+  const rows = (contacts ?? []) as (ContactRow & {
+    companies: { id: string; name: string } | null;
+  })[];
 
-  const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
-  const companyNames = new Map(companyList.map((company) => [company.id, company.name]))
+  const ownerNames = new Map(
+    ownerList.map((user) => [user.id, user.name || user.email]),
+  );
+  const companyNames = new Map(
+    companyList.map((company) => [company.id, company.name]),
+  );
 
   const groups = groupRows(rows, config.groupBy, (value) => {
-    if (value === null) return 'None'
-    if (config.groupBy === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
-    if (config.groupBy === 'company_id') return companyNames.get(value) ?? 'Unknown company'
-    return value
-  })
+    if (value === null) return "None";
+    if (config.groupBy === "owner_id")
+      return ownerNames.get(value) ?? "Unknown user";
+    if (config.groupBy === "company_id")
+      return companyNames.get(value) ?? "Unknown company";
+    return value;
+  });
 
   return (
     <>
@@ -166,16 +199,21 @@ export default async function ContactsPage({
           tone="brand"
           trend={
             (newThisMonth.count ?? 0) > 0
-              ? { label: `+${newThisMonth.count}`, direction: 'up' }
+              ? { label: `+${newThisMonth.count}`, direction: "up" }
               : undefined
           }
         />
-        <StatCard label="Customers" value={String(customers.count ?? 0)} icon={AwardIcon} tone="amber" />
+        <StatCard
+          label="Customers"
+          value={String(customers.count ?? 0)}
+          icon={AwardIcon}
+          tone="amber"
+        />
         <StatCard
           label="Unassigned"
           value={String(unassigned.count ?? 0)}
           icon={AlertIcon}
-          tone={(unassigned.count ?? 0) > 0 ? 'red' : 'violet'}
+          tone={(unassigned.count ?? 0) > 0 ? "red" : "violet"}
           href={(unassigned.count ?? 0) > 0 ? UNASSIGNED_VIEW : undefined}
         />
       </StatGrid>
@@ -200,8 +238,8 @@ export default async function ContactsPage({
           silently showing 200 of 900 would misrepresent the view. */}
       {count !== null && count !== undefined && rows.length > 0 && (
         <p className="mb-3 text-xs text-slate-500">
-          {count} contact{count === 1 ? '' : 's'} match this view
-          {count > PAGE_SIZE ? ` · showing the first ${PAGE_SIZE}` : ''}
+          {count} contact{count === 1 ? "" : "s"} match this view
+          {count > PAGE_SIZE ? ` · showing the first ${PAGE_SIZE}` : ""}
         </p>
       )}
 
@@ -218,11 +256,15 @@ export default async function ContactsPage({
       ) : (
         <div className="space-y-6">
           {groups.map((group) => (
-            <div key={group.key ?? 'all'} className="card overflow-hidden">
+            <div key={group.key ?? "all"} className="card overflow-hidden">
               {config.groupBy && (
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-                  <h2 className="text-sm font-semibold text-slate-900">{group.label}</h2>
-                  <span className="badge bg-slate-100 text-slate-600">{group.rows.length}</span>
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    {group.label}
+                  </h2>
+                  <span className="badge bg-slate-100 text-slate-600">
+                    {group.rows.length}
+                  </span>
                 </div>
               )}
               <div className="overflow-x-auto">
@@ -240,9 +282,12 @@ export default async function ContactsPage({
                   </thead>
                   <tbody>
                     {group.rows.map((contact) => {
-                      const name = contactName(contact)
+                      const name = contactName(contact);
                       return (
-                        <tr key={contact.id} className="transition-colors hover:bg-slate-50/70">
+                        <tr
+                          key={contact.id}
+                          className="transition-colors hover:bg-slate-50/70"
+                        >
                           {/* Email and phone ride under the name rather than
                               taking their own columns — the row stays scannable
                               and the contact details stay together. */}
@@ -257,7 +302,9 @@ export default async function ContactsPage({
                                   {name}
                                 </Link>
                                 <span className="block truncate text-xs text-slate-500">
-                                  {contact.email ?? contact.phone ?? 'No contact details'}
+                                  {contact.email ??
+                                    contact.phone ??
+                                    "No contact details"}
                                 </span>
                               </div>
                             </div>
@@ -271,7 +318,7 @@ export default async function ContactsPage({
                                 {contact.companies.name}
                               </Link>
                             ) : (
-                              '—'
+                              "—"
                             )}
                           </td>
                           <td>
@@ -281,9 +328,13 @@ export default async function ContactsPage({
                             <ScoreMeter score={contact.lead_score} />
                           </td>
                           <td className="text-slate-600">
-                            {contact.owner_id ? (ownerNames.get(contact.owner_id) ?? '—') : '—'}
+                            {contact.owner_id
+                              ? (ownerNames.get(contact.owner_id) ?? "—")
+                              : "—"}
                           </td>
-                          <td className="text-slate-500">{formatDate(contact.created_at)}</td>
+                          <td className="text-slate-500">
+                            {formatDate(contact.created_at)}
+                          </td>
                           <td>
                             <div className="flex items-center justify-end gap-1">
                               {contact.phone && (
@@ -309,7 +360,7 @@ export default async function ContactsPage({
                             </div>
                           </td>
                         </tr>
-                      )
+                      );
                     })}
                   </tbody>
                 </table>
@@ -319,5 +370,5 @@ export default async function ContactsPage({
         </div>
       )}
     </>
-  )
+  );
 }

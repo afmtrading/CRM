@@ -125,6 +125,12 @@ export function baseFieldsFor(entity: FilterEntityType): FieldDef[] {
 export function fieldsFor(
   entity: FilterEntityType,
   customFields: CustomFieldDefinitionRow[] = [],
+  /**
+   * Option values for select-type custom fields. They live in field_options
+   * alongside the built-in lists, so the filter dropdown has to be told about
+   * them rather than reading the definition.
+   */
+  fieldOptions: { entity_type: string; field_key: string; value: string }[] = [],
 ): FieldDef[] {
   const custom: FieldDef[] = customFields
     .filter((definition) => definition.entity_type === entity)
@@ -139,9 +145,12 @@ export function fieldsFor(
           : definition.field_type,
       groupable: true,
       sortable: false,
-      options: Array.isArray(definition.options)
-        ? (definition.options as string[]).map((o) => ({ value: String(o), label: String(o) }))
-        : undefined,
+      options: fieldOptions
+        .filter(
+          (option) =>
+            option.entity_type === definition.entity_type && option.field_key === definition.key,
+        )
+        .map((option) => ({ value: option.value, label: option.value })),
     }))
 
   return [...baseFieldsFor(entity), ...custom]

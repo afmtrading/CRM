@@ -37,7 +37,7 @@ function NoOptions() {
   return (
     <p className="text-xs text-slate-500">
       No options defined.{' '}
-      <Link href="/settings/field-options" className="text-brand-700 hover:underline">
+      <Link href="/settings/fields" className="text-brand-700 hover:underline">
         Add some
       </Link>
     </p>
@@ -314,18 +314,29 @@ export function AddressesEditor({ defaultValue }: { defaultValue: CompanyAddress
 }
 
 /** Renders whichever custom fields an admin assigned to the card being drawn. */
+/**
+ * Renders whichever custom fields an admin assigned to the card being drawn.
+ *
+ * Select and multi-select fields draw their values from field_options, the same
+ * table the built-in select fields use, so a custom field gets coloured chips
+ * and one editor rather than a second, plainer mechanism.
+ */
 export function CustomFieldInputs({
   fields,
   values,
+  fieldOptions = [],
 }: {
   fields: CustomFieldDefinitionRow[]
   values: Record<string, unknown>
+  fieldOptions?: FieldOptionRow[]
 }) {
   return (
     <>
       {fields.map((field) => {
         const raw = values[field.key]
-        const options = Array.isArray(field.options) ? (field.options as string[]).map(String) : []
+        const options = fieldOptions.filter(
+          (option) => option.entity_type === field.entity_type && option.field_key === field.key,
+        )
         const id = `custom.${field.key}`
 
         if (field.field_type === 'multiselect') {
@@ -333,43 +344,28 @@ export function CustomFieldInputs({
           return (
             <div key={field.id} className="sm:col-span-2">
               <span className="label">{field.label}</span>
-              <div className="flex flex-wrap gap-1.5">
-                {options.map((option) => (
-                  <label key={option} className="cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name={id}
-                      value={option}
-                      defaultChecked={selected.includes(option)}
-                      className="peer sr-only"
-                    />
-                    <span className="badge bg-slate-100 text-slate-600 opacity-50 peer-checked:bg-brand-100 peer-checked:text-brand-700 peer-checked:opacity-100">
-                      {option}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              <ChipGroup name={id} options={options} selected={selected} />
             </div>
           )
         }
 
         const value = raw === undefined || raw === null ? '' : String(raw)
 
+        if (field.field_type === 'select') {
+          return (
+            <div key={field.id}>
+              <span className="label">{field.label}</span>
+              <RadioChips name={id} options={options} selected={value || null} />
+            </div>
+          )
+        }
+
         return (
           <div key={field.id}>
             <label className="label" htmlFor={id}>
               {field.label}
             </label>
-            {field.field_type === 'select' ? (
-              <select id={id} name={id} className="input" defaultValue={value}>
-                <option value="">—</option>
-                {options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            ) : (
+            {(
               <input
                 id={id}
                 name={id}

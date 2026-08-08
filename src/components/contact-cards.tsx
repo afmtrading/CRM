@@ -109,27 +109,46 @@ export function ExternalLink({ url, label }: { url: string | null; label?: strin
   )
 }
 
-/** Renders whatever custom fields an admin assigned to a given card. */
+/**
+ * Renders whatever custom fields an admin assigned to a given card.
+ *
+ * Select and multi-select values come back as coloured badges, using the same
+ * option list the built-in select fields draw from — a custom field should not
+ * look like a lesser citizen on the record.
+ */
 export function CustomFieldValues({
   fields,
   values,
+  fieldOptions = [],
 }: {
-  fields: { id: string; key: string; label: string; field_type: string }[]
+  fields: { id: string; key: string; label: string; field_type: string; entity_type: string }[]
   values: Record<string, unknown>
+  fieldOptions?: FieldOptionRow[]
 }) {
   return (
     <>
       {fields.map((field) => {
         const raw = values[field.key]
+        const isEmpty = raw === undefined || raw === null || raw === ''
+
+        if (field.field_type === 'select' || field.field_type === 'multiselect') {
+          const options = fieldOptions.filter(
+            (option) => option.entity_type === field.entity_type && option.field_key === field.key,
+          )
+          const list = Array.isArray(raw) ? raw.map(String) : isEmpty ? [] : [String(raw)]
+
+          return (
+            <Field key={field.id} label={field.label}>
+              <OptionBadges values={list} options={options} />
+            </Field>
+          )
+        }
+
         const display = Array.isArray(raw) ? raw.join(', ') : raw
 
         return (
           <Field key={field.id} label={field.label}>
-            {display === undefined || display === null || display === '' ? (
-              <Empty />
-            ) : (
-              String(display)
-            )}
+            {isEmpty ? <Empty /> : String(display)}
           </Field>
         )
       })}

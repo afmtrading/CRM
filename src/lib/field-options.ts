@@ -25,6 +25,20 @@ export const CONTACT_CARD_LABELS = Object.fromEntries(
   CONTACT_CARDS.map((card) => [card.key, card.label]),
 ) as Record<ContactCard, string>
 
+export const COMPANY_CARD_LABELS = Object.fromEntries(
+  COMPANY_CARDS.map((card) => [card.key, card.label]),
+) as Record<ContactCard, string>
+
+/**
+ * Cards share their keys across both records but not their names — 'details' is
+ * "Contact details" on a person and "Company info" on a business.
+ */
+export function cardLabel(entity: string, card: ContactCard): string {
+  return entity === 'company'
+    ? (COMPANY_CARD_LABELS[card] ?? CONTACT_CARD_LABELS[card] ?? card)
+    : (CONTACT_CARD_LABELS[card] ?? card)
+}
+
 /**
  * Option colours resolve to fixed class strings rather than arbitrary hex, so
  * Tailwind can see every class at build time. The database constrains `color`
@@ -251,4 +265,55 @@ export function daysUntilBirthday(birthday: string | null | undefined, today = n
   if (next < start) next = new Date(start.getFullYear() + 1, month, day)
 
   return Math.round((next.getTime() - start.getTime()) / 86_400_000)
+}
+
+
+/**
+ * Everything that has an option list: the five built-in fields plus any custom
+ * select or multi-select an organization has defined. Settings renders one list
+ * from this, so there is a single place to manage option values and colours.
+ */
+export type OptionOwner = {
+  key: string
+  label: string
+  entity: 'contact' | 'company'
+  multiple: boolean
+  builtIn: boolean
+  /** Where the field appears on the record. */
+  card: ContactCard
+}
+
+export function optionOwners(
+  customFields: { key: string; label: string; entity_type: string; field_type: string; card: ContactCard }[],
+): OptionOwner[] {
+  const builtIn: OptionOwner[] = OPTION_FIELDS.map((field) => ({
+    key: field.key,
+    label: field.label,
+    entity: field.entity,
+    multiple: field.multiple,
+    builtIn: true,
+    card: field.card,
+  }))
+
+  const custom: OptionOwner[] = customFields
+    .filter((field) => field.field_type === 'select' || field.field_type === 'multiselect')
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+      entity: field.entity_type === 'company' ? 'company' : 'contact',
+      multiple: field.field_type === 'multiselect',
+      builtIn: false,
+      card: field.card,
+    }))
+
+  return [...builtIn, ...custom]
+}
+
+/** Options for one field, in display order. */
+export function optionsForField(
+  options: { entity_type: string; field_key: string }[],
+  entity: string,
+  key: string,
+) {
+  return options.filter((option) => option.entity_type === entity && option.field_key === key)
 }

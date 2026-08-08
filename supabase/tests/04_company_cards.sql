@@ -252,4 +252,92 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Custom fields and option lists share one mechanism.
+-- =============================================================================
+do $$
+declare
+  v_org_a uuid := (select id from fixture where key = 'org_a');
+  v_field uuid;
+begin
+  raise notice 'Unified option lists:';
+
+  set local role postgres;
+
+  insert into custom_field_definitions (organization_id, entity_type, key, label, field_type, card)
+  values (v_org_a, 'contact', 'region', 'Region', 'multiselect', 'details')
+  returning id into v_field;
+
+  insert into field_options (organization_id, entity_type, field_key, value, color, "order")
+  values (v_org_a, 'contact', 'region', 'EMEA', 'blue', 1),
+         (v_org_a, 'contact', 'region', 'APAC', 'green', 2);
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'contact' and field_key = 'region') = 2,
+    'a custom field stores its options in the same table as the built-in fields'
+  );
+
+  -- A contact and a company may each define a "region" field; they are
+  -- different fields and must not share one list.
+  insert into field_options (organization_id, entity_type, field_key, value, color, "order")
+  values (v_org_a, 'company', 'region', 'Ontario', 'amber', 1);
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'company' and field_key = 'region') = 1,
+    'the same key on a different record type keeps its own list'
+  );
+
+  -- Renaming the field carries its options across.
+  update custom_field_definitions set key = 'territory' where id = v_field;
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'contact' and field_key = 'territory') = 2,
+    'renaming a custom field moves its options with it'
+  );
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'contact' and field_key = 'region') = 0,
+    'nothing is left behind under the old key'
+  );
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'company' and field_key = 'region') = 1,
+    'the company list of the same name is untouched by the rename'
+  );
+
+  -- Deleting the field takes its options with it rather than orphaning them.
+  delete from custom_field_definitions where id = v_field;
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'contact' and field_key = 'territory') = 0,
+    'deleting a custom field removes its options'
+  );
+end;
+$$;
+
+-- The built-in lists now carry the record type they describe.
+do $$
+declare
+  v_org_a uuid := (select id from fixture where key = 'org_a');
+begin
+  perform test_assert(
+    (select distinct entity_type::text from field_options
+      where organization_id = v_org_a and field_key = 'specialty_market') = 'company',
+    'specialty market options belong to the company'
+  );
+
+  perform test_assert(
+    (select distinct entity_type::text from field_options
+      where organization_id = v_org_a and field_key = 'priority') = 'contact',
+    'priority options belong to the contact'
+  );
+end;
+$$;
+
 rollback;

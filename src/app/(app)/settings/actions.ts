@@ -435,12 +435,25 @@ export async function createFieldOption(formData: FormData) {
   const context = await requireAdmin()
 
   const fieldKey = String(formData.get('field_key') ?? '')
+  const entityType = String(formData.get('entity_type') ?? 'contact')
   const value = String(formData.get('value') ?? '').trim()
   const color = String(formData.get('color') ?? 'slate')
 
-  if (!OPTION_FIELDS.some((field) => field.key === fieldKey)) {
-    throw new Error('Unknown field')
+  // Either a built-in field, or a custom select this organization defined.
+  const isBuiltIn = OPTION_FIELDS.some(
+    (field) => field.key === fieldKey && field.entity === entityType,
+  )
+  if (!isBuiltIn) {
+    const { data: definition } = await scoped(context, 'custom_field_definitions')
+      .select('id')
+      .eq('entity_type', entityType)
+      .eq('key', fieldKey)
+      .in('field_type', ['select', 'multiselect'])
+      .limit(1)
+
+    if (((definition ?? []) as unknown[]).length === 0) throw new Error('Unknown field')
   }
+
   if (!value) throw new Error('An option needs a value')
   if (!OPTION_COLORS.includes(color as OptionColor)) throw new Error('Unknown colour')
 
@@ -448,13 +461,15 @@ export async function createFieldOption(formData: FormData) {
   const { data: existing } = await scoped(context, 'field_options')
     .select('order')
     .eq('field_key', fieldKey)
+    .eq('entity_type', entityType)
     .order('order', { ascending: false })
     .limit(1)
 
   const nextOrder = ((existing ?? []) as { order: number }[])[0]?.order ?? 0
 
   const { error } = await scoped(context, 'field_options').insert({
-    field_key: fieldKey as never,
+    field_key: fieldKey,
+    entity_type: entityType as never,
     value,
     color: color as never,
     order: nextOrder + 1,
@@ -468,7 +483,7 @@ export async function createFieldOption(formData: FormData) {
     )
   }
 
-  revalidatePath('/settings/field-options')
+  revalidatePath('/settings/fields')
 }
 
 export async function updateFieldOptionColor(formData: FormData) {
@@ -483,7 +498,7 @@ export async function updateFieldOptionColor(formData: FormData) {
     .eq('id', id)
 
   if (error) throw new Error(error.message)
-  revalidatePath('/settings/field-options')
+  revalidatePath('/settings/fields')
 }
 
 /**
@@ -499,5 +514,5 @@ export async function deleteFieldOption(formData: FormData) {
   const { error } = await scoped(context, 'field_options').delete().eq('id', id)
   if (error) throw new Error(error.message)
 
-  revalidatePath('/settings/field-options')
+  revalidatePath('/settings/fields')
 }

@@ -1,15 +1,20 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
-import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import { contactName, formatCurrency, formatDate, formatDateTime } from '@/lib/format'
+import { requireSession, scoped, firstRow } from "@/lib/tenancy";
+import {
+  contactName,
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+} from "@/lib/format";
 import {
   CONTACT_CARDS,
   daysUntilBirthday,
   renderMarkdown,
   safeUrl,
   socialUrl,
-} from '@/lib/field-options'
+} from "@/lib/field-options";
 import type {
   ActivityRow,
   ContactCard,
@@ -20,10 +25,20 @@ import type {
   FieldOptionRow,
   TagRow,
   UserRow,
-} from '@/lib/database.types'
-import { ActivityComposer, ActivityTimeline } from '@/components/activity-timeline'
-import { Avatar, DealStatusBadge, LifecycleBadge, PageHeader, ScoreMeter, Section } from '@/components/ui'
-import { CalendarIcon } from '@/components/icons'
+} from "@/lib/database.types";
+import {
+  ActivityComposer,
+  ActivityTimeline,
+} from "@/components/activity-timeline";
+import {
+  Avatar,
+  DealStatusBadge,
+  LifecycleBadge,
+  PageHeader,
+  ScoreMeter,
+  Section,
+} from "@/components/ui";
+import { CalendarIcon } from "@/components/icons";
 import {
   CardLink,
   ContactMethod,
@@ -34,31 +49,33 @@ import {
   OptionBadge,
   OptionBadges,
   optionColor,
-} from '@/components/contact-cards'
+} from "@/components/contact-cards";
 
-import { deleteContact, mergeContactsAction, setContactTags } from '../actions'
+import { deleteContact, mergeContactsAction, setContactTags } from "../actions";
 
 export default async function ContactDetailPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<{ merged?: string }>
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ merged?: string }>;
 }) {
-  const { id } = await params
-  const { merged } = await searchParams
-  const context = await requireSession()
+  const { id } = await params;
+  const { merged } = await searchParams;
+  const context = await requireSession();
 
   const contact = await firstRow<
-    ContactRow & { companies: { id: string; name: string; domain: string | null } | null }
+    ContactRow & {
+      companies: { id: string; name: string; domain: string | null } | null;
+    }
   >(
-    scoped(context, 'contacts')
-      .select('*, companies(id, name, domain)')
-      .eq('id', id)
+    scoped(context, "contacts")
+      .select("*, companies(id, name, domain)")
+      .eq("id", id)
       .maybeSingle(),
-  )
+  );
 
-  if (!contact) notFound()
+  if (!contact) notFound();
 
   const [
     { data: activities },
@@ -70,55 +87,71 @@ export default async function ContactDetailPage({
     { data: customFieldDefs },
     { data: duplicates },
   ] = await Promise.all([
-    scoped(context, 'activities')
-      .select('*')
-      .eq('related_to_type', 'contact')
-      .eq('related_to_id', id)
-      .order('occurred_at', { ascending: false })
+    scoped(context, "activities")
+      .select("*")
+      .eq("related_to_type", "contact")
+      .eq("related_to_id", id)
+      .order("occurred_at", { ascending: false })
       .limit(100),
-    scoped(context, 'deals').select('*, stages(name)').eq('contact_id', id).order('created_at', { ascending: false }),
-    scoped(context, 'users').select('*').order('name'),
-    scoped(context, 'tags').select('*').order('name'),
-    scoped(context, 'contact_tags').select('tag_id').eq('contact_id', id),
-    scoped(context, 'field_options').select('*').order('order'),
-    scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
-    context.supabase.rpc('find_duplicate_contacts', {
+    scoped(context, "deals")
+      .select("*, stages(name)")
+      .eq("contact_id", id)
+      .order("created_at", { ascending: false }),
+    scoped(context, "users").select("*").order("name"),
+    scoped(context, "tags").select("*").order("name"),
+    scoped(context, "contact_tags").select("tag_id").eq("contact_id", id),
+    scoped(context, "field_options").select("*").order("order"),
+    scoped(context, "custom_field_definitions")
+      .select("*")
+      .eq("entity_type", "contact")
+      .order("order"),
+    context.supabase.rpc("find_duplicate_contacts", {
       p_email: contact.email,
       p_first_name: contact.first_name,
       p_last_name: contact.last_name,
       p_phone: contact.phone,
       p_exclude_id: contact.id,
     }),
-  ])
+  ]);
 
-  const duplicateList = (duplicates ?? []) as ContactRow[]
-  const userList = (users ?? []) as UserRow[]
-  const tagList = (tags ?? []) as TagRow[]
-  const selectedTagIds = new Set(((contactTags ?? []) as { tag_id: string }[]).map((t) => t.tag_id))
-  const dealRows = (deals ?? []) as (DealRow & { stages: { name: string } | null })[]
+  const duplicateList = (duplicates ?? []) as ContactRow[];
+  const userList = (users ?? []) as UserRow[];
+  const tagList = (tags ?? []) as TagRow[];
+  const selectedTagIds = new Set(
+    ((contactTags ?? []) as { tag_id: string }[]).map((t) => t.tag_id),
+  );
+  const dealRows = (deals ?? []) as (DealRow & {
+    stages: { name: string } | null;
+  })[];
 
-  const options = (fieldOptions ?? []) as FieldOptionRow[]
-  const optionsFor = (key: string) => options.filter((option) => option.field_key === key)
+  const options = (fieldOptions ?? []) as FieldOptionRow[];
+  const optionsFor = (key: string) =>
+    options.filter((option) => option.field_key === key);
 
   const userName = (userId: string | null) => {
-    if (!userId) return null
-    const user = userList.find((candidate) => candidate.id === userId)
-    return user ? user.name || user.email : null
-  }
+    if (!userId) return null;
+    const user = userList.find((candidate) => candidate.id === userId);
+    return user ? user.name || user.email : null;
+  };
 
   // Custom fields are grouped by the card their admin assigned them to.
-  const customFields = (customFieldDefs ?? []) as CustomFieldDefinitionRow[]
-  const customByCard = (card: ContactCard) => customFields.filter((field) => field.card === card)
-  const customValues = (contact.custom_fields ?? {}) as Record<string, unknown>
+  const customFields = (customFieldDefs ?? []) as CustomFieldDefinitionRow[];
+  const customByCard = (card: ContactCard) =>
+    customFields.filter((field) => field.card === card);
+  const customValues = (contact.custom_fields ?? {}) as Record<string, unknown>;
 
-  const name = contactName(contact)
-  const notesHtml = renderMarkdown(contact.notes)
-  const untilBirthday = daysUntilBirthday(contact.birthday)
-  const extraLinks = Array.isArray(contact.links) ? (contact.links as ContactLink[]) : []
+  const name = contactName(contact);
+  const notesHtml = renderMarkdown(contact.notes);
+  const untilBirthday = daysUntilBirthday(contact.birthday);
+  const extraLinks = Array.isArray(contact.links)
+    ? (contact.links as ContactLink[])
+    : [];
 
   // The Digital card falls back to the company's domain, so a contact inherits
   // their employer's website without it being typed twice.
-  const companyWebsite = safeUrl(contact.website ?? contact.companies?.domain ?? null)
+  const companyWebsite = safeUrl(
+    contact.website ?? contact.companies?.domain ?? null,
+  );
 
   return (
     <>
@@ -142,14 +175,18 @@ export default async function ContactDetailPage({
 
       {merged && (
         <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">
-          Contacts merged. Deals and activities from the duplicate now live here.
+          Contacts merged. Deals and activities from the duplicate now live
+          here.
         </p>
       )}
 
       {contact.duplicate_of_id && (
         <p className="mb-4 rounded-xl border border-slate-300 bg-slate-100 px-3.5 py-2.5 text-sm text-slate-700">
-          This record was merged into{' '}
-          <Link href={`/contacts/${contact.duplicate_of_id}`} className="font-medium text-brand-700 hover:underline">
+          This record was merged into{" "}
+          <Link
+            href={`/contacts/${contact.duplicate_of_id}`}
+            className="font-medium text-brand-700 hover:underline"
+          >
             another contact
           </Link>
           . It is kept so existing links still resolve.
@@ -161,7 +198,7 @@ export default async function ContactDetailPage({
           <CalendarIcon className="h-4 w-4 shrink-0" />
           {untilBirthday === 0
             ? `It is ${name}'s birthday today.`
-            : `${name}'s birthday is in ${untilBirthday} day${untilBirthday === 1 ? '' : 's'}.`}
+            : `${name}'s birthday is in ${untilBirthday} day${untilBirthday === 1 ? "" : "s"}.`}
         </p>
       )}
 
@@ -169,15 +206,24 @@ export default async function ContactDetailPage({
       {duplicateList.length > 0 && !contact.duplicate_of_id && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <p className="text-sm font-medium text-amber-900">
-            Possible duplicate{duplicateList.length === 1 ? '' : 's'} of this contact
+            Possible duplicate{duplicateList.length === 1 ? "" : "s"} of this
+            contact
           </p>
           <ul className="mt-2 space-y-2">
             {duplicateList.map((duplicate) => (
-              <li key={duplicate.id} className="flex flex-wrap items-center gap-3 text-sm">
-                <Link href={`/contacts/${duplicate.id}`} className="font-medium text-brand-700 hover:underline">
+              <li
+                key={duplicate.id}
+                className="flex flex-wrap items-center gap-3 text-sm"
+              >
+                <Link
+                  href={`/contacts/${duplicate.id}`}
+                  className="font-medium text-brand-700 hover:underline"
+                >
                   {contactName(duplicate)}
                 </Link>
-                <span className="text-slate-500">{duplicate.email ?? duplicate.phone ?? ''}</span>
+                <span className="text-slate-500">
+                  {duplicate.email ?? duplicate.phone ?? ""}
+                </span>
                 <form action={mergeContactsAction}>
                   <input type="hidden" name="target_id" value={id} />
                   <input type="hidden" name="source_id" value={duplicate.id} />
@@ -200,7 +246,7 @@ export default async function ContactDetailPage({
             <div className="min-w-0">
               <p className="truncate font-semibold text-slate-900">{name}</p>
               <p className="truncate text-xs text-slate-500">
-                {contact.job_title ?? 'No job title'}
+                {contact.job_title ?? "No job title"}
               </p>
             </div>
           </div>
@@ -223,9 +269,17 @@ export default async function ContactDetailPage({
               <ContactMethod value={contact.phone} kind="phone" label={name} />
             </Field>
             <Field label="Office phone" wide>
-              <ContactMethod value={contact.office_phone} kind="phone" label={name} />
+              <ContactMethod
+                value={contact.office_phone}
+                kind="phone"
+                label={name}
+              />
             </Field>
-            <CustomFieldValues fields={customByCard('details')} values={customValues} />
+            <CustomFieldValues
+              fields={customByCard("details")}
+              values={customValues}
+              fieldOptions={options}
+            />
           </dl>
         </Section>
       </div>
@@ -257,13 +311,18 @@ export default async function ContactDetailPage({
           <Section
             title="Deals"
             actions={
-              <Link href={`/deals/new?contact_id=${id}`} className="btn-secondary py-1">
+              <Link
+                href={`/deals/new?contact_id=${id}`}
+                className="btn-secondary py-1"
+              >
                 New deal
               </Link>
             }
           >
             {dealRows.length === 0 ? (
-              <p className="text-sm text-slate-500">No deals linked to this contact.</p>
+              <p className="text-sm text-slate-500">
+                No deals linked to this contact.
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="table">
@@ -280,11 +339,14 @@ export default async function ContactDetailPage({
                     {dealRows.map((deal) => (
                       <tr key={deal.id}>
                         <td>
-                          <Link href={`/deals/${deal.id}`} className="font-medium text-brand-700 hover:underline">
+                          <Link
+                            href={`/deals/${deal.id}`}
+                            className="font-medium text-brand-700 hover:underline"
+                          >
                             {deal.name}
                           </Link>
                         </td>
-                        <td>{deal.stages?.name ?? '—'}</td>
+                        <td>{deal.stages?.name ?? "—"}</td>
                         <td>{formatCurrency(deal.value, deal.currency)}</td>
                         <td>
                           <DealStatusBadge status={deal.status} />
@@ -304,13 +366,19 @@ export default async function ContactDetailPage({
           <Section title={CONTACT_CARDS[1].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
               <Field label="Role type" wide>
-                <OptionBadges values={contact.role_type} options={optionsFor('role_type')} />
+                <OptionBadges
+                  values={contact.role_type}
+                  options={optionsFor("role_type")}
+                />
               </Field>
               <Field label="Priority">
                 {contact.priority ? (
                   <OptionBadge
                     value={contact.priority}
-                    color={optionColor(optionsFor('priority'), contact.priority)}
+                    color={optionColor(
+                      optionsFor("priority"),
+                      contact.priority,
+                    )}
                   />
                 ) : (
                   <Empty />
@@ -320,20 +388,29 @@ export default async function ContactDetailPage({
                 {contact.credibility ? (
                   <OptionBadge
                     value={contact.credibility}
-                    color={optionColor(optionsFor('credibility'), contact.credibility)}
+                    color={optionColor(
+                      optionsFor("credibility"),
+                      contact.credibility,
+                    )}
                   />
                 ) : (
                   <Empty />
                 )}
               </Field>
-              <CustomFieldValues fields={customByCard('influence')} values={customValues} />
+              <CustomFieldValues
+                fields={customByCard("influence")}
+                values={customValues}
+                fieldOptions={options}
+              />
             </dl>
           </Section>
 
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Owner">{userName(contact.owner_id) ?? <Empty />}</Field>
+              <Field label="Owner">
+                {userName(contact.owner_id) ?? <Empty />}
+              </Field>
               <Field label="Lead score">
                 <ScoreMeter score={contact.lead_score} />
               </Field>
@@ -348,8 +425,8 @@ export default async function ContactDetailPage({
                     {untilBirthday !== null && (
                       <span className="text-xs text-slate-500">
                         {untilBirthday === 0
-                          ? 'today'
-                          : `in ${untilBirthday} day${untilBirthday === 1 ? '' : 's'}`}
+                          ? "today"
+                          : `in ${untilBirthday} day${untilBirthday === 1 ? "" : "s"}`}
                       </span>
                     )}
                   </span>
@@ -357,7 +434,11 @@ export default async function ContactDetailPage({
                   <Empty />
                 )}
               </Field>
-              <CustomFieldValues fields={customByCard('additional')} values={customValues} />
+              <CustomFieldValues
+                fields={customByCard("additional")}
+                values={customValues}
+                fieldOptions={options}
+              />
               <Field label="Notes" wide>
                 {notesHtml ? (
                   <div
@@ -381,29 +462,38 @@ export default async function ContactDetailPage({
                 <ExternalLink url={companyWebsite} />
               </Field>
               <Field label="LinkedIn">
-                <ExternalLink url={socialUrl('linkedin', contact.linkedin)} />
+                <ExternalLink url={socialUrl("linkedin", contact.linkedin)} />
               </Field>
               <Field label="Facebook">
-                <ExternalLink url={socialUrl('facebook', contact.facebook)} />
+                <ExternalLink url={socialUrl("facebook", contact.facebook)} />
               </Field>
               <Field label="Instagram">
-                <ExternalLink url={socialUrl('instagram', contact.instagram)} />
+                <ExternalLink url={socialUrl("instagram", contact.instagram)} />
               </Field>
               <Field label="TikTok">
-                <ExternalLink url={socialUrl('tiktok', contact.tiktok)} />
+                <ExternalLink url={socialUrl("tiktok", contact.tiktok)} />
               </Field>
               <Field label="X (Twitter)">
-                <ExternalLink url={socialUrl('x_twitter', contact.x_twitter)} />
+                <ExternalLink url={socialUrl("x_twitter", contact.x_twitter)} />
               </Field>
-              <CustomFieldValues fields={customByCard('digital')} values={customValues} />
+              <CustomFieldValues
+                fields={customByCard("digital")}
+                values={customValues}
+                fieldOptions={options}
+              />
 
               {extraLinks.length > 0 && (
                 <div>
-                  <dt className="text-xs font-medium text-slate-500">Other links</dt>
+                  <dt className="text-xs font-medium text-slate-500">
+                    Other links
+                  </dt>
                   <dd className="mt-1 space-y-1 text-sm">
                     {extraLinks.map((link, index) => (
                       <div key={`${link.url}-${index}`}>
-                        <ExternalLink url={safeUrl(link.url)} label={link.label || undefined} />
+                        <ExternalLink
+                          url={safeUrl(link.url)}
+                          label={link.label || undefined}
+                        />
                       </div>
                     ))}
                   </dd>
@@ -416,12 +506,20 @@ export default async function ContactDetailPage({
           <Section title="Record history">
             <dl className="space-y-3">
               <Field label="Created by">
-                <span className="block">{userName(contact.created_by) ?? 'Unknown'}</span>
-                <span className="text-xs text-slate-500">{formatDateTime(contact.created_at)}</span>
+                <span className="block">
+                  {userName(contact.created_by) ?? "Unknown"}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {formatDateTime(contact.created_at)}
+                </span>
               </Field>
               <Field label="Updated by">
-                <span className="block">{userName(contact.updated_by) ?? 'Unknown'}</span>
-                <span className="text-xs text-slate-500">{formatDateTime(contact.updated_at)}</span>
+                <span className="block">
+                  {userName(contact.updated_by) ?? "Unknown"}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {formatDateTime(contact.updated_at)}
+                </span>
               </Field>
             </dl>
           </Section>
@@ -429,9 +527,12 @@ export default async function ContactDetailPage({
           <Section title="Tags">
             {tagList.length === 0 ? (
               <p className="text-sm text-slate-500">
-                No tags defined yet.{' '}
+                No tags defined yet.{" "}
                 {context.isAdmin && (
-                  <Link href="/settings/tags" className="text-brand-700 hover:underline">
+                  <Link
+                    href="/settings/tags"
+                    className="text-brand-700 hover:underline"
+                  >
                     Create some
                   </Link>
                 )}
@@ -470,5 +571,5 @@ export default async function ContactDetailPage({
         </div>
       </div>
     </>
-  )
+  );
 }
