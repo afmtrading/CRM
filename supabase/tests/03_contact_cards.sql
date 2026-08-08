@@ -169,7 +169,7 @@ begin
 
   perform test_assert(
     (select job_title from contacts where id = v_contact) is null
-    and (select specialty_market from contacts where id = v_contact) = '{}'::text[],
+    and (select links from contacts where id = v_contact) = '[]'::jsonb,
     'the new card columns default to empty rather than failing the insert'
   );
 end;

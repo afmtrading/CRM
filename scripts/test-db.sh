@@ -34,5 +34,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/02_business_rul
 echo "→ contact card tests"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/03_contact_cards.sql"
 
+echo "→ company card tests"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/04_company_cards.sql"
+
 echo
 echo "All database tests passed."

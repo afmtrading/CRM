@@ -3,9 +3,16 @@ import Link from 'next/link'
 import { requireSession, scoped } from '@/lib/tenancy'
 import { applyFilter, fieldsFor, filterFromSearchParams, groupRows, parseFilterConfig } from '@/lib/filters'
 import { formatDate } from '@/lib/format'
-import type { CompanyRow, CustomFieldDefinitionRow, SavedFilterRow, UserRow } from '@/lib/database.types'
+import type {
+  CompanyRow,
+  CustomFieldDefinitionRow,
+  FieldOptionRow,
+  SavedFilterRow,
+  UserRow,
+} from '@/lib/database.types'
 import { FilterBar } from '@/components/filter-bar'
 import { Avatar, EmptyState, PageHeader } from '@/components/ui'
+import { OptionBadges } from '@/components/contact-cards'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 
@@ -19,11 +26,15 @@ export default async function CompaniesPage({
   const params = await searchParams
   const context = await requireSession()
 
-  const [{ data: savedFilters }, { data: customFields }, { data: owners }] = await Promise.all([
-    scoped(context, 'saved_filters').select('*').eq('entity_type', 'company'),
-    scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company'),
-    scoped(context, 'users').select('*').order('name'),
-  ])
+  const [{ data: savedFilters }, { data: customFields }, { data: owners }, { data: fieldOptions }] =
+    await Promise.all([
+      scoped(context, 'saved_filters').select('*').eq('entity_type', 'company'),
+      scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company'),
+      scoped(context, 'users').select('*').order('name'),
+      scoped(context, 'field_options').select('*').eq('field_key', 'specialty_market').order('order'),
+    ])
+
+  const marketOptions = (fieldOptions ?? []) as FieldOptionRow[]
 
   const viewId = typeof params.view === 'string' ? params.view : null
   const savedView = viewId
@@ -97,8 +108,8 @@ export default async function CompaniesPage({
                 <thead>
                   <tr>
                     <th>Name</th>
-                    <th>Domain</th>
-                    <th>Industry</th>
+                    <th>Website</th>
+                    <th>Specialty market</th>
                     <th>Contacts</th>
                     <th>Owner</th>
                     <th>Created</th>
@@ -119,7 +130,9 @@ export default async function CompaniesPage({
                         </div>
                       </td>
                       <td className="text-slate-600">{company.domain ?? '—'}</td>
-                      <td className="text-slate-600">{company.industry ?? '—'}</td>
+                      <td>
+                        <OptionBadges values={company.specialty_market} options={marketOptions} />
+                      </td>
                       <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
                       <td className="text-slate-600">
                         {company.owner_id ? (ownerNames.get(company.owner_id) ?? '—') : '—'}

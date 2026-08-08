@@ -100,7 +100,9 @@ export function ExternalLink({ url, label }: { url: string | null; label?: strin
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="truncate text-brand-700 hover:underline"
+      // block, not inline: `truncate` relies on overflow, which an inline
+      // element ignores — several links would run together on one line.
+      className="block max-w-full truncate text-brand-700 hover:underline"
     >
       {label ?? prettyUrl(url)}
     </a>

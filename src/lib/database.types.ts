@@ -66,6 +66,9 @@ export type OptionFieldKey =
 /** A named link on the Digital card, beyond the known social networks. */
 export type ContactLink = { label: string; url: string }
 
+/** A labelled postal address on a company. */
+export type CompanyAddress = { label: string; address: string }
+
 type Row<T> = T
 type Insert<T, Optional extends keyof T> = Omit<T, Optional> & Partial<Pick<T, Optional>>
 
@@ -108,8 +111,6 @@ export type ContactRow = {
   duplicate_of_id: string | null
   job_title: string | null
   office_phone: string | null
-  specialty_market: string[]
-  customer_type: string[]
   role_type: string[]
   priority: string | null
   credibility: string | null
@@ -121,6 +122,7 @@ export type ContactRow = {
   instagram: string | null
   tiktok: string | null
   x_twitter: string | null
+  linkedin: string | null
   links: ContactLink[]
   created_by: string | null
   updated_by: string | null
@@ -142,12 +144,36 @@ export type CompanyRow = {
   id: string
   organization_id: string
   name: string
+  /** The company's website. Surfaced as "Website", kept as `domain` so existing rows and imports still line up. */
   domain: string | null
+  /** Superseded by specialty_market; retained so older rows keep their value. */
   industry: string | null
   owner_id: string | null
   custom_fields: Record<string, Json>
+  phone: string | null
+  email: string | null
+  /** Markdown, rendered through renderMarkdown() — never raw HTML. */
+  notes: string | null
+  specialty_market: string[]
+  customer_type: string[]
+  linkedin: string | null
+  facebook: string | null
+  instagram: string | null
+  tiktok: string | null
+  x_twitter: string | null
+  links: ContactLink[]
+  addresses: CompanyAddress[]
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
+}
+
+export type CompanyTagRow = {
+  organization_id: string
+  company_id: string
+  tag_id: string
+  created_at: string
 }
 
 export type PipelineRow = {
@@ -338,8 +364,6 @@ export interface Database {
         | 'duplicate_of_id'
         | 'job_title'
         | 'office_phone'
-        | 'specialty_market'
-        | 'customer_type'
         | 'role_type'
         | 'priority'
         | 'credibility'
@@ -350,6 +374,7 @@ export interface Database {
         | 'instagram'
         | 'tiktok'
         | 'x_twitter'
+        | 'linkedin'
         | 'links'
         | 'created_by'
         | 'updated_by'
@@ -363,9 +388,24 @@ export interface Database {
         | 'industry'
         | 'owner_id'
         | 'custom_fields'
+        | 'phone'
+        | 'email'
+        | 'notes'
+        | 'specialty_market'
+        | 'customer_type'
+        | 'linkedin'
+        | 'facebook'
+        | 'instagram'
+        | 'tiktok'
+        | 'x_twitter'
+        | 'links'
+        | 'addresses'
+        | 'created_by'
+        | 'updated_by'
         | 'created_at'
         | 'updated_at'
       >
+      company_tags: TableDef<CompanyTagRow, 'organization_id' | 'created_at'>
       pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'created_at'>
       stages: TableDef<
         StageRow,

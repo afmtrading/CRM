@@ -11,6 +11,16 @@ export const CONTACT_CARDS: { key: ContactCard; label: string; description: stri
   { key: 'digital', label: 'Digital', description: 'Websites and social profiles' },
 ]
 
+/**
+ * The company equivalent. Reuses the same card keys so one custom-field
+ * definition can be placed on either record without a second vocabulary.
+ */
+export const COMPANY_CARDS: { key: ContactCard; label: string; description: string }[] = [
+  { key: 'details', label: 'Company info', description: 'What the business is and where to find it' },
+  { key: 'additional', label: 'Additional info', description: 'Ownership and notes' },
+  { key: 'digital', label: 'Digital', description: 'Website and social profiles' },
+]
+
 export const CONTACT_CARD_LABELS = Object.fromEntries(
   CONTACT_CARDS.map((card) => [card.key, card.label]),
 ) as Record<ContactCard, string>
@@ -65,12 +75,15 @@ export const OPTION_FIELDS: {
   label: string
   card: ContactCard
   multiple: boolean
+  entity: 'contact' | 'company'
 }[] = [
-  { key: 'specialty_market', label: 'Specialty market', card: 'details', multiple: true },
-  { key: 'customer_type', label: 'Customer type', card: 'details', multiple: true },
-  { key: 'role_type', label: 'Role type', card: 'influence', multiple: true },
-  { key: 'priority', label: 'Priority', card: 'influence', multiple: false },
-  { key: 'credibility', label: 'Credibility', card: 'influence', multiple: false },
+  // These two describe the business, not the person, so they live on the
+  // company record and are shared by every contact who works there.
+  { key: 'specialty_market', label: 'Specialty market', card: 'details', multiple: true, entity: 'company' },
+  { key: 'customer_type', label: 'Company type', card: 'details', multiple: true, entity: 'company' },
+  { key: 'role_type', label: 'Role type', card: 'influence', multiple: true, entity: 'contact' },
+  { key: 'priority', label: 'Priority', card: 'influence', multiple: false, entity: 'contact' },
+  { key: 'credibility', label: 'Credibility', card: 'influence', multiple: false, entity: 'contact' },
 ]
 
 export const OPTION_FIELD_LABELS = Object.fromEntries(
@@ -106,6 +119,7 @@ export function safeUrl(value: string | null | undefined): string | null {
 }
 
 const SOCIAL_BASES: Record<string, string> = {
+  linkedin: 'https://linkedin.com/company/',
   facebook: 'https://facebook.com/',
   instagram: 'https://instagram.com/',
   tiktok: 'https://tiktok.com/@',

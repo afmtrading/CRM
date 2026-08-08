@@ -31,6 +31,7 @@ const contactSchema = z.object({
   instagram: z.string().trim().max(300).default(''),
   tiktok: z.string().trim().max(300).default(''),
   x_twitter: z.string().trim().max(300).default(''),
+  linkedin: z.string().trim().max(300).default(''),
 })
 
 /**
@@ -61,6 +62,42 @@ function readList(formData: FormData, name: string): string[] {
   return [...new Set(formData.getAll(name).map(String).map((v) => v.trim()).filter(Boolean))]
 }
 
+/**
+ * Resolves the company picker to an id.
+ *
+ * The picker posts either an existing `company_id` or a `new_company_name` to
+ * create, so someone entering a contact for a company the CRM has never seen is
+ * not sent away to create it first. An existing company with the same name is
+ * reused rather than duplicated — the search is case-insensitive, but two
+ * people typing "Acme" and "ACME" a week apart should still land on one record.
+ */
+async function resolveCompanyId(
+  context: Awaited<ReturnType<typeof requireSession>>,
+  companyId: string,
+  formData: FormData,
+): Promise<{ id: string | null; error?: string }> {
+  if (companyId) return { id: companyId }
+
+  const name = String(formData.get('new_company_name') ?? '').trim()
+  if (!name) return { id: null }
+
+  const { data: existing } = await scoped(context, 'companies')
+    .select('id')
+    .ilike('name', name)
+    .limit(1)
+
+  const match = ((existing ?? []) as { id: string }[])[0]
+  if (match) return { id: match.id }
+
+  const { data, error } = await scoped(context, 'companies')
+    .insert({ name })
+    .select('id')
+    .single()
+
+  if (error) return { id: null, error: error.message }
+  return { id: data.id }
+}
+
 /** The columns shared by create and update. */
 function contactColumns(input: z.infer<typeof contactSchema>, formData: FormData) {
   return {
@@ -68,13 +105,10 @@ function contactColumns(input: z.infer<typeof contactSchema>, formData: FormData
     last_name: input.last_name,
     email: input.email || null,
     phone: input.phone || null,
-    company_id: input.company_id || null,
     lifecycle_stage: input.lifecycle_stage as LifecycleStage,
     source: input.source || null,
     job_title: input.job_title || null,
     office_phone: input.office_phone || null,
-    specialty_market: readList(formData, 'specialty_market'),
-    customer_type: readList(formData, 'customer_type'),
     role_type: readList(formData, 'role_type'),
     priority: input.priority || null,
     credibility: input.credibility || null,
@@ -85,6 +119,7 @@ function contactColumns(input: z.infer<typeof contactSchema>, formData: FormData
     instagram: input.instagram || null,
     tiktok: input.tiktok || null,
     x_twitter: input.x_twitter || null,
+    linkedin: input.linkedin || null,
     links: readLinks(formData),
     custom_fields: readCustomFields(formData),
   }
@@ -145,14 +180,18 @@ export async function createContact(_prev: ActionState, formData: FormData): Pro
     ownerId = assignee ?? context.user.id
   }
 
+  const company = await resolveCompanyId(context, input.company_id, formData)
+  if (company.error) return { error: company.error }
+
   const { data, error } = await scoped(context, 'contacts')
-    .insert({ ...contactColumns(input, formData), owner_id: ownerId })
+    .insert({ ...contactColumns(input, formData), owner_id: ownerId, company_id: company.id })
     .select('id')
     .single()
 
   if (error) return { error: error.message }
 
   revalidatePath('/contacts')
+  revalidatePath('/companies')
   redirect(`/contacts/${data.id}`)
 }
 
@@ -167,8 +206,15 @@ export async function updateContact(_prev: ActionState, formData: FormData): Pro
   }
   const input = parsed.data
 
+  const company = await resolveCompanyId(context, input.company_id, formData)
+  if (company.error) return { error: company.error }
+
   const { error } = await scoped(context, 'contacts')
-    .update({ ...contactColumns(input, formData), owner_id: input.owner_id || null })
+    .update({
+      ...contactColumns(input, formData),
+      owner_id: input.owner_id || null,
+      company_id: company.id,
+    })
     .eq('id', id)
 
   if (error) return { error: error.message }

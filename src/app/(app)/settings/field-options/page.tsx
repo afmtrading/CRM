@@ -37,6 +37,7 @@ export default async function FieldOptionsPage() {
               title={field.label}
               actions={
                 <span className="text-xs text-slate-500">
+                  {field.entity === 'company' ? 'Company' : 'Contact'} ·{' '}
                   {CONTACT_CARD_LABELS[field.card]} · {field.multiple ? 'multiple' : 'single'} choice
                 </span>
               }

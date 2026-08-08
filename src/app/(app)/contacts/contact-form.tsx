@@ -14,318 +14,20 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { contactName } from '@/lib/format'
-import { CONTACT_CARDS, OPTION_COLOR_CLASSES } from '@/lib/field-options'
-import { PlusIcon } from '@/components/icons'
+import { CONTACT_CARDS } from '@/lib/field-options'
+import { CompanyPicker } from '@/components/company-picker'
+import {
+  ChipGroup,
+  CustomFieldInputs,
+  FormCard,
+  LinksEditor,
+  NotesEditor,
+  RadioChips,
+} from '@/components/form-fields'
 
 import type { ActionState } from './actions'
 
 const STAGES: LifecycleStage[] = ['lead', 'qualified', 'customer', 'other']
-
-/**
- * Multi-select rendered as toggleable chips in each option's own colour, so the
- * form and the record read the same way. Backed by real checkboxes, which keeps
- * it keyboard-accessible and lets the values post without any client wiring.
- */
-function ChipGroup({
-  name,
-  options,
-  selected,
-}: {
-  name: string
-  options: FieldOptionRow[]
-  selected: string[]
-}) {
-  if (options.length === 0) {
-    return (
-      <p className="text-xs text-slate-500">
-        No options defined.{' '}
-        <Link href="/settings/field-options" className="text-brand-700 hover:underline">
-          Add some
-        </Link>
-      </p>
-    )
-  }
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((option) => (
-        <label
-          key={option.id}
-          className="group cursor-pointer"
-          title={option.value}
-        >
-          <input
-            type="checkbox"
-            name={name}
-            value={option.value}
-            defaultChecked={selected.includes(option.value)}
-            className="peer sr-only"
-          />
-          <span
-            className={`badge border border-transparent transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[option.color]} opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
-          >
-            {option.value}
-          </span>
-        </label>
-      ))}
-    </div>
-  )
-}
-
-/** Single-select rendered as radio chips, with a clear option. */
-function RadioChips({
-  name,
-  options,
-  selected,
-}: {
-  name: string
-  options: FieldOptionRow[]
-  selected: string | null
-}) {
-  if (options.length === 0) {
-    return (
-      <p className="text-xs text-slate-500">
-        No options defined.{' '}
-        <Link href="/settings/field-options" className="text-brand-700 hover:underline">
-          Add some
-        </Link>
-      </p>
-    )
-  }
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      <label className="cursor-pointer">
-        <input
-          type="radio"
-          name={name}
-          value=""
-          defaultChecked={!selected}
-          className="peer sr-only"
-        />
-        <span className="badge bg-white text-slate-500 ring-1 ring-slate-200 peer-checked:ring-2 peer-checked:ring-slate-400">
-          None
-        </span>
-      </label>
-      {options.map((option) => (
-        <label key={option.id} className="cursor-pointer">
-          <input
-            type="radio"
-            name={name}
-            value={option.value}
-            defaultChecked={selected === option.value}
-            className="peer sr-only"
-          />
-          <span
-            className={`badge transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[option.color]} opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
-          >
-            {option.value}
-          </span>
-        </label>
-      ))}
-    </div>
-  )
-}
-
-/**
- * Notes editor. Markdown in a textarea rather than a rich-text surface: the
- * stored value is rendered back into the page, and markdown can be escaped
- * before formatting, so a note can never carry markup of its own.
- */
-function NotesEditor({ defaultValue }: { defaultValue: string }) {
-  const [value, setValue] = useState(defaultValue)
-
-  function wrap(before: string, after = before) {
-    const el = document.getElementById('notes') as HTMLTextAreaElement | null
-    if (!el) return
-
-    const { selectionStart: start, selectionEnd: end } = el
-    const selected = value.slice(start, end) || 'text'
-    const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`
-    setValue(next)
-
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(start + before.length, start + before.length + selected.length)
-    })
-  }
-
-  function prefixLine(prefix: string) {
-    const el = document.getElementById('notes') as HTMLTextAreaElement | null
-    if (!el) return
-    const start = value.lastIndexOf('\n', el.selectionStart - 1) + 1
-    setValue(`${value.slice(0, start)}${prefix}${value.slice(start)}`)
-    requestAnimationFrame(() => el.focus())
-  }
-
-  return (
-    <div>
-      <div className="mb-1.5 flex flex-wrap gap-1">
-        {[
-          { label: 'B', title: 'Bold', run: () => wrap('**'), className: 'font-bold' },
-          { label: 'I', title: 'Italic', run: () => wrap('*'), className: 'italic' },
-          { label: '</>', title: 'Code', run: () => wrap('`'), className: 'font-mono text-[10px]' },
-          { label: 'H', title: 'Heading', run: () => prefixLine('## '), className: 'font-semibold' },
-          { label: '• List', title: 'Bullet list', run: () => prefixLine('- '), className: '' },
-          { label: '1. List', title: 'Numbered list', run: () => prefixLine('1. '), className: '' },
-          { label: 'Link', title: 'Link', run: () => wrap('[', '](https://)'), className: '' },
-        ].map((button) => (
-          <button
-            key={button.label}
-            type="button"
-            title={button.title}
-            onClick={button.run}
-            className={`rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 ${button.className}`}
-          >
-            {button.label}
-          </button>
-        ))}
-      </div>
-      <textarea
-        id="notes"
-        name="notes"
-        rows={6}
-        className="input font-mono text-xs leading-relaxed"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        placeholder={'Meeting notes, preferences, history…\n\n- **Bold** for emphasis\n- [Links](https://example.com) work too'}
-      />
-      <p className="mt-1 text-xs text-slate-400">
-        Markdown: **bold**, *italic*, `code`, ## heading, - list, [label](url)
-      </p>
-    </div>
-  )
-}
-
-/** Repeater for the named URLs on the Digital card. */
-function LinksEditor({ defaultValue }: { defaultValue: ContactLink[] }) {
-  const [links, setLinks] = useState<ContactLink[]>(defaultValue)
-
-  function update(index: number, patch: Partial<ContactLink>) {
-    setLinks(links.map((link, i) => (i === index ? { ...link, ...patch } : link)))
-  }
-
-  return (
-    <div className="space-y-2">
-      {/* Serialised into one field: the row count is dynamic, and a JSON blob
-          avoids inventing an indexed naming scheme the action has to unpick. */}
-      <input type="hidden" name="links" value={JSON.stringify(links.filter((link) => link.url.trim()))} />
-
-      {links.map((link, index) => (
-        <div key={index} className="flex flex-wrap items-center gap-2">
-          <input
-            className="input max-w-40"
-            placeholder="Label"
-            value={link.label}
-            onChange={(event) => update(index, { label: event.target.value })}
-            aria-label={`Link ${index + 1} label`}
-          />
-          <input
-            className="input min-w-0 flex-1"
-            placeholder="https://…"
-            value={link.url}
-            onChange={(event) => update(index, { url: event.target.value })}
-            aria-label={`Link ${index + 1} URL`}
-          />
-          <button
-            type="button"
-            className="rounded-lg px-2 py-1 text-sm text-slate-400 hover:text-red-600"
-            onClick={() => setLinks(links.filter((_, i) => i !== index))}
-            aria-label={`Remove link ${index + 1}`}
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-
-      <button
-        type="button"
-        className="btn-secondary"
-        onClick={() => setLinks([...links, { label: '', url: '' }])}
-      >
-        <PlusIcon className="h-4 w-4" />
-        Add link
-      </button>
-    </div>
-  )
-}
-
-function CustomFieldInputs({
-  fields,
-  values,
-}: {
-  fields: CustomFieldDefinitionRow[]
-  values: Record<string, unknown>
-}) {
-  return (
-    <>
-      {fields.map((field) => {
-        const raw = values[field.key]
-        const options = Array.isArray(field.options) ? (field.options as string[]).map(String) : []
-        const id = `custom.${field.key}`
-
-        if (field.field_type === 'multiselect') {
-          const selected = Array.isArray(raw) ? raw.map(String) : raw ? [String(raw)] : []
-          return (
-            <div key={field.id} className="sm:col-span-2">
-              <span className="label">{field.label}</span>
-              <div className="flex flex-wrap gap-1.5">
-                {options.map((option) => (
-                  <label key={option} className="cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name={id}
-                      value={option}
-                      defaultChecked={selected.includes(option)}
-                      className="peer sr-only"
-                    />
-                    <span className="badge bg-slate-100 text-slate-600 opacity-50 peer-checked:bg-brand-100 peer-checked:text-brand-700 peer-checked:opacity-100">
-                      {option}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )
-        }
-
-        const value = raw === undefined || raw === null ? '' : String(raw)
-
-        return (
-          <div key={field.id}>
-            <label className="label" htmlFor={id}>
-              {field.label}
-            </label>
-            {field.field_type === 'select' ? (
-              <select id={id} name={id} className="input" defaultValue={value}>
-                <option value="">—</option>
-                {options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id={id}
-                name={id}
-                className="input"
-                type={
-                  field.field_type === 'number'
-                    ? 'number'
-                    : field.field_type === 'date'
-                      ? 'date'
-                      : 'text'
-                }
-                defaultValue={value}
-              />
-            )}
-          </div>
-        )
-      })}
-    </>
-  )
-}
 
 export function ContactForm({
   action,
@@ -334,6 +36,7 @@ export function ContactForm({
   owners,
   customFields,
   fieldOptions,
+  prefillCompanyId,
   submitLabel,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
@@ -342,6 +45,8 @@ export function ContactForm({
   owners: UserRow[]
   customFields: CustomFieldDefinitionRow[]
   fieldOptions: FieldOptionRow[]
+  /** Preselects the company when arriving from a company page. */
+  prefillCompanyId?: string
   submitLabel: string
 }) {
   const [state, formAction, pending] = useActionState(action, {} as ActionState)
@@ -424,17 +129,11 @@ export function ContactForm({
           <input id="last_name" name="last_name" className="input" defaultValue={contact?.last_name ?? ''} />
         </div>
         <div>
-          <label className="label" htmlFor="company_id">
-            Company
-          </label>
-          <select id="company_id" name="company_id" className="input" defaultValue={contact?.company_id ?? ''}>
-            <option value="">—</option>
-            {companies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-          </select>
+          <span className="label">Company</span>
+          <CompanyPicker
+            companies={companies}
+            defaultValue={contact?.company_id ?? prefillCompanyId}
+          />
         </div>
         <div>
           <label className="label" htmlFor="job_title">
@@ -469,22 +168,6 @@ export function ContactForm({
             name="office_phone"
             className="input"
             defaultValue={contact?.office_phone ?? ''}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <span className="label">Specialty market</span>
-          <ChipGroup
-            name="specialty_market"
-            options={optionsFor('specialty_market')}
-            selected={contact?.specialty_market ?? []}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <span className="label">Customer type</span>
-          <ChipGroup
-            name="customer_type"
-            options={optionsFor('customer_type')}
-            selected={contact?.customer_type ?? []}
           />
         </div>
         <CustomFieldInputs fields={customByCard('details')} values={custom} />
@@ -587,6 +270,12 @@ export function ContactForm({
           />
         </div>
         <div>
+          <label className="label" htmlFor="linkedin">
+            LinkedIn
+          </label>
+          <input id="linkedin" name="linkedin" className="input" placeholder="handle or URL" defaultValue={contact?.linkedin ?? ''} />
+        </div>
+        <div>
           <label className="label" htmlFor="facebook">
             Facebook
           </label>
@@ -626,25 +315,5 @@ export function ContactForm({
         </Link>
       </div>
     </form>
-  )
-}
-
-function FormCard({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="card p-5">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        <p className="text-xs text-slate-500">{description}</p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
-    </section>
   )
 }

@@ -7,7 +7,13 @@ import { ContactForm } from '../contact-form'
 
 export const metadata = { title: 'New contact · FLO CRM' }
 
-export default async function NewContactPage() {
+export default async function NewContactPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ company_id?: string }>
+}) {
+  // Prefills the picker when arriving from a company page.
+  const { company_id: companyId } = await searchParams
   const context = await requireSession()
 
   const [{ data: companies }, { data: owners }, { data: customFields }, { data: fieldOptions }] =
@@ -23,6 +29,7 @@ export default async function NewContactPage() {
       <PageHeader title="New contact" description="Leads and customers are both contacts — the lifecycle stage is what differs." />
       <ContactForm
         action={createContact}
+        prefillCompanyId={companyId}
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}

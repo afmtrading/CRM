@@ -118,6 +118,7 @@ export type TenantTable =
   | 'activities'
   | 'tags'
   | 'contact_tags'
+  | 'company_tags'
   | 'saved_filters'
   | 'import_jobs'
   | 'lead_score_rules'

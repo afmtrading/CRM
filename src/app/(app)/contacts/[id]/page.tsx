@@ -191,10 +191,49 @@ export default async function ContactDetailPage({
         </div>
       )}
 
+      {/* Contact details spans the full width above everything else — it is
+          what someone opened the page for. */}
+      <div className="mb-5">
+        <Section title={CONTACT_CARDS[0].label}>
+          <div className="mb-4 flex items-center gap-3">
+            <Avatar name={name} className="h-11 w-11 text-sm" />
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-slate-900">{name}</p>
+              <p className="truncate text-xs text-slate-500">
+                {contact.job_title ?? 'No job title'}
+              </p>
+            </div>
+          </div>
+
+          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Company">
+              {contact.companies ? (
+                <CardLink href={`/companies/${contact.companies.id}`}>
+                  {contact.companies.name}
+                </CardLink>
+              ) : (
+                <Empty />
+              )}
+            </Field>
+            <Field label="Job title">{contact.job_title || <Empty />}</Field>
+            <Field label="Primary email" wide>
+              <ContactMethod value={contact.email} kind="email" label={name} />
+            </Field>
+            <Field label="Mobile phone" wide>
+              <ContactMethod value={contact.phone} kind="phone" label={name} />
+            </Field>
+            <Field label="Office phone" wide>
+              <ContactMethod value={contact.office_phone} kind="phone" label={name} />
+            </Field>
+            <CustomFieldValues fields={customByCard('details')} values={customValues} />
+          </dl>
+        </Section>
+      </div>
+
       {/*
-        Cards sit in the right-hand column on a wide screen. Below lg the layout
-        is a single column and the cards come first, because the record itself
-        is what someone opened the page for — the activity feed can wait.
+        The remaining cards sit in the right-hand column on a wide screen. Below
+        lg the layout is a single column and they come first, ahead of the
+        activity feed.
       */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
         <div className="order-2 space-y-5 lg:order-1 lg:col-span-2">
@@ -261,48 +300,6 @@ export default async function ContactDetailPage({
         </div>
 
         <div className="order-1 space-y-5 lg:order-2">
-          {/* ---------------------------------------------------------------- */}
-          <Section title={CONTACT_CARDS[0].label}>
-            <div className="mb-4 flex items-center gap-3">
-              <Avatar name={name} className="h-11 w-11 text-sm" />
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-900">{name}</p>
-                <p className="truncate text-xs text-slate-500">
-                  {contact.job_title ?? 'No job title'}
-                </p>
-              </div>
-            </div>
-
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Company">
-                {contact.companies ? (
-                  <CardLink href={`/companies/${contact.companies.id}`}>
-                    {contact.companies.name}
-                  </CardLink>
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-              <Field label="Job title">{contact.job_title || <Empty />}</Field>
-              <Field label="Primary email" wide>
-                <ContactMethod value={contact.email} kind="email" label={name} />
-              </Field>
-              <Field label="Mobile phone" wide>
-                <ContactMethod value={contact.phone} kind="phone" label={name} />
-              </Field>
-              <Field label="Office phone" wide>
-                <ContactMethod value={contact.office_phone} kind="phone" label={name} />
-              </Field>
-              <Field label="Specialty market" wide>
-                <OptionBadges values={contact.specialty_market} options={optionsFor('specialty_market')} />
-              </Field>
-              <Field label="Customer type" wide>
-                <OptionBadges values={contact.customer_type} options={optionsFor('customer_type')} />
-              </Field>
-              <CustomFieldValues fields={customByCard('details')} values={customValues} />
-            </dl>
-          </Section>
-
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[1].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
@@ -382,6 +379,9 @@ export default async function ContactDetailPage({
             <dl className="grid gap-3">
               <Field label="Company website">
                 <ExternalLink url={companyWebsite} />
+              </Field>
+              <Field label="LinkedIn">
+                <ExternalLink url={socialUrl('linkedin', contact.linkedin)} />
               </Field>
               <Field label="Facebook">
                 <ExternalLink url={socialUrl('facebook', contact.facebook)} />

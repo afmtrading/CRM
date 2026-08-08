@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import type { CompanyRow, CustomFieldDefinitionRow, UserRow } from '@/lib/database.types'
+import type { CompanyRow, CustomFieldDefinitionRow, FieldOptionRow, UserRow } from '@/lib/database.types'
 import { PageHeader } from '@/components/ui'
 
 import { updateCompany } from '../../actions'
@@ -17,9 +17,10 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
 
   if (!company) notFound()
 
-  const [{ data: owners }, { data: customFields }] = await Promise.all([
+  const [{ data: owners }, { data: customFields }, { data: fieldOptions }] = await Promise.all([
     scoped(context, 'users').select('*').eq('status', 'active').order('name'),
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company').order('order'),
+    scoped(context, 'field_options').select('*').order('order'),
   ])
 
   return (
@@ -30,6 +31,7 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
         company={company}
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
+        fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
         submitLabel="Save changes"
       />
     </>
