@@ -324,9 +324,10 @@ export function optionsForField(
  * enum value would rewrite every user row for a label change.
  */
 export const USER_ROLES: { value: string; label: string; description: string }[] = [
-  { value: 'admin', label: 'Administrator', description: 'Everything, including settings and users' },
-  { value: 'manager', label: 'Manager', description: 'Every record, and may delete and import' },
-  { value: 'regular', label: 'Sales rep', description: 'Only records they own, plus unassigned ones' },
+  { value: 'admin', label: 'Administrator', description: 'Everything, including settings, users and deleted records' },
+  { value: 'manager', label: 'Manager', description: 'Every record in the organization; delete, import, export, assign' },
+  { value: 'sales_director', label: 'Sales director', description: 'Own records plus unassigned; delete, import, export, assign' },
+  { value: 'regular', label: 'Sales rep', description: 'Only their own records; create, edit and delete' },
   { value: 'readonly', label: 'Read-only', description: 'Can look, cannot change anything' },
 ]
 

@@ -54,7 +54,9 @@ export default async function CompaniesPage({
       : field,
   )
 
-  let query = scoped(context, 'companies').select('*, contacts(count)', { count: 'exact' })
+  let query = scoped(context, 'companies')
+    .select('*, contacts(count)', { count: 'exact' })
+    .is('deleted_at', null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query = applyFilter(query as any, config, 'company') as any
 
@@ -88,7 +90,7 @@ export default async function CompaniesPage({
         savedFilters={(savedFilters ?? []) as SavedFilterRow[]}
         entityType="company"
         currentUserId={context.user.id}
-        canExport={context.canManage}
+        canExport={context.canBulk}
         saveAction={saveFilter}
         deleteAction={deleteSavedFilter}
       />

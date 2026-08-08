@@ -38,9 +38,9 @@ export async function GET(request: NextRequest) {
 
   // Export is the one action that can put the whole customer list in a file, so
   // it is held to the same bar as deleting and importing.
-  if (!context.canManage) {
+  if (!context.canBulk) {
     return NextResponse.json(
-      { error: 'Only an administrator or manager can export.' },
+      { error: 'Your role does not allow exporting.' },
       { status: 403 },
     )
   }

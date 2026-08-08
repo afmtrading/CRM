@@ -86,7 +86,10 @@ export default async function ContactsPage({
   const live = () =>
     scoped(context, "contacts")
       .select("id", { count: "exact", head: true })
-      .is("duplicate_of_id", null);
+      .is("duplicate_of_id", null)
+      // An admin can see deleted records, but they do not belong in a headline
+      // count or a working list — only in the recycle bin.
+      .is("deleted_at", null);
   const statsPromise = Promise.all([
     live(),
     live().gte("created_at", monthStart.toISOString()),
@@ -138,7 +141,8 @@ export default async function ContactsPage({
   let query = scoped(context, "contacts")
     .select("*, companies(id, name)", { count: "exact" })
     // Merged-away records stay in the table as tombstones; the list shows survivors.
-    .is("duplicate_of_id", null);
+    .is("duplicate_of_id", null)
+    .is("deleted_at", null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query = applyFilter(query as any, config, "contact") as any;
@@ -173,7 +177,7 @@ export default async function ContactsPage({
         description="Manage your contacts"
         actions={
           <>
-            {context.canManage && (
+            {context.canBulk && (
               <Link href="/settings/import" className="btn-secondary">
                 <ImportIcon className="h-4 w-4" />
                 Import
@@ -228,7 +232,7 @@ export default async function ContactsPage({
         savedFilters={(savedFilters ?? []) as SavedFilterRow[]}
         entityType="contact"
         currentUserId={context.user.id}
-        canExport={context.canManage}
+        canExport={context.canBulk}
         saveAction={saveFilter}
         deleteAction={deleteSavedFilter}
       />

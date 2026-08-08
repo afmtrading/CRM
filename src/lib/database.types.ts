@@ -20,7 +20,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type OrgStatus = 'active' | 'inactive'
-export type UserRole = 'admin' | 'regular'
+export type UserRole = 'admin' | 'manager' | 'sales_director' | 'regular' | 'readonly'
 export type UserStatus = 'active' | 'invited' | 'disabled'
 export type LifecycleStage = 'lead' | 'qualified' | 'customer' | 'other'
 export type DealStatus = 'open' | 'won' | 'lost'
@@ -126,6 +126,9 @@ export type ContactRow = {
   links: ContactLink[]
   created_by: string | null
   updated_by: string | null
+  /** Soft delete. Only an administrator sees a stamped record. */
+  deleted_at: string | null
+  deleted_by: string | null
   created_at: string
   updated_at: string
 }
@@ -167,8 +170,22 @@ export type CompanyRow = {
   addresses: CompanyAddress[]
   created_by: string | null
   updated_by: string | null
+  deleted_at: string | null
+  deleted_by: string | null
   created_at: string
   updated_at: string
+}
+
+export type NotificationRow = {
+  id: string
+  organization_id: string
+  user_id: string
+  kind: string
+  title: string
+  body: string | null
+  link: string | null
+  read_at: string | null
+  created_at: string
 }
 
 export type CompanyTagRow = {
@@ -380,6 +397,8 @@ export interface Database {
         | 'links'
         | 'created_by'
         | 'updated_by'
+        | 'deleted_at'
+        | 'deleted_by'
         | 'created_at'
         | 'updated_at'
       >
@@ -404,9 +423,12 @@ export interface Database {
         | 'addresses'
         | 'created_by'
         | 'updated_by'
+        | 'deleted_at'
+        | 'deleted_by'
         | 'created_at'
         | 'updated_at'
       >
+      notifications: TableDef<NotificationRow, 'id' | 'body' | 'link' | 'read_at' | 'created_at'>
       company_tags: TableDef<CompanyTagRow, 'organization_id' | 'created_at'>
       pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'created_at'>
       stages: TableDef<
@@ -504,6 +526,10 @@ export interface Database {
       }
       create_birthday_reminders: { Args: { p_days_ahead?: number }; Returns: number }
       reassign_contact: { Args: { p_contact_id: string; p_new_owner_id: string | null }; Returns: void }
+      soft_delete_contact: { Args: { p_contact_id: string }; Returns: void }
+      soft_delete_company: { Args: { p_company_id: string }; Returns: void }
+      restore_contact: { Args: { p_contact_id: string }; Returns: void }
+      restore_company: { Args: { p_company_id: string }; Returns: void }
       reassign_deal: { Args: { p_deal_id: string; p_new_owner_id: string | null }; Returns: void }
       can_manage_records: { Args: Record<string, never>; Returns: boolean }
       can_write_records: { Args: Record<string, never>; Returns: boolean }

@@ -5,10 +5,11 @@
 -- same path PostgREST uses — because the whole point is that these rules hold
 -- against the REST API, not just against a UI that hides buttons.
 --
---   Admin     configuration, users, every record
---   Manager   every record, no configuration
---   Regular   records they own, plus unassigned; no delete, no import
---   Readonly  reads, writes nothing
+--   Admin           configuration, users, every record including deleted ones
+--   Manager         every live record; delete, import, export, reassign
+--   Sales director   own + unassigned; delete, import, export, reassign
+--   Regular          "Sales rep" — own only; create, edit, delete
+--   Readonly         reads, writes nothing
 -- =============================================================================
 
 \set ON_ERROR_STOP on
@@ -134,14 +135,16 @@ begin
     'a rep cannot see another rep''s contact'
   );
 
+  -- A Sales Rep works their own book and nothing else: the unassigned pool
+  -- belongs to the roles that can act on it.
   perform test_assert(
-    (select count(*) from contacts where id = (select id from fixture where key = 'orphan')) = 1,
-    'a rep sees an unassigned contact, so a new lead cannot get lost'
+    (select count(*) from contacts where id = (select id from fixture where key = 'orphan')) = 0,
+    'a sales rep does not see the unassigned pool'
   );
 
   perform test_assert(
-    (select count(*) from contacts) = 2,
-    'a listing returns only what the rep may see'
+    (select count(*) from contacts) = 1,
+    'a listing returns only the rep''s own records'
   );
 
   -- Searching is the same query with a filter; it must not be a way around.
@@ -182,12 +185,13 @@ begin
     'a rep editing another rep''s contact changes nothing'
   );
 
+  -- Deletion is soft now and goes through a function; a direct DELETE is
+  -- reserved for an administrator emptying the bin.
   delete from contacts where id = v_mine;
   perform test_assert(
     (select count(*) from contacts where id = v_mine) = 1,
-    'a rep cannot delete even their own contact'
+    'a rep cannot destroy a record with a direct DELETE'
   );
-
 end;
 $$;
 
@@ -196,8 +200,8 @@ $$;
 --
 -- A plain UPDATE cannot do this: under FORCE ROW LEVEL SECURITY the new row
 -- must still satisfy the SELECT policy, and a record owned by a colleague is
--- invisible by definition. reassign_contact() exists for exactly this, and
--- these two assertions pin both halves — the refusal and the working path.
+-- invisible by definition. reassign_contact() exists for exactly this — and it
+-- is a Sales Director's tool, not a rep's.
 -- =============================================================================
 do $$
 declare
@@ -218,25 +222,30 @@ begin
     'a direct UPDATE cannot move a record out of the writer''s own sight'
   );
 
+  v_failed := false;
+  begin
+    perform reassign_contact(v_mine, v_rep2);
+  exception when others then
+    v_failed := true;
+  end;
+  perform test_assert(v_failed, 'a sales rep cannot reassign a record');
+
+  perform sign_in_as('mgr_auth');
   perform reassign_contact(v_mine, v_rep2);
   perform test_assert(
-    (select count(*) from contacts where id = v_mine) = 0,
-    'reassign_contact hands the account over, and the rep stops seeing it'
+    (select owner_id from contacts where id = v_mine) = v_rep2,
+    'a manager can hand the account over'
   );
 end;
 $$;
 
--- The record moved rather than merely vanishing.
 do $$
-declare
-  v_mine uuid := (select id from fixture where key = 'mine');
 begin
   perform sign_in_as('mgr_auth');
-  perform test_assert(
-    (select owner_id from contacts where id = v_mine) = (select id from fixture where key = 'rep2'),
-    'the handed-over record is genuinely reassigned, not just hidden'
+  perform reassign_contact(
+    (select id from fixture where key = 'mine'),
+    (select id from fixture where key = 'rep')
   );
-  perform reassign_contact(v_mine, (select id from fixture where key = 'rep'));
 end;
 $$;
 
@@ -392,10 +401,10 @@ begin
   insert into contacts (organization_id, first_name, owner_id) values (v_org, 'Doomed', null)
   returning id into v_temp;
 
-  delete from contacts where id = v_temp;
+  perform soft_delete_contact(v_temp);
   perform test_assert(
     (select count(*) from contacts where id = v_temp) = 0,
-    'a manager can delete a contact'
+    'a manager can delete a contact, and it leaves their view'
   );
 end;
 $$;

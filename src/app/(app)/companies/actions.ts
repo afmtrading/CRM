@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import { safeUrl } from '@/lib/field-options'
 import type { CompanyAddress, ContactLink } from '@/lib/database.types'
 
@@ -152,12 +152,13 @@ export async function updateCompany(
   return { ok: true }
 }
 
+/** Stamped rather than destroyed — see deleteContact. */
 export async function deleteCompany(formData: FormData) {
   const context = await requireSession()
-  assertCanManage(context)
+  assertCanWrite(context)
   const id = String(formData.get('id') ?? '')
 
-  const { error } = await scoped(context, 'companies').delete().eq('id', id)
+  const { error } = await context.supabase.rpc('soft_delete_company', { p_company_id: id })
   if (error) throw new Error(error.message)
 
   revalidatePath('/companies')

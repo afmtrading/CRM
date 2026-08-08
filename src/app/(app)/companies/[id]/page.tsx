@@ -79,6 +79,7 @@ export default async function CompanyDetailPage({
       .select("*")
       .eq("company_id", id)
       .is("duplicate_of_id", null)
+      .is("deleted_at", null)
       .order("last_name"),
     scoped(context, "deals")
       .select("*, stages(name)")
@@ -154,7 +155,7 @@ export default async function CompanyDetailPage({
                 Edit
               </Link>
             )}
-            {context.canManage && (
+            {context.canWrite && (
               <form action={deleteCompany}>
                 <input type="hidden" name="id" value={id} />
                 <button type="submit" className="btn-danger">

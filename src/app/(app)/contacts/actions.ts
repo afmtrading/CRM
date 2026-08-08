@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import { assertCanBulk, assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import { safeUrl } from '@/lib/field-options'
 import type { ContactLink, ContactRow, LifecycleStage } from '@/lib/database.types'
 
@@ -232,13 +232,20 @@ export async function updateContact(_prev: ActionState, formData: FormData): Pro
   return { ok: true }
 }
 
+/**
+ * Deleting stamps the record rather than destroying it. It leaves everyone's
+ * view except an administrator's, who can restore it, and the administrators
+ * are notified. Routed through a definer function because the stamped row stops
+ * satisfying the writer's own SELECT policy — the same reason handover needs
+ * one.
+ */
 export async function deleteContact(formData: FormData) {
   const context = await requireSession()
-  assertCanManage(context)
+  assertCanWrite(context)
 
   const id = String(formData.get('id') ?? '')
 
-  const { error } = await scoped(context, 'contacts').delete().eq('id', id)
+  const { error } = await context.supabase.rpc('soft_delete_contact', { p_contact_id: id })
   if (error) throw new Error(error.message)
 
   revalidatePath('/contacts')
@@ -337,7 +344,7 @@ export async function deleteSavedFilter(formData: FormData) {
  */
 export async function reassignContact(formData: FormData) {
   const context = await requireSession()
-  assertCanWrite(context)
+  assertCanBulk(context)
 
   const contactId = String(formData.get('contact_id') ?? '')
   const ownerId = String(formData.get('owner_id') ?? '')

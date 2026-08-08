@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { requireSession } from '@/lib/tenancy'
+import { requireSession, scoped } from '@/lib/tenancy'
 import { initials } from '@/lib/format'
 import { USER_ROLE_LABELS } from '@/lib/field-options'
 
@@ -23,6 +23,7 @@ import {
   SearchIcon,
   SignOutIcon,
   TagIcon,
+  TrashIcon,
   UsersIcon,
 } from '@/components/icons'
 
@@ -49,6 +50,7 @@ const ADMIN_NAV = [
   { href: '/settings/fields', label: 'Fields', icon: <FieldsIcon className={ICON} /> },
   { href: '/settings/tags', label: 'Tags', icon: <TagIcon className={ICON} /> },
   { href: '/settings/duplicates', label: 'Duplicates', icon: <DuplicatesIcon className={ICON} /> },
+  { href: '/settings/deleted', label: 'Deleted records', icon: <TrashIcon className={ICON} /> },
 ]
 
 /** Bulk tools sit with managers rather than with configuration. */
@@ -57,8 +59,14 @@ const MANAGER_NAV = [
 ]
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, organization, isAdmin, canManage } = await requireSession()
+  const context = await requireSession()
+  const { user, organization, isAdmin, canBulk } = context
   const displayName = user.name || user.email
+
+  // Unread count for the bell. Cheap: a partial index covers exactly this.
+  const { count: unread } = await scoped(context, 'notifications')
+    .select('id', { count: 'exact', head: true })
+    .is('read_at', null)
 
   return (
     <div className="flex min-h-screen">
@@ -85,7 +93,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </NavLink>
           ))}
 
-          {canManage && !isAdmin && (
+          {canBulk && !isAdmin && (
             <>
               <hr className="mt-6 mb-2 border-slate-200" />
               {MANAGER_NAV.map((item) => (
@@ -144,11 +152,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
             <div className="ml-auto flex items-center gap-1.5">
               <Link
-                href="/activities"
-                aria-label="Activities"
-                className="hidden rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 sm:block"
+                href="/notifications"
+                aria-label={unread ? `Notifications (${unread} unread)` : 'Notifications'}
+                className="relative rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
               >
                 <BellIcon className="h-5 w-5" />
+                {(unread ?? 0) > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                    {(unread ?? 0) > 9 ? '9+' : unread}
+                  </span>
+                )}
               </Link>
 
               {/* <details> keeps the menu server-rendered — no client bundle

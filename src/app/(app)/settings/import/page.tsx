@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { requireManager, scoped } from '@/lib/tenancy'
+import { requireBulk, scoped } from '@/lib/tenancy'
 import { formatDateTime } from '@/lib/format'
 import type { CustomFieldDefinitionRow, ImportJobRow } from '@/lib/database.types'
 import { PageHeader, Section } from '@/components/ui'
@@ -10,7 +10,7 @@ import { ImportWizard } from './import-wizard'
 export const metadata = { title: 'Import · FLO CRM' }
 
 export default async function ImportPage() {
-  const context = await requireManager()
+  const context = await requireBulk()
 
   const [{ data: customFields }, { data: jobs }] = await Promise.all([
     scoped(context, 'custom_field_definitions').select('*'),

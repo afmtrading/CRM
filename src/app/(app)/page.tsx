@@ -17,7 +17,10 @@ export default async function DashboardPage({
   const context = await requireSession()
 
   const [contacts, openDeals, myTasks, report] = await Promise.all([
-    scoped(context, 'contacts').select('id', { count: 'exact', head: true }).is('duplicate_of_id', null),
+    scoped(context, 'contacts')
+      .select('id', { count: 'exact', head: true })
+      .is('duplicate_of_id', null)
+      .is('deleted_at', null),
     scoped(context, 'deals').select('value, currency').eq('status', 'open'),
     scoped(context, 'activities')
       .select('*')

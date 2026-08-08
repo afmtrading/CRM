@@ -165,9 +165,9 @@ export default async function ContactDetailPage({
                 Edit
               </Link>
             )}
-            {/* Deleting is a manager's job; RLS refuses it either way, so the
-                button is hidden rather than left to fail. */}
-            {context.canManage && (
+            {/* Deleting is reversible now — the record is stamped, leaves
+                everyone's view but an administrator's, and can be restored. */}
+            {context.canWrite && (
               <form action={deleteContact}>
                 <input type="hidden" name="id" value={id} />
                 <button type="submit" className="btn-danger">

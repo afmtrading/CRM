@@ -12,8 +12,10 @@ export interface SessionContext {
   organization: OrganizationRow
   organizationId: string
   isAdmin: boolean
-  /** Admin or manager: sees every record, and may delete and import. */
+  /** Admin or manager: sees every record in the organization. */
   canManage: boolean
+  /** Admin, manager or sales director: may import, export and reassign. */
+  canBulk: boolean
   /** Anyone but a read-only user. */
   canWrite: boolean
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>
@@ -68,6 +70,10 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
     organizationId: organization.id,
     isAdmin: userRow.role === 'admin',
     canManage: userRow.role === 'admin' || userRow.role === 'manager',
+    canBulk:
+      userRow.role === 'admin' ||
+      userRow.role === 'manager' ||
+      userRow.role === 'sales_director',
     canWrite: userRow.role !== 'readonly',
     supabase,
   }
@@ -105,10 +111,10 @@ export async function requireAdmin(): Promise<SessionContext> {
   return context
 }
 
-/** For pages an admin or a manager may open — imports, bulk tools, exports. */
-export async function requireManager(): Promise<SessionContext> {
+/** For pages behind the bulk tools — import, export. */
+export async function requireBulk(): Promise<SessionContext> {
   const context = await requireSession()
-  if (!context.canManage) redirect('/?error=manager-required')
+  if (!context.canBulk) redirect('/?error=permission')
   return context
 }
 
@@ -119,6 +125,10 @@ export function assertCanWrite(context: SessionContext) {
 
 export function assertCanManage(context: SessionContext) {
   if (!context.canManage) throw new Error('Only an administrator or manager can do that.')
+}
+
+export function assertCanBulk(context: SessionContext) {
+  if (!context.canBulk) throw new Error('Your role does not allow importing, exporting or assigning.')
 }
 
 /**
@@ -153,6 +163,7 @@ export type TenantTable =
   | 'assignment_rules'
   | 'custom_field_definitions'
   | 'field_options'
+  | 'notifications'
   | 'users'
 
 /**

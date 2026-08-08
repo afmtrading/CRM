@@ -141,7 +141,7 @@ export async function deleteStage(formData: FormData) {
 // Users (PRD Section 4)
 // -----------------------------------------------------------------------------
 
-const userRoles = ['admin', 'manager', 'regular', 'readonly'] as const
+const userRoles = ['admin', 'manager', 'sales_director', 'regular', 'readonly'] as const
 
 const inviteSchema = z.object({
   email: z.string().trim().email(),
@@ -523,4 +523,33 @@ export async function deleteFieldOption(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/settings/fields')
+}
+
+// -----------------------------------------------------------------------------
+// Restoring deleted records
+//
+// Only an administrator sees the recycle bin, and only an administrator can put
+// something back. The database enforces that too — these are thin wrappers.
+// -----------------------------------------------------------------------------
+
+export async function restoreContact(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await context.supabase.rpc('restore_contact', { p_contact_id: id })
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/deleted')
+  revalidatePath('/contacts')
+}
+
+export async function restoreCompany(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await context.supabase.rpc('restore_company', { p_company_id: id })
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/deleted')
+  revalidatePath('/companies')
 }
