@@ -23,6 +23,23 @@
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
+-- Precondition
+--
+-- This migration builds on the role predicates added in
+-- 20260204000100_role_permissions.sql. Without them Postgres reports a missing
+-- function a hundred lines in, which says nothing about the real cause — so say
+-- it plainly up front.
+-- -----------------------------------------------------------------------------
+do $$
+begin
+  if to_regprocedure('public.current_user_role()') is null then
+    raise exception
+      'Run 20260204000000_role_values.sql and 20260204000100_role_permissions.sql first — this migration builds on them.';
+  end if;
+end
+$$;
+
+-- -----------------------------------------------------------------------------
 -- Soft delete
 -- -----------------------------------------------------------------------------
 alter table contacts
