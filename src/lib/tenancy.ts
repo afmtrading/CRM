@@ -12,6 +12,10 @@ export interface SessionContext {
   organization: OrganizationRow
   organizationId: string
   isAdmin: boolean
+  /** Admin or manager: sees every record, and may delete and import. */
+  canManage: boolean
+  /** Anyone but a read-only user. */
+  canWrite: boolean
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>
 }
 
@@ -51,12 +55,20 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
 
   if (!organization) return null
 
+  /*
+   * These mirror can_manage_records() and can_write_records() in the database.
+   * The database is what actually enforces them — these exist so the interface
+   * does not offer a button that RLS will refuse. If the two ever disagree, the
+   * database wins and the user sees a failure rather than a breach.
+   */
   return {
     authUserId: authUser.id,
     user: userRow,
     organization,
     organizationId: organization.id,
     isAdmin: userRow.role === 'admin',
+    canManage: userRow.role === 'admin' || userRow.role === 'manager',
+    canWrite: userRow.role !== 'readonly',
     supabase,
   }
 })
@@ -91,6 +103,22 @@ export async function requireAdmin(): Promise<SessionContext> {
   const context = await requireSession()
   if (!context.isAdmin) redirect('/?error=admin-required')
   return context
+}
+
+/** For pages an admin or a manager may open — imports, bulk tools, exports. */
+export async function requireManager(): Promise<SessionContext> {
+  const context = await requireSession()
+  if (!context.canManage) redirect('/?error=manager-required')
+  return context
+}
+
+/** Guards a server action. Throws rather than redirects, so the form reports it. */
+export function assertCanWrite(context: SessionContext) {
+  if (!context.canWrite) throw new Error('Your role does not allow changes.')
+}
+
+export function assertCanManage(context: SessionContext) {
+  if (!context.canManage) throw new Error('Only an administrator or manager can do that.')
 }
 
 /**

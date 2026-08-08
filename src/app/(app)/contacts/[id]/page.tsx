@@ -160,15 +160,21 @@ export default async function ContactDetailPage({
         description={contact.job_title ?? undefined}
         actions={
           <>
-            <Link href={`/contacts/${id}/edit`} className="btn-secondary">
-              Edit
-            </Link>
-            <form action={deleteContact}>
-              <input type="hidden" name="id" value={id} />
-              <button type="submit" className="btn-danger">
-                Delete
-              </button>
-            </form>
+            {context.canWrite && (
+              <Link href={`/contacts/${id}/edit`} className="btn-secondary">
+                Edit
+              </Link>
+            )}
+            {/* Deleting is a manager's job; RLS refuses it either way, so the
+                button is hidden rather than left to fail. */}
+            {context.canManage && (
+              <form action={deleteContact}>
+                <input type="hidden" name="id" value={id} />
+                <button type="submit" className="btn-danger">
+                  Delete
+                </button>
+              </form>
+            )}
           </>
         }
       />

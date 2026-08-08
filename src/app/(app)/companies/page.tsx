@@ -74,9 +74,11 @@ export default async function CompaniesPage({
         title="Companies"
         description={count ? `${count} compan${count === 1 ? 'y' : 'ies'}` : undefined}
         actions={
-          <Link href="/companies/new" className="btn-primary">
-            New company
-          </Link>
+          context.canWrite ? (
+            <Link href="/companies/new" className="btn-primary">
+              New company
+            </Link>
+          ) : undefined
         }
       />
 
@@ -86,6 +88,7 @@ export default async function CompaniesPage({
         savedFilters={(savedFilters ?? []) as SavedFilterRow[]}
         entityType="company"
         currentUserId={context.user.id}
+        canExport={context.canManage}
         saveAction={saveFilter}
         deleteAction={deleteSavedFilter}
       />

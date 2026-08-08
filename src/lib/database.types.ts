@@ -503,6 +503,10 @@ export interface Database {
         Returns: PipelineValueReportRow[]
       }
       create_birthday_reminders: { Args: { p_days_ahead?: number }; Returns: number }
+      reassign_contact: { Args: { p_contact_id: string; p_new_owner_id: string | null }; Returns: void }
+      reassign_deal: { Args: { p_deal_id: string; p_new_owner_id: string | null }; Returns: void }
+      can_manage_records: { Args: Record<string, never>; Returns: boolean }
+      can_write_records: { Args: Record<string, never>; Returns: boolean }
       current_org_id: { Args: Record<string, never>; Returns: string }
       is_org_admin: { Args: Record<string, never>; Returns: boolean }
     }

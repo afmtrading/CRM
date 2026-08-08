@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { requireSession } from '@/lib/tenancy'
 import { initials } from '@/lib/format'
+import { USER_ROLE_LABELS } from '@/lib/field-options'
 
 import { NavLink } from '@/components/nav-link'
 import {
@@ -47,12 +48,16 @@ const ADMIN_NAV = [
   { href: '/settings/assignment', label: 'Assignment', icon: <AssignmentIcon className={ICON} /> },
   { href: '/settings/fields', label: 'Fields', icon: <FieldsIcon className={ICON} /> },
   { href: '/settings/tags', label: 'Tags', icon: <TagIcon className={ICON} /> },
-  { href: '/settings/import', label: 'Import', icon: <ImportIcon className={ICON} /> },
   { href: '/settings/duplicates', label: 'Duplicates', icon: <DuplicatesIcon className={ICON} /> },
 ]
 
+/** Bulk tools sit with managers rather than with configuration. */
+const MANAGER_NAV = [
+  { href: '/settings/import', label: 'Import', icon: <ImportIcon className={ICON} /> },
+]
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, organization, isAdmin } = await requireSession()
+  const { user, organization, isAdmin, canManage } = await requireSession()
   const displayName = user.name || user.email
 
   return (
@@ -80,13 +85,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </NavLink>
           ))}
 
+          {canManage && !isAdmin && (
+            <>
+              <hr className="mt-6 mb-2 border-slate-200" />
+              {MANAGER_NAV.map((item) => (
+                <NavLink key={item.href} href={item.href} icon={item.icon}>
+                  {item.label}
+                </NavLink>
+              ))}
+            </>
+          )}
+
           {isAdmin && (
             <>
               <p className="mt-6 mb-2 hidden px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase lg:block">
                 Settings
               </p>
               <hr className="mt-6 mb-2 border-slate-200 lg:hidden" />
-              {ADMIN_NAV.map((item) => (
+              {[...ADMIN_NAV, ...MANAGER_NAV].map((item) => (
                 <NavLink key={item.href} href={item.href} icon={item.icon}>
                   {item.label}
                 </NavLink>
@@ -103,7 +119,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <div className="hidden min-w-0 flex-1 lg:block">
               <p className="truncate text-sm font-medium text-slate-800">{displayName}</p>
               <p className="truncate text-xs text-slate-500">
-                {user.role === 'admin' ? 'Administrator' : 'User'}
+                {USER_ROLE_LABELS[user.role] ?? user.role}
               </p>
             </div>
           </div>

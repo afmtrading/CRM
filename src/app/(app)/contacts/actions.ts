@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { requireSession, scoped } from '@/lib/tenancy'
+import { assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import { safeUrl } from '@/lib/field-options'
 import type { ContactLink, ContactRow, LifecycleStage } from '@/lib/database.types'
 
@@ -149,6 +149,7 @@ function readCustomFields(formData: FormData): Record<string, string | string[]>
  */
 export async function createContact(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const context = await requireSession()
+  if (!context.canWrite) return { error: 'Your role does not allow creating contacts.' }
 
   const parsed = contactSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
@@ -197,6 +198,8 @@ export async function createContact(_prev: ActionState, formData: FormData): Pro
 
 export async function updateContact(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const context = await requireSession()
+  if (!context.canWrite) return { error: 'Your role does not allow editing contacts.' }
+
   const id = String(formData.get('id') ?? '')
   if (!id) return { error: 'Missing contact id' }
 
@@ -209,12 +212,17 @@ export async function updateContact(_prev: ActionState, formData: FormData): Pro
   const company = await resolveCompanyId(context, input.company_id, formData)
   if (company.error) return { error: company.error }
 
+  /*
+   * Ownership is left alone for anyone but a manager. A rep's edit form does
+   * not render the field, and quietly writing owner_id from a posted value
+   * would let a crafted request move a record — or fail against RLS for an
+   * ordinary edit, since a row whose owner changes leaves the writer's sight.
+   * Handover goes through reassignContact instead.
+   */
+  const ownership = context.canManage ? { owner_id: input.owner_id || null } : {}
+
   const { error } = await scoped(context, 'contacts')
-    .update({
-      ...contactColumns(input, formData),
-      owner_id: input.owner_id || null,
-      company_id: company.id,
-    })
+    .update({ ...contactColumns(input, formData), ...ownership, company_id: company.id })
     .eq('id', id)
 
   if (error) return { error: error.message }
@@ -226,6 +234,8 @@ export async function updateContact(_prev: ActionState, formData: FormData): Pro
 
 export async function deleteContact(formData: FormData) {
   const context = await requireSession()
+  assertCanManage(context)
+
   const id = String(formData.get('id') ?? '')
 
   const { error } = await scoped(context, 'contacts').delete().eq('id', id)
@@ -238,6 +248,9 @@ export async function deleteContact(formData: FormData) {
 /** POST /contacts/{id}/merge, as a server action for the in-app merge flow. */
 export async function mergeContactsAction(formData: FormData) {
   const context = await requireSession()
+  // A merge folds one record into another and tombstones the loser — close
+  // enough to a delete to sit with managers.
+  assertCanManage(context)
   const targetId = String(formData.get('target_id') ?? '')
   const sourceId = String(formData.get('source_id') ?? '')
 
@@ -254,6 +267,7 @@ export async function mergeContactsAction(formData: FormData) {
 
 export async function setContactTags(formData: FormData) {
   const context = await requireSession()
+  assertCanWrite(context)
   const contactId = String(formData.get('contact_id') ?? '')
   const tagIds = formData.getAll('tag_ids').map(String).filter(Boolean)
 
@@ -310,4 +324,31 @@ export async function deleteSavedFilter(formData: FormData) {
 
   await scoped(context, 'saved_filters').delete().eq('id', id)
   revalidatePath(returnTo)
+}
+
+/**
+ * Hands a contact to a colleague.
+ *
+ * Routed through a database function because a plain UPDATE cannot do it: under
+ * FORCE ROW LEVEL SECURITY the updated row must still satisfy the SELECT
+ * policy, and a record owned by someone else is invisible by definition. The
+ * function does its own authorisation — you may give away what you can see,
+ * and nothing else.
+ */
+export async function reassignContact(formData: FormData) {
+  const context = await requireSession()
+  assertCanWrite(context)
+
+  const contactId = String(formData.get('contact_id') ?? '')
+  const ownerId = String(formData.get('owner_id') ?? '')
+
+  const { error } = await context.supabase.rpc('reassign_contact', {
+    p_contact_id: contactId,
+    p_new_owner_id: ownerId || null,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/contacts')
+  revalidatePath(`/contacts/${contactId}`)
 }

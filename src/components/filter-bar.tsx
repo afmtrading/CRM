@@ -27,6 +27,7 @@ export function FilterBar({
   savedFilters,
   entityType,
   currentUserId,
+  canExport = true,
   saveAction,
   deleteAction,
 }: {
@@ -35,6 +36,8 @@ export function FilterBar({
   savedFilters: SavedFilterRow[]
   entityType: 'contact' | 'company' | 'deal'
   currentUserId: string
+  /** Export can pull the whole book, so it is a manager's action. */
+  canExport?: boolean
   saveAction: (formData: FormData) => void
   deleteAction: (formData: FormData) => void
 }) {
@@ -133,10 +136,16 @@ export function FilterBar({
         </button>
 
         <div className="ml-auto flex items-center gap-2">
-          <Link className="btn-secondary" href={`/api/export?${exportParams.toString()}`} prefetch={false}>
-            <ExportIcon className="h-4 w-4" />
-            Export CSV
-          </Link>
+          {canExport && (
+            <Link
+              className="btn-secondary"
+              href={`/api/export?${exportParams.toString()}`}
+              prefetch={false}
+            >
+              <ExportIcon className="h-4 w-4" />
+              Export CSV
+            </Link>
+          )}
           <button type="button" className="btn-secondary" onClick={() => setSaving(!saving)}>
             Save view
           </button>

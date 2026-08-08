@@ -1,6 +1,7 @@
 import { requireAdmin, scoped } from '@/lib/tenancy'
 import { formatDateTime } from '@/lib/format'
 import type { UserRow } from '@/lib/database.types'
+import { USER_ROLES } from '@/lib/field-options'
 import { PageHeader, Section } from '@/components/ui'
 
 import { updateUserRole, updateUserStatus } from '../actions'
@@ -50,9 +51,12 @@ export default async function UserSettingsPage() {
                     <td>
                       <form action={updateUserRole} className="flex items-center gap-1">
                         <input type="hidden" name="id" value={user.id} />
-                        <select name="role" defaultValue={user.role} className="input w-28 py-1">
-                          <option value="regular">Regular</option>
-                          <option value="admin">Admin</option>
+                        <select name="role" defaultValue={user.role} className="input w-36 py-1">
+                          {USER_ROLES.map((role) => (
+                            <option key={role.value} value={role.value} title={role.description}>
+                              {role.label}
+                            </option>
+                          ))}
                         </select>
                         <button type="submit" className="text-xs text-slate-500 hover:text-brand-700">
                           Save

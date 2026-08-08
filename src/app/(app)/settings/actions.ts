@@ -141,10 +141,12 @@ export async function deleteStage(formData: FormData) {
 // Users (PRD Section 4)
 // -----------------------------------------------------------------------------
 
+const userRoles = ['admin', 'manager', 'regular', 'readonly'] as const
+
 const inviteSchema = z.object({
   email: z.string().trim().email(),
   name: z.string().trim().max(120).default(''),
-  role: z.enum(['admin', 'regular']).default('regular'),
+  role: z.enum(userRoles).default('regular'),
 })
 
 export type InviteState = { ok?: string; error?: string }
@@ -203,10 +205,16 @@ export async function inviteUser(_prev: InviteState, formData: FormData): Promis
 export async function updateUserRole(formData: FormData) {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
-  const role = String(formData.get('role') ?? 'regular') === 'admin' ? 'admin' : 'regular'
+
+  // Parsed against the full list rather than coerced: treating anything that is
+  // not 'admin' as 'regular' would silently demote a manager to a rep, or a
+  // read-only user to one who can write.
+  const parsedRole = z.enum(userRoles).safeParse(formData.get('role'))
+  if (!parsedRole.success) throw new Error('Unknown role')
+  const role = parsedRole.data
 
   // Never let the last administrator demote themselves out of the organization.
-  if (id === context.user.id && role === 'regular') {
+  if (id === context.user.id && role !== 'admin') {
     const { count } = await scoped(context, 'users')
       .select('id', { count: 'exact', head: true })
       .eq('role', 'admin')

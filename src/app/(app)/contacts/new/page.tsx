@@ -34,6 +34,7 @@ export default async function NewContactPage({
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
         fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
+        canManage={context.canManage}
         submitLabel="Create contact"
       />
     </>

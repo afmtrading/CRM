@@ -173,14 +173,18 @@ export default async function ContactsPage({
         description="Manage your contacts"
         actions={
           <>
-            <Link href="/settings/import" className="btn-secondary">
-              <ImportIcon className="h-4 w-4" />
-              Import
-            </Link>
-            <Link href="/contacts/new" className="btn-primary">
-              <PlusIcon className="h-4 w-4" />
-              New contact
-            </Link>
+            {context.canManage && (
+              <Link href="/settings/import" className="btn-secondary">
+                <ImportIcon className="h-4 w-4" />
+                Import
+              </Link>
+            )}
+            {context.canWrite && (
+              <Link href="/contacts/new" className="btn-primary">
+                <PlusIcon className="h-4 w-4" />
+                New contact
+              </Link>
+            )}
           </>
         }
       />
@@ -224,6 +228,7 @@ export default async function ContactsPage({
         savedFilters={(savedFilters ?? []) as SavedFilterRow[]}
         entityType="contact"
         currentUserId={context.user.id}
+        canExport={context.canManage}
         saveAction={saveFilter}
         deleteAction={deleteSavedFilter}
       />

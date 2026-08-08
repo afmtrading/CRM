@@ -36,6 +36,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
+  // Export is the one action that can put the whole customer list in a file, so
+  // it is held to the same bar as deleting and importing.
+  if (!context.canManage) {
+    return NextResponse.json(
+      { error: 'Only an administrator or manager can export.' },
+      { status: 403 },
+    )
+  }
+
   const params = Object.fromEntries(request.nextUrl.searchParams.entries())
   const entity = params.entity ?? 'contact'
 

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { requireSession, scoped } from '@/lib/tenancy'
+import { assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import { safeUrl } from '@/lib/field-options'
 import type { CompanyAddress, ContactLink } from '@/lib/database.types'
 
@@ -110,6 +110,7 @@ export async function createCompany(
   formData: FormData,
 ): Promise<CompanyActionState> {
   const context = await requireSession()
+  if (!context.canWrite) return { error: 'Your role does not allow creating companies.' }
 
   const parsed = companySchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid company' }
@@ -133,6 +134,8 @@ export async function updateCompany(
   formData: FormData,
 ): Promise<CompanyActionState> {
   const context = await requireSession()
+  if (!context.canWrite) return { error: 'Your role does not allow editing companies.' }
+
   const id = String(formData.get('id') ?? '')
 
   const parsed = companySchema.safeParse(Object.fromEntries(formData))
@@ -151,6 +154,7 @@ export async function updateCompany(
 
 export async function deleteCompany(formData: FormData) {
   const context = await requireSession()
+  assertCanManage(context)
   const id = String(formData.get('id') ?? '')
 
   const { error } = await scoped(context, 'companies').delete().eq('id', id)
@@ -162,6 +166,7 @@ export async function deleteCompany(formData: FormData) {
 
 export async function setCompanyTags(formData: FormData) {
   const context = await requireSession()
+  assertCanWrite(context)
   const companyId = String(formData.get('company_id') ?? '')
   const tagIds = formData.getAll('tag_ids').map(String).filter(Boolean)
 

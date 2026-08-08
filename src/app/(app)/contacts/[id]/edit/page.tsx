@@ -36,6 +36,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
         fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
+        canManage={context.canManage}
         submitLabel="Save changes"
       />
     </>

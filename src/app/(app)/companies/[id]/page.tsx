@@ -141,21 +141,27 @@ export default async function CompanyDetailPage({
         description={company.domain ?? undefined}
         actions={
           <>
-            <Link
-              href={`/contacts/new?company_id=${id}`}
-              className="btn-secondary"
-            >
-              New contact
-            </Link>
-            <Link href={`/companies/${id}/edit`} className="btn-secondary">
-              Edit
-            </Link>
-            <form action={deleteCompany}>
-              <input type="hidden" name="id" value={id} />
-              <button type="submit" className="btn-danger">
-                Delete
-              </button>
-            </form>
+            {context.canWrite && (
+              <Link
+                href={`/contacts/new?company_id=${id}`}
+                className="btn-secondary"
+              >
+                New contact
+              </Link>
+            )}
+            {context.canWrite && (
+              <Link href={`/companies/${id}/edit`} className="btn-secondary">
+                Edit
+              </Link>
+            )}
+            {context.canManage && (
+              <form action={deleteCompany}>
+                <input type="hidden" name="id" value={id} />
+                <button type="submit" className="btn-danger">
+                  Delete
+                </button>
+              </form>
+            )}
           </>
         }
       />

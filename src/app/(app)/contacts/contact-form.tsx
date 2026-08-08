@@ -37,6 +37,7 @@ export function ContactForm({
   customFields,
   fieldOptions,
   prefillCompanyId,
+  canManage = true,
   submitLabel,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
@@ -47,6 +48,8 @@ export function ContactForm({
   fieldOptions: FieldOptionRow[]
   /** Preselects the company when arriving from a company page. */
   prefillCompanyId?: string
+  /** Only a manager may set the owner; a rep hands records over instead. */
+  canManage?: boolean
   submitLabel: string
 }) {
   const [state, formAction, pending] = useActionState(action, {} as ActionState)
@@ -202,19 +205,21 @@ export function ContactForm({
       </FormCard>
 
       <FormCard title={CONTACT_CARDS[2].label} description={CONTACT_CARDS[2].description}>
-        <div>
-          <label className="label" htmlFor="owner_id">
-            Owner
-          </label>
-          <select id="owner_id" name="owner_id" className="input" defaultValue={contact?.owner_id ?? ''}>
-            <option value="">Assign automatically</option>
-            {owners.map((owner) => (
-              <option key={owner.id} value={owner.id}>
-                {owner.name || owner.email}
-              </option>
-            ))}
-          </select>
-        </div>
+        {canManage && (
+          <div>
+            <label className="label" htmlFor="owner_id">
+              Owner
+            </label>
+            <select id="owner_id" name="owner_id" className="input" defaultValue={contact?.owner_id ?? ''}>
+              <option value="">Assign automatically</option>
+              {owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.name || owner.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label className="label" htmlFor="lifecycle_stage">
             Lifecycle stage

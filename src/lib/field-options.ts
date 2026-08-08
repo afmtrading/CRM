@@ -317,3 +317,19 @@ export function optionsForField(
 ) {
   return options.filter((option) => option.entity_type === entity && option.field_key === key)
 }
+
+
+/**
+ * Roles as an admin sees them. 'regular' keeps its database name — renaming the
+ * enum value would rewrite every user row for a label change.
+ */
+export const USER_ROLES: { value: string; label: string; description: string }[] = [
+  { value: 'admin', label: 'Administrator', description: 'Everything, including settings and users' },
+  { value: 'manager', label: 'Manager', description: 'Every record, and may delete and import' },
+  { value: 'regular', label: 'Sales rep', description: 'Only records they own, plus unassigned ones' },
+  { value: 'readonly', label: 'Read-only', description: 'Can look, cannot change anything' },
+]
+
+export const USER_ROLE_LABELS = Object.fromEntries(
+  USER_ROLES.map((role) => [role.value, role.label]),
+) as Record<string, string>
