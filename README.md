@@ -172,18 +172,28 @@ supabase/
   tests/                SQL test suites
 scripts/test-db.sh      database test runner
 tests/                  unit tests
-docs/SYNC.md            what the Gmail/Calendar connector has to do
+docs/SYNC.md            how mailbox sync works, and why it works that way
+docs/GMAIL_SETUP.md     click-by-click Google Cloud + deployment runbook
 ```
 
 ---
 
+## Gmail sync
+
+**Built and tested; off until configured.** Emails written in Gmail appear on
+the contact's timeline by themselves, provided the contact is already in the
+CRM — everything else is discarded on arrival. Logging only: nothing is ever
+sent from the CRM.
+
+It stays invisible until an administrator has created a Google Cloud project
+and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `MAILBOX_TOKEN_KEY`;
+until then the Mailboxes page says so rather than offering a button that leads
+to a Google error page. **[docs/GMAIL_SETUP.md](docs/GMAIL_SETUP.md)** walks
+through the setup; **[docs/SYNC.md](docs/SYNC.md)** explains the design.
+
 ## Known gap
 
-**Gmail and Calendar sync (PRD 6.4) is half-built.** The CRM side is done and
-tested: `POST /api/activities/ingest` accepts messages and events, matches them
-to contacts by email address within one organization, and writes them onto the
-timeline idempotently. The Google-side connector — OAuth consent, token
-storage, and the scheduled poll — is **not** built, because it needs Google
-Cloud credentials and an OAuth consent screen that do not exist yet.
-`docs/SYNC.md` specifies exactly what that connector has to do. Everything else
-in Phase 1 is implemented.
+**Calendar sync (PRD 6.4).** `POST /api/activities/ingest` already understands
+meetings and writes them to the timeline, so the CRM side is done. What is
+missing is the Google half: the `calendar.readonly` scope and a second poller
+alongside the Gmail one. Everything else in Phase 1 is implemented.

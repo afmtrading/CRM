@@ -29,19 +29,17 @@ Both the built-in poller and any external connector go through the same
 
 ## Setting it up
 
+**[docs/GMAIL_SETUP.md](GMAIL_SETUP.md) is the click-by-click runbook**, including
+what each Google console screen is called, what the users see, and what every
+error message means. What follows is the shape of it and the reasoning.
+
 ### 1. Google Cloud
 
-Sign in as **tradingafm@gmail.com** — that account owns the project and is the
-support address users see on the consent screen.
-
-1. Create a project (`FLO CRM`) and enable the **Gmail API**.
-2. OAuth consent screen → **External**, left in **Testing**.
-3. Support email and developer contact: `tradingafm@gmail.com`.
-4. Add the scopes `gmail.readonly` and `userinfo.email`.
-5. Under **Test users**, add every address that will connect a mailbox.
-6. Create an OAuth client (Web application) with these redirect URIs:
-   - `https://your-domain/api/gmail/callback`
-   - `http://localhost:3000/api/gmail/callback`
+Owned by **tradingafm@gmail.com**, which is also the support address on the
+consent screen. A project with the Gmail API enabled, an **External** consent
+screen left in **Testing**, the two scopes below, every user's address on the
+test-user list, and a Web application client whose redirect URIs are
+`https://your-domain/api/gmail/callback` and the localhost equivalent.
 
 #### Why External/Testing, and what it costs
 
@@ -116,7 +114,8 @@ else's — the callback reads the user from the session, never from the request.
 
 Their address must be on the test-user list first, or Google refuses the sign-in
 before the CRM is involved. Google will also warn that the app is unverified;
-**Advanced → Go to FLO CRM** continues past it.
+**Advanced → Go to FLO CRM** continues past it. Both are worth saying in
+advance, because each one looks like the app is broken.
 
 About once a week the mailbox will read *Needs reconnecting* — that is the
 testing-mode expiry, not a fault. One click on Reconnect and syncing resumes
