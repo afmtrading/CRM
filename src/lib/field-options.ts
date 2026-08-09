@@ -21,6 +21,34 @@ export const COMPANY_CARDS: { key: ContactCard; label: string; description: stri
   { key: 'digital', label: 'Digital', description: 'Website and social profiles' },
 ]
 
+/**
+ * A product's cards. 'pricing' exists nowhere else — what a thing costs has no
+ * counterpart on a person or a business.
+ */
+export const PRODUCT_CARDS: { key: ContactCard; label: string; description: string }[] = [
+  { key: 'details', label: 'Product details', description: 'What it is and how it is counted' },
+  { key: 'pricing', label: 'Pricing', description: 'What it sells for and what it costs' },
+  { key: 'additional', label: 'Additional info', description: 'Description and anything else' },
+]
+
+export const PRODUCT_CARD_LABELS = Object.fromEntries(
+  PRODUCT_CARDS.map((card) => [card.key, card.label]),
+) as Record<ContactCard, string>
+
+/**
+ * Every card a custom field can be assigned to, named so an admin can tell
+ * which records offer it. One flat list rather than a per-record one: the card
+ * picker in settings is a plain form, and a dependent dropdown would mean
+ * shipping JavaScript for a choice made once.
+ */
+export const ALL_CARDS: { key: ContactCard; label: string }[] = [
+  { key: 'details', label: 'Details' },
+  { key: 'influence', label: 'Influence — contacts' },
+  { key: 'pricing', label: 'Pricing — products' },
+  { key: 'digital', label: 'Digital — contacts and companies' },
+  { key: 'additional', label: 'Additional info' },
+]
+
 export const CONTACT_CARD_LABELS = Object.fromEntries(
   CONTACT_CARDS.map((card) => [card.key, card.label]),
 ) as Record<ContactCard, string>
@@ -34,9 +62,9 @@ export const COMPANY_CARD_LABELS = Object.fromEntries(
  * "Contact details" on a person and "Company info" on a business.
  */
 export function cardLabel(entity: string, card: ContactCard): string {
-  return entity === 'company'
-    ? (COMPANY_CARD_LABELS[card] ?? CONTACT_CARD_LABELS[card] ?? card)
-    : (CONTACT_CARD_LABELS[card] ?? card)
+  if (entity === 'company') return COMPANY_CARD_LABELS[card] ?? CONTACT_CARD_LABELS[card] ?? card
+  if (entity === 'product') return PRODUCT_CARD_LABELS[card] ?? CONTACT_CARD_LABELS[card] ?? card
+  return CONTACT_CARD_LABELS[card] ?? card
 }
 
 /**
@@ -84,12 +112,21 @@ export const OPTION_COLOR_SWATCHES: Record<OptionColor, string> = {
   teal: 'bg-teal-500',
 }
 
+/** Records that can carry organization-defined fields and option lists. */
+export type OptionEntity = 'contact' | 'company' | 'product'
+
+export const OPTION_ENTITIES: { value: OptionEntity; label: string }[] = [
+  { value: 'contact', label: 'Contact' },
+  { value: 'company', label: 'Company' },
+  { value: 'product', label: 'Product' },
+]
+
 export const OPTION_FIELDS: {
   key: OptionFieldKey
   label: string
   card: ContactCard
   multiple: boolean
-  entity: 'contact' | 'company'
+  entity: OptionEntity
 }[] = [
   // These two describe the business, not the person, so they live on the
   // company record and are shared by every contact who works there.
@@ -98,6 +135,9 @@ export const OPTION_FIELDS: {
   { key: 'role_type', label: 'Role type', card: 'influence', multiple: true, entity: 'contact' },
   { key: 'priority', label: 'Priority', card: 'influence', multiple: false, entity: 'contact' },
   { key: 'credibility', label: 'Credibility', card: 'influence', multiple: false, entity: 'contact' },
+  // Seeded with nothing on purpose: a catalogue's categories are the
+  // organization's own vocabulary, not one this app can guess.
+  { key: 'product_category', label: 'Product category', card: 'details', multiple: false, entity: 'product' },
 ]
 
 export const OPTION_FIELD_LABELS = Object.fromEntries(
@@ -269,14 +309,14 @@ export function daysUntilBirthday(birthday: string | null | undefined, today = n
 
 
 /**
- * Everything that has an option list: the five built-in fields plus any custom
+ * Everything that has an option list: the built-in fields plus any custom
  * select or multi-select an organization has defined. Settings renders one list
  * from this, so there is a single place to manage option values and colours.
  */
 export type OptionOwner = {
   key: string
   label: string
-  entity: 'contact' | 'company'
+  entity: OptionEntity
   multiple: boolean
   builtIn: boolean
   /** Where the field appears on the record. */
@@ -300,7 +340,12 @@ export function optionOwners(
     .map((field) => ({
       key: field.key,
       label: field.label,
-      entity: field.entity_type === 'company' ? 'company' : 'contact',
+      entity:
+        field.entity_type === 'company'
+          ? 'company'
+          : field.entity_type === 'product'
+            ? 'product'
+            : 'contact',
       multiple: field.field_type === 'multiselect',
       builtIn: false,
       card: field.card,

@@ -18,6 +18,7 @@ import {
   FieldsIcon,
   ImportIcon,
   PipelinesIcon,
+  ProductsIcon,
   ReportsIcon,
   ScoringIcon,
   SearchIcon,
@@ -38,6 +39,7 @@ const NAV = [
   { href: '/contacts', label: 'Contacts', icon: <ContactsIcon className={ICON} /> },
   { href: '/companies', label: 'Companies', icon: <CompaniesIcon className={ICON} /> },
   { href: '/deals', label: 'Deals', icon: <DealsIcon className={ICON} /> },
+  { href: '/products', label: 'Products', icon: <ProductsIcon className={ICON} /> },
   { href: '/activities', label: 'Activities', icon: <ActivityIcon className={ICON} /> },
   { href: '/reports/pipeline-value', label: 'Reports', icon: <ReportsIcon className={ICON} /> },
 ]

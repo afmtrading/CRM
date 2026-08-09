@@ -553,3 +553,14 @@ export async function restoreCompany(formData: FormData) {
   revalidatePath('/settings/deleted')
   revalidatePath('/companies')
 }
+
+export async function restoreProduct(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await context.supabase.rpc('restore_product', { p_product_id: id })
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/deleted')
+  revalidatePath('/products')
+}

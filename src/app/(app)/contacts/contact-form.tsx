@@ -22,6 +22,7 @@ import {
   FormCard,
   LinksEditor,
   NotesEditor,
+  ProductChips,
   RadioChips,
 } from '@/components/form-fields'
 
@@ -36,6 +37,8 @@ export function ContactForm({
   owners,
   customFields,
   fieldOptions,
+  products,
+  productInterest = [],
   prefillCompanyId,
   canManage = true,
   submitLabel,
@@ -46,6 +49,9 @@ export function ContactForm({
   owners: UserRow[]
   customFields: CustomFieldDefinitionRow[]
   fieldOptions: FieldOptionRow[]
+  /** The catalogue, for "what have they asked about". */
+  products: { id: string; name: string }[]
+  productInterest?: string[]
   /** Preselects the company when arriving from a company page. */
   prefillCompanyId?: string
   /** Only a manager may set the owner; a rep hands records over instead. */
@@ -196,6 +202,13 @@ export function ContactForm({
             options={optionsFor('credibility')}
             selected={contact?.credibility ?? null}
           />
+        </div>
+        <div className="sm:col-span-2">
+          <span className="label">Interested in</span>
+          <ProductChips products={products} selected={productInterest} />
+          <p className="mt-1 text-xs text-slate-400">
+            What they have asked about. What they have actually bought comes from won deals.
+          </p>
         </div>
         <CustomFieldInputs
           fields={customByCard('influence')}

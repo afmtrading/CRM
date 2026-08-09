@@ -85,6 +85,7 @@ export default async function ContactDetailPage({
     { data: contactTags },
     { data: fieldOptions },
     { data: customFieldDefs },
+    { data: productInterest },
     { data: duplicates },
   ] = await Promise.all([
     scoped(context, "activities")
@@ -105,6 +106,9 @@ export default async function ContactDetailPage({
       .select("*")
       .eq("entity_type", "contact")
       .order("order"),
+    scoped(context, "contact_products")
+      .select("product_id, products(id, name)")
+      .eq("contact_id", id),
     context.supabase.rpc("find_duplicate_contacts", {
       p_email: contact.email,
       p_first_name: contact.first_name,
@@ -113,6 +117,12 @@ export default async function ContactDetailPage({
       p_exclude_id: contact.id,
     }),
   ]);
+
+  const interests = (
+    (productInterest ?? []) as { products: { id: string; name: string } | null }[]
+  )
+    .map((row) => row.products)
+    .filter((product): product is { id: string; name: string } => product !== null);
 
   const duplicateList = (duplicates ?? []) as ContactRow[];
   const userList = (users ?? []) as UserRow[];
@@ -401,6 +411,23 @@ export default async function ContactDetailPage({
                   />
                 ) : (
                   <Empty />
+                )}
+              </Field>
+              <Field label="Interested in" wide>
+                {interests.length === 0 ? (
+                  <Empty />
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {interests.map((product) => (
+                      <Link
+                        key={product.id}
+                        href={`/products/${product.id}`}
+                        className="badge bg-brand-100 text-brand-700 hover:bg-brand-200"
+                      >
+                        {product.name}
+                      </Link>
+                    ))}
+                  </div>
                 )}
               </Field>
               <CustomFieldValues

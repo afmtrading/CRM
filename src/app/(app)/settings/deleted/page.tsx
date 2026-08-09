@@ -1,11 +1,11 @@
 import Link from 'next/link'
 
 import { requireAdmin, scoped } from '@/lib/tenancy'
-import { contactName, formatDateTime } from '@/lib/format'
-import type { CompanyRow, ContactRow, UserRow } from '@/lib/database.types'
+import { contactName, formatCurrency, formatDateTime } from '@/lib/format'
+import type { CompanyRow, ContactRow, ProductRow, UserRow } from '@/lib/database.types'
 import { Avatar, EmptyState, PageHeader, Section } from '@/components/ui'
 
-import { restoreCompany, restoreContact } from '../actions'
+import { restoreCompany, restoreContact, restoreProduct } from '../actions'
 
 export const metadata = { title: 'Deleted records · FLO CRM' }
 
@@ -19,22 +19,29 @@ export const metadata = { title: 'Deleted records · FLO CRM' }
 export default async function DeletedRecordsPage() {
   const context = await requireAdmin()
 
-  const [{ data: contacts }, { data: companies }, { data: users }] = await Promise.all([
-    scoped(context, 'contacts')
-      .select('*')
-      .not('deleted_at', 'is', null)
-      .order('deleted_at', { ascending: false })
-      .limit(200),
-    scoped(context, 'companies')
-      .select('*')
-      .not('deleted_at', 'is', null)
-      .order('deleted_at', { ascending: false })
-      .limit(200),
-    scoped(context, 'users').select('*'),
-  ])
+  const [{ data: contacts }, { data: companies }, { data: products }, { data: users }] =
+    await Promise.all([
+      scoped(context, 'contacts')
+        .select('*')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(200),
+      scoped(context, 'companies')
+        .select('*')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(200),
+      scoped(context, 'products')
+        .select('*')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(200),
+      scoped(context, 'users').select('*'),
+    ])
 
   const contactRows = (contacts ?? []) as ContactRow[]
   const companyRows = (companies ?? []) as CompanyRow[]
+  const productRows = (products ?? []) as ProductRow[]
   const userList = (users ?? []) as UserRow[]
 
   const deleterName = (id: string | null) => {
@@ -43,19 +50,19 @@ export default async function DeletedRecordsPage() {
     return user ? user.name || user.email : 'Unknown'
   }
 
-  const total = contactRows.length + companyRows.length
+  const total = contactRows.length + companyRows.length + productRows.length
 
   return (
     <>
       <PageHeader
         title="Deleted records"
-        description="Contacts and companies that have been deleted. Nobody else can see them. Restoring puts a record back where it was, with its owner, activities and deals intact."
+        description="Deleted records. Restoring puts one back where it was, with its owner, activities and deals intact. A deleted product stays readable on the deals that already list it, so their totals never move."
       />
 
       {total === 0 ? (
         <EmptyState
           title="Nothing has been deleted"
-          description="When someone deletes a contact or a company it lands here, and every administrator is notified."
+          description="When someone deletes a contact, a company or a product it lands here, and every administrator is notified."
         />
       ) : (
         <div className="space-y-5">
@@ -141,6 +148,52 @@ export default async function DeletedRecordsPage() {
                         <td className="text-right">
                           <form action={restoreCompany}>
                             <input type="hidden" name="id" value={company.id} />
+                            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                              Restore
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          )}
+          {productRows.length > 0 && (
+            <Section title={`Products (${productRows.length})`}>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>SKU</th>
+                      <th className="text-right">Price</th>
+                      <th>Deleted by</th>
+                      <th>Deleted</th>
+                      <th className="text-right">Restore</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productRows.map((product) => (
+                      <tr key={product.id}>
+                        <td>
+                          <Link
+                            href={`/products/${product.id}`}
+                            className="font-medium text-slate-900 hover:text-brand-700"
+                          >
+                            {product.name}
+                          </Link>
+                        </td>
+                        <td className="text-slate-600">{product.sku ?? '—'}</td>
+                        <td className="text-right text-slate-600">
+                          {formatCurrency(Number(product.unit_price), product.currency)}
+                        </td>
+                        <td className="text-slate-600">{deleterName(product.deleted_by)}</td>
+                        <td className="text-slate-500">{formatDateTime(product.deleted_at)}</td>
+                        <td className="text-right">
+                          <form action={restoreProduct}>
+                            <input type="hidden" name="id" value={product.id} />
                             <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
                               Restore
                             </button>

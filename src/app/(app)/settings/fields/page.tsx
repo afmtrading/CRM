@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { requireAdmin, scoped } from '@/lib/tenancy'
 import type { CustomFieldDefinitionRow, FieldOptionRow } from '@/lib/database.types'
 import {
-  CONTACT_CARDS,
+  ALL_CARDS,
+  OPTION_ENTITIES,
   cardLabel,
   OPTION_COLORS,
   OPTION_COLOR_CLASSES,
@@ -65,7 +66,7 @@ export default async function FieldsPage({
     <>
       <PageHeader
         title="Fields"
-        description="Organization-defined fields on contacts and companies, and the values behind every field that offers a choice. Both live here — pick a field on the left to edit its options."
+        description="Organization-defined fields on contacts, companies and products, and the values behind every field that offers a choice. Both live here — pick a field on the left to edit its options."
       />
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -114,8 +115,11 @@ export default async function FieldsPage({
                   Record type
                 </label>
                 <select id="field-entity" name="entity_type" className="input" defaultValue="contact">
-                  <option value="contact">Contact</option>
-                  <option value="company">Company</option>
+                  {OPTION_ENTITIES.map((entity) => (
+                    <option key={entity.value} value={entity.value}>
+                      {entity.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -153,7 +157,7 @@ export default async function FieldsPage({
                   Card
                 </label>
                 <select id="field-card" name="card" className="input" defaultValue="additional">
-                  {CONTACT_CARDS.map((card) => (
+                  {ALL_CARDS.map((card) => (
                     <option key={card.key} value={card.key}>
                       {card.label}
                     </option>

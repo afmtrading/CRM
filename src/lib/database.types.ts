@@ -24,10 +24,11 @@ export type UserRole = 'admin' | 'manager' | 'sales_director' | 'regular' | 'rea
 export type UserStatus = 'active' | 'invited' | 'disabled'
 export type LifecycleStage = 'lead' | 'qualified' | 'customer' | 'other'
 export type DealStatus = 'open' | 'won' | 'lost'
+export type DealValueSource = 'manual' | 'products'
 export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'task'
 export type RelatedToType = 'contact' | 'company' | 'deal'
 export type ImportStatus = 'pending' | 'processing' | 'complete' | 'failed'
-export type FilterEntityType = 'contact' | 'company' | 'deal' | 'campaign'
+export type FilterEntityType = 'contact' | 'company' | 'deal' | 'campaign' | 'product'
 export type ScoreCondition =
   | 'equals'
   | 'not_equals'
@@ -39,8 +40,11 @@ export type ScoreCondition =
 export type AssignmentStrategy = 'round_robin' | 'by_source' | 'fixed_user'
 export type CustomFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'multiselect'
 
-/** Which card on the contact record a field is rendered under. */
-export type ContactCard = 'details' | 'influence' | 'additional' | 'digital'
+/**
+ * Which card on a record a field is rendered under. Contacts and companies
+ * share the first four; 'pricing' belongs to products alone.
+ */
+export type ContactCard = 'details' | 'influence' | 'additional' | 'digital' | 'pricing'
 
 /** Palette a select option's colour is drawn from (mapped to classes in lib/field-options.ts). */
 export type OptionColor =
@@ -55,13 +59,14 @@ export type OptionColor =
   | 'orange'
   | 'teal'
 
-/** The five option lists an organization configures for its contacts. */
+/** The built-in option lists an organization configures for its records. */
 export type OptionFieldKey =
   | 'specialty_market'
   | 'customer_type'
   | 'role_type'
   | 'priority'
   | 'credibility'
+  | 'product_category'
 
 /** A named link on the Digital card, beyond the known social networks. */
 export type ContactLink = { label: string; url: string }
@@ -224,6 +229,11 @@ export type DealRow = {
   currency: string
   probability: number
   probability_overridden: boolean
+  /**
+   * Where `value` comes from. 'products' means it is the sum of the deal's line
+   * items and is kept in step automatically; 'manual' means somebody typed it.
+   */
+  value_source: DealValueSource
   expected_close_date: string | null
   actual_close_date: string | null
   status: DealStatus
@@ -231,6 +241,63 @@ export type DealRow = {
   position: number
   created_at: string
   updated_at: string
+}
+
+export type ProductRow = {
+  id: string
+  organization_id: string
+  name: string
+  sku: string | null
+  /** Drawn from field_options, like every other select field. */
+  category: string | null
+  /** kg, MT, container, licence — whatever the line item is counted in. */
+  unit: string
+  unit_price: number
+  unit_cost: number
+  currency: string
+  /** Markdown, rendered through renderMarkdown() — never raw HTML. */
+  description: string | null
+  custom_fields: Record<string, Json>
+  /** Retired but still on old deals. The everyday alternative to deleting. */
+  active: boolean
+  created_by: string | null
+  updated_by: string | null
+  deleted_at: string | null
+  deleted_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * A product on a deal, at the price it was sold for.
+ *
+ * unit_price and unit_cost are copied from the product when the line is added
+ * and never follow it afterwards, so re-pricing the catalogue cannot rewrite
+ * what a closed deal was worth. Amounts are in the deal's currency.
+ */
+export type DealProductRow = {
+  id: string
+  organization_id: string
+  deal_id: string
+  product_id: string
+  quantity: number
+  unit_price: number
+  unit_cost: number
+  discount_pct: number
+  /** Generated in the database — never written by the application. */
+  line_total: number
+  line_cost: number
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+/** What a contact has asked about. Intent, not purchase history. */
+export type ContactProductRow = {
+  organization_id: string
+  contact_id: string
+  product_id: string
+  created_at: string
 }
 
 export type ActivityRow = {
@@ -342,6 +409,20 @@ export type PipelineValueReportRow = {
   weighted_value: number
 }
 
+/** One row per product per currency — currencies are never added together. */
+export type ProductMixReportRow = {
+  product_id: string
+  product_name: string
+  category: string | null
+  currency: string
+  deal_count: number
+  total_quantity: number
+  total_value: number
+  weighted_value: number
+  total_cost: number
+  margin: number
+}
+
 export type DuplicateGroupRow = {
   match_key: string
   match_type: string
@@ -444,6 +525,7 @@ export interface Database {
         | 'currency'
         | 'probability'
         | 'probability_overridden'
+        | 'value_source'
         | 'expected_close_date'
         | 'actual_close_date'
         | 'status'
@@ -465,6 +547,39 @@ export interface Database {
         | 'occurred_at'
         | 'created_at'
       >
+      products: TableDef<
+        ProductRow,
+        | 'id'
+        | 'sku'
+        | 'category'
+        | 'unit'
+        | 'unit_price'
+        | 'unit_cost'
+        | 'currency'
+        | 'description'
+        | 'custom_fields'
+        | 'active'
+        | 'created_by'
+        | 'updated_by'
+        | 'deleted_at'
+        | 'deleted_by'
+        | 'created_at'
+        | 'updated_at'
+      >
+      deal_products: TableDef<
+        DealProductRow,
+        | 'id'
+        | 'quantity'
+        | 'unit_price'
+        | 'unit_cost'
+        | 'discount_pct'
+        | 'line_total'
+        | 'line_cost'
+        | 'position'
+        | 'created_at'
+        | 'updated_at'
+      >
+      contact_products: TableDef<ContactProductRow, 'organization_id' | 'created_at'>
       tags: TableDef<TagRow, 'id' | 'color' | 'created_at'>
       contact_tags: TableDef<ContactTagRow, 'organization_id' | 'created_at'>
       saved_filters: TableDef<
@@ -526,6 +641,13 @@ export interface Database {
       }
       create_birthday_reminders: { Args: { p_days_ahead?: number }; Returns: number }
       reassign_contact: { Args: { p_contact_id: string; p_new_owner_id: string | null }; Returns: void }
+      report_product_mix: {
+        Args: { p_pipeline_id?: string | null; p_status?: DealStatus | null }
+        Returns: ProductMixReportRow[]
+      }
+      set_deal_value_from_products: { Args: { p_deal_id: string }; Returns: void }
+      soft_delete_product: { Args: { p_product_id: string }; Returns: void }
+      restore_product: { Args: { p_product_id: string }; Returns: void }
       soft_delete_contact: { Args: { p_contact_id: string }; Returns: void }
       soft_delete_company: { Args: { p_company_id: string }; Returns: void }
       restore_contact: { Args: { p_contact_id: string }; Returns: void }

@@ -1,3 +1,9 @@
+/**
+ * Currencies the app offers. One list, so a product and the deal it lands on
+ * can never drift onto different menus.
+ */
+export const CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP'] as const
+
 export function formatCurrency(value: number, currency = 'CAD'): string {
   return new Intl.NumberFormat('en-CA', {
     style: 'currency',

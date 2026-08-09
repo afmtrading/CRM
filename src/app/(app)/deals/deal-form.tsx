@@ -117,6 +117,11 @@ export function DealForm({
             className="input"
             defaultValue={deal?.value ?? 0}
           />
+          {deal?.value_source === 'products' && (
+            <p className="mt-1 text-xs text-slate-400">
+              This deal follows its line items. Changing the number here takes it off them.
+            </p>
+          )}
         </div>
 
         <div>

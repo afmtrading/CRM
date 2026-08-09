@@ -74,6 +74,7 @@ export default async function CompanyDetailPage({
     { data: companyTags },
     { data: fieldOptions },
     { data: customFieldDefs },
+    { data: lineItems },
   ] = await Promise.all([
     scoped(context, "contacts")
       .select("*")
@@ -99,6 +100,11 @@ export default async function CompanyDetailPage({
       .select("*")
       .eq("entity_type", "company")
       .order("order"),
+    // Line items reached through their deals: !inner turns the join into a
+    // filter, so this returns only what this company's deals are for.
+    scoped(context, "deal_products")
+      .select("*, products(id, name), deals!inner(id, company_id, status, currency)")
+      .eq("deals.company_id", id),
   ]);
 
   const userList = (users ?? []) as UserRow[];
@@ -110,6 +116,40 @@ export default async function CompanyDetailPage({
     stages: { name: string } | null;
   })[];
   const contactRows = (contacts ?? []) as ContactRow[];
+
+  /*
+   * What this client buys, derived rather than stored: a company_products table
+   * would be a second copy of something the won deals already say, and the two
+   * would disagree the first time a deal was edited.
+   */
+  type CompanyLine = {
+    line_total: number;
+    quantity: number;
+    products: { id: string; name: string } | null;
+    deals: { status: string; currency: string } | null;
+  };
+
+  const purchases = new Map<
+    string,
+    { id: string; name: string; won: number; open: number; currency: string }
+  >();
+
+  for (const line of (lineItems ?? []) as CompanyLine[]) {
+    if (!line.products || !line.deals) continue;
+    const key = `${line.products.id}:${line.deals.currency}`;
+    const entry = purchases.get(key) ?? {
+      id: line.products.id,
+      name: line.products.name,
+      won: 0,
+      open: 0,
+      currency: line.deals.currency,
+    };
+    if (line.deals.status === "won") entry.won += Number(line.line_total);
+    if (line.deals.status === "open") entry.open += Number(line.line_total);
+    purchases.set(key, entry);
+  }
+
+  const purchaseRows = [...purchases.values()].sort((a, b) => b.won - a.won);
 
   const options = (fieldOptions ?? []) as FieldOptionRow[];
   const optionsFor = (key: string) =>
@@ -470,6 +510,41 @@ export default async function CompanyDetailPage({
                 )}
               </Field>
             </dl>
+          </Section>
+
+          <Section title="Products">
+            {purchaseRows.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nothing yet. This is built from the line items on this
+                client&rsquo;s deals.
+              </p>
+            ) : (
+              <ul className="space-y-2.5">
+                {purchaseRows.map((row) => (
+                  <li
+                    key={`${row.id}-${row.currency}`}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <Link
+                      href={`/products/${row.id}`}
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 hover:text-brand-700"
+                    >
+                      {row.name}
+                    </Link>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {formatCurrency(row.won, row.currency)}
+                      </p>
+                      {row.open > 0 && (
+                        <p className="text-xs text-slate-500">
+                          {formatCurrency(row.open, row.currency)} open
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Section>
 
           <Section title="Tags">

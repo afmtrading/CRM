@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ALL_CARDS,
+  OPTION_FIELDS,
+  PRODUCT_CARDS,
+  cardLabel,
   daysUntilBirthday,
+  optionOwners,
+  optionsForField,
   prettyUrl,
   renderMarkdown,
   safeUrl,
@@ -163,5 +169,51 @@ describe('daysUntilBirthday', () => {
   it('returns null when no birthday is set', () => {
     expect(daysUntilBirthday(null, today)).toBeNull()
     expect(daysUntilBirthday('', today)).toBeNull()
+  })
+})
+
+describe('cards across record types', () => {
+  it('names the same card differently on each record', () => {
+    expect(cardLabel('contact', 'details')).toBe('Contact details')
+    expect(cardLabel('company', 'details')).toBe('Company info')
+    expect(cardLabel('product', 'details')).toBe('Product details')
+  })
+
+  it('gives products a pricing card that no other record has', () => {
+    expect(PRODUCT_CARDS.map((card) => card.key)).toContain('pricing')
+    expect(cardLabel('product', 'pricing')).toBe('Pricing')
+  })
+
+  it('offers every card key in the settings picker', () => {
+    const offered = new Set(ALL_CARDS.map((card) => card.key))
+    for (const card of PRODUCT_CARDS) expect(offered.has(card.key)).toBe(true)
+  })
+})
+
+describe('option owners', () => {
+  it('lists product categories as a built-in list an admin can fill in', () => {
+    const owner = optionOwners([]).find((candidate) => candidate.key === 'product_category')
+    expect(owner).toMatchObject({ entity: 'product', builtIn: true, multiple: false })
+  })
+
+  it('keeps a custom field on the record it was defined for', () => {
+    const owners = optionOwners([
+      { key: 'grade', label: 'Grade', entity_type: 'product', field_type: 'select', card: 'details' },
+    ])
+    expect(owners.find((owner) => owner.key === 'grade')?.entity).toBe('product')
+  })
+
+  it('separates identically keyed lists on different records', () => {
+    const options = [
+      { entity_type: 'product', field_key: 'grade', value: 'A' },
+      { entity_type: 'contact', field_key: 'grade', value: 'Warm' },
+    ]
+    expect(optionsForField(options, 'product', 'grade')).toEqual([options[0]])
+    expect(optionsForField(options, 'contact', 'grade')).toEqual([options[1]])
+  })
+
+  it('declares each built-in list against exactly one record type', () => {
+    const seen = new Set(OPTION_FIELDS.map((field) => `${field.entity}.${field.key}`))
+    expect(seen.size).toBe(OPTION_FIELDS.length)
   })
 })

@@ -246,6 +246,20 @@ export const TrashIcon: IconComponent = (p) => (
   </Svg>
 )
 
+export const ProductsIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M21 8.2v7.6a2 2 0 0 1-1.05 1.76l-7 3.8a2 2 0 0 1-1.9 0l-7-3.8A2 2 0 0 1 3 15.8V8.2a2 2 0 0 1 1.05-1.76l7-3.8a2 2 0 0 1 1.9 0l7 3.8A2 2 0 0 1 21 8.2z" />
+    <path d="m3.3 7.2 8.7 4.7 8.7-4.7M12 21v-9.1" />
+  </Svg>
+)
+
+export const LayersIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="m12 2 9 5-9 5-9-5 9-5z" />
+    <path d="m3 12 9 5 9-5M3 17l9 5 9-5" />
+  </Svg>
+)
+
 export const CurrencyIcon: IconComponent = (p) => (
   <Svg {...p}>
     <path d="M12 2v20" />

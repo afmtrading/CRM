@@ -18,13 +18,25 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
 
   if (!contact) notFound()
 
-  const [{ data: companies }, { data: owners }, { data: customFields }, { data: fieldOptions }] =
-    await Promise.all([
-      scoped(context, 'companies').select('id, name').order('name'),
-      scoped(context, 'users').select('*').eq('status', 'active').order('name'),
-      scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
-      scoped(context, 'field_options').select('*').order('order'),
-    ])
+  const [
+    { data: companies },
+    { data: owners },
+    { data: customFields },
+    { data: fieldOptions },
+    { data: products },
+    { data: interest },
+  ] = await Promise.all([
+    scoped(context, 'companies').select('id, name').order('name'),
+    scoped(context, 'users').select('*').eq('status', 'active').order('name'),
+    scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
+    scoped(context, 'field_options').select('*').order('order'),
+    scoped(context, 'products')
+      .select('id, name')
+      .is('deleted_at', null)
+      .eq('active', true)
+      .order('name'),
+    scoped(context, 'contact_products').select('product_id').eq('contact_id', id),
+  ])
 
   return (
     <>
@@ -36,6 +48,8 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
         fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
+        products={(products ?? []) as { id: string; name: string }[]}
+        productInterest={((interest ?? []) as { product_id: string }[]).map((row) => row.product_id)}
         canManage={context.canManage}
         submitLabel="Save changes"
       />
