@@ -17,6 +17,7 @@ import {
   DuplicatesIcon,
   FieldsIcon,
   ImportIcon,
+  MailIcon,
   PipelinesIcon,
   ProductsIcon,
   ReportsIcon,
@@ -53,6 +54,7 @@ const ADMIN_NAV = [
   { href: '/settings/tags', label: 'Tags', icon: <TagIcon className={ICON} /> },
   { href: '/settings/duplicates', label: 'Duplicates', icon: <DuplicatesIcon className={ICON} /> },
   { href: '/settings/deleted', label: 'Deleted records', icon: <TrashIcon className={ICON} /> },
+  { href: '/settings/mailboxes', label: 'Mailboxes', icon: <MailIcon className={ICON} /> },
 ]
 
 /** Bulk tools sit with managers rather than with configuration. */
@@ -184,10 +186,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                     <p className="truncate text-sm font-medium text-slate-800">{displayName}</p>
                     <p className="truncate text-xs text-slate-500">{user.email}</p>
                   </div>
+                  <Link
+                    href="/settings/mailboxes"
+                    className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <MailIcon className="h-4 w-4" />
+                    Mailboxes
+                  </Link>
                   <form action="/auth/signout" method="post">
                     <button
                       type="submit"
-                      className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
                     >
                       <SignOutIcon className="h-4 w-4" />
                       Sign out

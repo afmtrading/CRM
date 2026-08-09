@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { isSchedulerAuthorized, schedulerSecrets } from '@/lib/scheduler'
 
 /**
  * Creates the birthday reminder tasks that are due, across every organization.
@@ -18,15 +19,14 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server'
  * pg_cron).
  */
 export async function POST(request: Request) {
-  const secret = process.env.SYNC_INGEST_SECRET
-  if (!secret) {
+  if (schedulerSecrets().length === 0) {
     return NextResponse.json(
-      { error: 'Reminders are not configured. Set SYNC_INGEST_SECRET.' },
+      { error: 'Reminders are not configured. Set SYNC_INGEST_SECRET or CRON_SECRET.' },
       { status: 503 },
     )
   }
 
-  if (request.headers.get('authorization') !== `Bearer ${secret}`) {
+  if (!isSchedulerAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -46,3 +46,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ created: data ?? 0, daysAhead })
 }
+
+/** Vercel Cron issues a GET. */
+export const GET = POST

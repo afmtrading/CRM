@@ -2,28 +2,22 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
-import {
-  activityTypeFor,
-  counterpartyAddresses,
-  timelineSubject,
-  type IncomingMessage,
-} from '@/lib/sync'
+import { ingestMessages } from '@/lib/ingest'
+import type { IncomingMessage } from '@/lib/sync'
 
 /**
- * POST /activities/ingest — the CRM side of the Gmail and Calendar sync (6.4).
+ * POST /activities/ingest — the CRM side of the mailbox sync (6.4).
  *
- * A connector process polls the mailbox and posts what it finds here. Messages
- * involving a known contact's email address land on that contact's timeline
- * without anyone logging them by hand, which is the acceptance criterion.
+ * An external connector posts what it finds here. The built-in Gmail poller
+ * does not use this route: it calls ingestMessages() directly, since it already
+ * runs inside the app. Both share the same matching and idempotency rules.
  *
  * Security notes, because this route deliberately runs outside a user session:
  *  - It authenticates with a shared secret, not a user JWT, since a background
  *    job has no session.
  *  - It therefore uses the service-role client, which bypasses RLS. The
  *    organization is taken from the request and every lookup and write is
- *    filtered to it explicitly — this route is the one place in the codebase
- *    where the application filter is the *only* tenant boundary, so it is kept
- *    small and obvious.
+ *    filtered to it explicitly — see the note in lib/ingest.ts.
  *  - Re-delivering the same message is a no-op: (organization_id,
  *    external_source, external_id) is unique, and the upsert is idempotent.
  */
@@ -79,90 +73,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Unknown organization "${slug}"` }, { status: 404 })
   }
 
-  const organizationId = organization.id as string
-
-  // The mailbox owner, so the activity is attributed to the right user.
-  const mailboxes = [...new Set(messages.map((message) => message.mailboxAddress.toLowerCase()))]
-  const { data: owners } = await supabase
-    .from('users')
-    .select('id, email')
-    .eq('organization_id', organizationId)
-    .in('email', mailboxes)
-
-  const ownerByEmail = new Map(
-    ((owners ?? []) as { id: string; email: string }[]).map((user) => [
-      user.email.toLowerCase(),
-      user.id,
-    ]),
-  )
-
-  // Resolve every counterparty address in one query, scoped to this organization.
-  const addresses = [...new Set(messages.flatMap((message) => counterpartyAddresses(message as IncomingMessage)))]
-
-  const { data: contacts } = addresses.length
-    ? await supabase
-        .from('contacts')
-        .select('id, email')
-        .eq('organization_id', organizationId)
-        .is('duplicate_of_id', null)
-        .in('email', addresses)
-    : { data: [] }
-
-  const contactByEmail = new Map(
-    ((contacts ?? []) as { id: string; email: string | null }[])
-      .filter((contact) => contact.email)
-      .map((contact) => [contact.email!.toLowerCase(), contact.id]),
-  )
-
-  const rows: Record<string, unknown>[] = []
-  let unmatched = 0
-
-  for (const message of messages) {
-    const matches = counterpartyAddresses(message as IncomingMessage)
-      .map((address) => contactByEmail.get(address))
-      .filter((id): id is string => Boolean(id))
-
-    if (matches.length === 0) {
-      // Nobody in the CRM was involved — nothing to log against.
-      unmatched += 1
-      continue
-    }
-
-    // A message can involve several known contacts; each gets its own timeline
-    // entry, with the contact id folded into external_id so they stay distinct
-    // and each remains individually idempotent.
-    for (const contactId of [...new Set(matches)]) {
-      rows.push({
-        organization_id: organizationId,
-        type: activityTypeFor(message as IncomingMessage),
-        related_to_type: 'contact',
-        related_to_id: contactId,
-        owner_id: ownerByEmail.get(message.mailboxAddress.toLowerCase()) ?? null,
-        subject: timelineSubject(message as IncomingMessage),
-        body: message.body ?? null,
-        external_source: message.source,
-        external_id: `${message.externalId}:${contactId}`,
-        occurred_at: message.occurredAt,
-      })
-    }
+  try {
+    const result = await ingestMessages(
+      supabase,
+      organization.id as string,
+      messages as IncomingMessage[],
+    )
+    return NextResponse.json(result)
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Ingestion failed' },
+      { status: 500 },
+    )
   }
-
-  if (rows.length === 0) {
-    return NextResponse.json({ logged: 0, unmatched })
-  }
-
-  const { data: inserted, error } = await supabase
-    .from('activities')
-    .upsert(rows, { onConflict: 'organization_id,external_source,external_id', ignoreDuplicates: true })
-    .select('id')
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({
-    logged: inserted?.length ?? 0,
-    duplicates: rows.length - (inserted?.length ?? 0),
-    unmatched,
-  })
 }

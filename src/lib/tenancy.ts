@@ -167,6 +167,7 @@ export type TenantTable =
   | 'custom_field_definitions'
   | 'field_options'
   | 'notifications'
+  | 'mailbox_connections'
   | 'users'
 
 /**

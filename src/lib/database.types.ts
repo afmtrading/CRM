@@ -181,6 +181,30 @@ export type CompanyRow = {
   updated_at: string
 }
 
+/**
+ * A linked mailbox, as the application is allowed to see it.
+ *
+ * refresh_token is deliberately absent: `authenticated` holds no grant on that
+ * column, so a `select('*')` is refused by the database. Select the named
+ * columns instead — the type mirrors what is actually readable.
+ */
+export type MailboxConnectionRow = {
+  id: string
+  organization_id: string
+  user_id: string
+  provider: 'gmail'
+  email_address: string
+  /** Gmail's incremental cursor. Null means the next run backfills. */
+  history_id: string | null
+  backfill_days: number
+  status: 'active' | 'needs_reauth' | 'disabled'
+  last_error: string | null
+  last_synced_at: string | null
+  messages_logged: number
+  created_at: string
+  updated_at: string
+}
+
 export type NotificationRow = {
   id: string
   organization_id: string
@@ -510,6 +534,19 @@ export interface Database {
         | 'updated_at'
       >
       notifications: TableDef<NotificationRow, 'id' | 'body' | 'link' | 'read_at' | 'created_at'>
+      mailbox_connections: TableDef<
+        MailboxConnectionRow,
+        | 'id'
+        | 'provider'
+        | 'history_id'
+        | 'backfill_days'
+        | 'status'
+        | 'last_error'
+        | 'last_synced_at'
+        | 'messages_logged'
+        | 'created_at'
+        | 'updated_at'
+      >
       company_tags: TableDef<CompanyTagRow, 'organization_id' | 'created_at'>
       pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'created_at'>
       stages: TableDef<
@@ -651,6 +688,8 @@ export interface Database {
       soft_delete_contact: { Args: { p_contact_id: string }; Returns: void }
       soft_delete_company: { Args: { p_company_id: string }; Returns: void }
       restore_contact: { Args: { p_contact_id: string }; Returns: void }
+      disconnect_mailbox: { Args: { p_connection_id: string }; Returns: void }
+      set_mailbox_backfill: { Args: { p_connection_id: string; p_days: number }; Returns: void }
       restore_company: { Args: { p_company_id: string }; Returns: void }
       reassign_deal: { Args: { p_deal_id: string; p_new_owner_id: string | null }; Returns: void }
       can_manage_records: { Args: Record<string, never>; Returns: boolean }
