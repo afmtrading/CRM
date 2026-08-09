@@ -273,9 +273,12 @@ async function tokenRequest(body: URLSearchParams): Promise<Record<string, unkno
 
   if (!response.ok) {
     const error = String(payload.error ?? response.status)
-    // invalid_grant means the user revoked access or changed their password.
-    // Retrying will never fix it, so it is reported as its own kind.
-    if (error === 'invalid_grant') throw new GmailAuthError('The mailbox connection was revoked')
+    // invalid_grant means the grant is gone: revoked, the password changed, or
+    // — on a Testing-mode consent screen — it simply passed its seven-day life.
+    // Retrying will never fix any of those, so it is reported as its own kind.
+    if (error === 'invalid_grant') {
+      throw new GmailAuthError('Google ended the authorisation — reconnect the mailbox')
+    }
     throw new Error(`Google token request failed: ${error}`)
   }
 

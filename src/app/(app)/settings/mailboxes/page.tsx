@@ -135,11 +135,24 @@ export default async function MailboxesPage({
           </form>
         )}
 
-        {connection.status === 'disabled' ? (
-          <Link href="/api/gmail/connect" className="btn-secondary px-2.5 py-1 text-xs">
+        {/*
+          A mailbox that needs reconnecting gets the prominent button, because
+          that is the whole of what is being asked of the person looking at it.
+          It keeps Disconnect too — needing to reauthorise is a reasonable
+          moment to decide you would rather not.
+        */}
+        {connection.status !== 'active' && (
+          <Link
+            href="/api/gmail/connect"
+            className={`px-2.5 py-1 text-xs ${
+              connection.status === 'needs_reauth' ? 'btn-primary' : 'btn-secondary'
+            }`}
+          >
             Reconnect
           </Link>
-        ) : (
+        )}
+
+        {connection.status !== 'disabled' && (
           <form action={disconnectMailbox}>
             <input type="hidden" name="id" value={connection.id} />
             <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
@@ -233,6 +246,12 @@ export default async function MailboxesPage({
               does not become visible to anyone who could not already see that record.
             </li>
             <li>You can disconnect at any time, which destroys the stored credentials.</li>
+            <li>
+              Google ends an authorisation now and then — a revoked grant, a changed password, or
+              the seven-day limit that applies while this app is in Google&apos;s testing mode. The
+              mailbox then reads <em>Needs reconnecting</em> and one click restores it. Nothing
+              already on a timeline is lost, and syncing resumes where it stopped.
+            </li>
           </ul>
         </Section>
       </div>

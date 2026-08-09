@@ -21,9 +21,10 @@ import { exchangeCode, getProfile } from '@/lib/gmail'
  * column. The organization and user are taken from the session, not the
  * request, so the elevated client cannot be steered at someone else's row.
  *
- * history_id is deliberately left null: the first sync then backfills the
+ * A first connection leaves history_id null: the first sync then backfills the
  * connection's window rather than starting from this instant, so connecting a
- * mailbox brings recent correspondence with it.
+ * mailbox brings recent correspondence with it. A *reconnection* keeps whatever
+ * cursor the row already had — see below.
  */
 function back(params: Record<string, string>) {
   const url = new URL('/settings/mailboxes', siteUrl())
@@ -84,15 +85,34 @@ export async function GET(request: Request) {
   if (!emailAddress) return back({ error: 'profile' })
 
   const supabase = createSupabaseAdminClient()
+  const address = emailAddress.toLowerCase()
+
+  /*
+   * Carry the existing cursor across a reconnection.
+   *
+   * On a Testing-mode consent screen every grant dies after seven days, so this
+   * route is walked weekly by people whose mailbox is already syncing. Resetting
+   * the cursor each time would re-scan the whole backfill window every week —
+   * harmless, because ingestion is idempotent, but a great deal of wasted quota
+   * for mail that is already on the timeline. An aged-out cursor still falls
+   * back to a backfill on the next run, so nothing is skipped by keeping it.
+   */
+  const { data: existing } = await supabase
+    .from('mailbox_connections')
+    .select('history_id')
+    .eq('organization_id', context.organizationId)
+    .eq('provider', 'gmail')
+    .eq('email_address', address)
+    .maybeSingle()
 
   const { error } = await supabase.from('mailbox_connections').upsert(
     {
       organization_id: context.organizationId,
       user_id: context.user.id,
       provider: 'gmail',
-      email_address: emailAddress.toLowerCase(),
+      email_address: address,
       refresh_token: sealToken(refreshToken),
-      history_id: null,
+      history_id: existing?.history_id ?? null,
       status: 'active',
       last_error: null,
     },

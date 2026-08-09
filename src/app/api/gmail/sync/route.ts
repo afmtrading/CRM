@@ -246,10 +246,18 @@ async function syncConnection(
   return { mailbox, fetched: messages.length, backfilled, ...result }
 }
 
+/**
+ * The cursor is kept, not cleared. Under a Testing-mode consent screen a grant
+ * expires every seven days, so this state is a weekly routine rather than a
+ * catastrophe, and someone who reconnects the same day should resume where they
+ * left off instead of re-scanning a month of mail. If the cursor has genuinely
+ * aged out by then, the poller's own 404 handling falls back to a backfill —
+ * so keeping it can only save work, never skip mail.
+ */
 async function markNeedsReauth(supabase: AppSupabaseClient, id: string, reason: string) {
   await supabase
     .from('mailbox_connections')
-    .update({ status: 'needs_reauth', last_error: reason, history_id: null })
+    .update({ status: 'needs_reauth', last_error: reason })
     .eq('id', id)
 }
 

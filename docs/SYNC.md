@@ -31,17 +31,37 @@ Both the built-in poller and any external connector go through the same
 
 ### 1. Google Cloud
 
-1. Create a project and enable the **Gmail API**.
-2. OAuth consent screen → **Internal** if your domain is on Google Workspace.
+Sign in as **tradingafm@gmail.com** — that account owns the project and is the
+support address users see on the consent screen.
 
-   This matters more than anything else here. Gmail scopes are *restricted*:
-   a public ("External") app needs Google's verification review plus an annual
-   third-party security assessment before anyone outside a test-user list can
-   connect. An Internal app skips all of it for users in your own domain.
-   Personal `@gmail.com` addresses cannot connect to an Internal app.
-3. Create an OAuth client (Web application) with these redirect URIs:
+1. Create a project (`FLO CRM`) and enable the **Gmail API**.
+2. OAuth consent screen → **External**, left in **Testing**.
+3. Support email and developer contact: `tradingafm@gmail.com`.
+4. Add the scopes `gmail.readonly` and `userinfo.email`.
+5. Under **Test users**, add every address that will connect a mailbox.
+6. Create an OAuth client (Web application) with these redirect URIs:
    - `https://your-domain/api/gmail/callback`
    - `http://localhost:3000/api/gmail/callback`
+
+#### Why External/Testing, and what it costs
+
+Gmail scopes are *restricted*. That leaves three configurations, and only one
+of them accepts a personal `@gmail.com` address:
+
+| | Personal Gmail | Outside domains | Reconnects |
+|---|---|---|---|
+| Internal (Workspace) | no | only domains you own | never |
+| External, **Testing** | **yes** | **yes** | every 7 days |
+| External, Production | yes | yes | never, but needs Google's verification review plus an annual third-party security assessment |
+
+Testing is chosen because the CRM's users are not all in a domain we control.
+The price is that Google expires every refresh token after seven days, so each
+person clicks **Reconnect** on the Mailboxes page about once a week. The cap is
+100 test users.
+
+Nothing about that is load-bearing on the code: publishing the app later, or
+moving everyone into one Workspace and switching to Internal, stops the weekly
+reconnects and changes nothing else.
 
 Only two scopes are requested, and neither can send, delete or relabel mail:
 
@@ -94,6 +114,14 @@ Each person goes to **Mailboxes** (in the account menu, and in Settings for
 admins) and clicks Connect Gmail. They connect their own mailbox and nobody
 else's — the callback reads the user from the session, never from the request.
 
+Their address must be on the test-user list first, or Google refuses the sign-in
+before the CRM is involved. Google will also warn that the app is unverified;
+**Advanced → Go to FLO CRM** continues past it.
+
+About once a week the mailbox will read *Needs reconnecting* — that is the
+testing-mode expiry, not a fault. One click on Reconnect and syncing resumes
+from where it stopped.
+
 ## What is stored, and what is not
 
 - **Only messages involving a contact already in the CRM.** Everything else is
@@ -139,9 +167,15 @@ it away from the application:
 - **A backfill anchors forward.** The mailbox's current cursor is read *before*
   fetching, so after one backfill the connection goes incremental instead of
   backfilling forever.
-- **Revocation stops the connection.** `invalid_grant` marks it
-  `needs_reauth` and surfaces on the Mailboxes page, rather than failing quietly
-  every ten minutes for a year.
+- **A dead grant stops the connection.** `invalid_grant` — revoked, password
+  changed, or the seven-day testing-mode expiry — marks it `needs_reauth` and
+  surfaces on the Mailboxes page with a Reconnect button, rather than failing
+  quietly every ten minutes for a year.
+- **Reconnecting resumes, it does not restart.** `needs_reauth` keeps the
+  cursor and the callback carries it across, so the weekly reconnect picks up
+  where the mailbox stopped instead of re-scanning the backfill window every
+  week. A cursor that has genuinely aged out still falls back to a backfill on
+  the next run, so keeping it can only save work.
 - **Ceilings per run:** 75 messages per mailbox, 25 mailboxes. A backlog drains
   over successive runs.
 
