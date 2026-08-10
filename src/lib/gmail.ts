@@ -24,9 +24,17 @@ const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me'
  * Deliberately minimal. `gmail.readonly` is the narrowest scope that can read
  * message bodies; `gmail.modify` and `https://mail.google.com/` would also
  * allow deleting someone's mail, which the CRM has no business doing.
+ * `calendar.readonly` is the same bargain for meetings — it cannot create,
+ * move or cancel anything.
+ *
+ * Adding a scope does not widen an existing grant. Anyone who connected before
+ * calendar was added holds a token that reads mail and not calendars, and stays
+ * that way until they reconnect; `calendar_state` on the connection is how that
+ * is noticed without breaking their Gmail sync.
  */
 export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
 ]
 

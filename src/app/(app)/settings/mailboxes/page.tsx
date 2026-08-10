@@ -19,7 +19,7 @@ export const metadata = { title: 'Mailboxes · FLO CRM' }
  * so this cannot be loosened by accident.
  */
 const COLUMNS =
-  'id, organization_id, user_id, provider, email_address, history_id, backfill_days, backfill_until, status, last_error, last_synced_at, messages_logged, created_at, updated_at'
+  'id, organization_id, user_id, provider, email_address, history_id, backfill_days, backfill_until, calendar_state, status, last_error, last_synced_at, messages_logged, created_at, updated_at'
 
 const STATUS_STYLES: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -130,6 +130,13 @@ export default async function MailboxesPage({
           <span className="mx-1.5 text-slate-300">·</span>
           {historyProgress(connection)}
         </p>
+
+        {connection.status === 'active' && connection.calendar_state === 'unauthorised' && (
+          <p className="mt-1.5 text-xs text-slate-500">
+            Calendar not included — this mailbox was connected before meetings were synced.
+            Reconnect to add them. Email keeps working either way.
+          </p>
+        )}
 
         {connection.last_error && (
           <p className="mt-1.5 text-xs text-amber-700">{connection.last_error}</p>
@@ -256,8 +263,9 @@ export default async function MailboxesPage({
         <Section title="What gets stored">
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-slate-600">
             <li>
-              Only emails involving someone already in the CRM. A message matching no contact is
-              discarded on arrival — personal mail never reaches the database.
+              Only emails and meetings involving someone already in the CRM. Anything matching no
+              contact is discarded on arrival — personal mail and private appointments never reach
+              the database.
             </li>
             <li>
               Read-only access. The connection cannot send, delete or relabel anything in your

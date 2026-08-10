@@ -6,6 +6,12 @@ import { googleClientId, googleClientSecret, isGoogleConfigured } from '@/lib/en
 import { isTokenKeyConfigured, openToken } from '@/lib/crypto'
 import { ingestMessages } from '@/lib/ingest'
 import {
+  CalendarNotAuthorisedError,
+  SyncTokenExpiredError,
+  listEvents,
+  parseCalendarEvent,
+} from '@/lib/calendar'
+import {
   GmailAuthError,
   HistoryExpiredError,
   backfillWindowStart,
@@ -38,6 +44,8 @@ import type { IncomingMessage } from '@/lib/sync'
  */
 const MAX_MESSAGES_PER_RUN = 75
 const MAX_CONNECTIONS_PER_RUN = 25
+/** One list call returns many, so this is generous without being a stress test. */
+const MAX_EVENTS_PER_RUN = 150
 /** Gmail is happy with a handful of concurrent reads; this is not a stress test. */
 const FETCH_CONCURRENCY = 5
 /**
@@ -59,6 +67,8 @@ type Connection = {
   history_id: string | null
   backfill_days: number
   backfill_until: string | null
+  calendar_sync_token: string | null
+  calendar_state: string
 }
 
 type ConnectionResult = {
@@ -69,6 +79,8 @@ type ConnectionResult = {
   fetched?: number
   /** How many of this run's messages came from the history walk. */
   backfilled?: number
+  /** Calendar events read this run, or why none were. */
+  events?: number | string
   /** How far back the walk has reached, or 'complete'. */
   history?: string
   /**
@@ -106,7 +118,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from('mailbox_connections')
     .select(
-      'id, organization_id, email_address, refresh_token, history_id, backfill_days, backfill_until',
+      'id, organization_id, email_address, refresh_token, history_id, backfill_days, backfill_until, calendar_sync_token, calendar_state',
     )
     .eq('status', 'active')
     .eq('provider', 'gmail')
@@ -272,6 +284,56 @@ async function syncConnection(
     return await recordError(supabase, connection.id, mailbox, thrown)
   }
 
+  /*
+   * The calendar rides along on the same connection and the same access token,
+   * rather than being a second poller with its own cron and its own refresh.
+   *
+   * Its failures are contained here on purpose. A connection made before the
+   * calendar scope existed holds a token that reads mail and not calendars, and
+   * losing somebody's email sync over that would be a poor trade — so the
+   * calendar half is marked unauthorised and the mailbox carries on.
+   */
+  let events: number | string = 0
+  let calendarState = connection.calendar_state
+  let calendarToken = connection.calendar_sync_token
+
+  if (calendarState === 'unauthorised') {
+    events = 'not authorised — reconnect to include the calendar'
+  } else {
+    try {
+      const calendar = await listEvents(accessToken, {
+        syncToken: calendarToken,
+        days: connection.backfill_days,
+        limit: MAX_EVENTS_PER_RUN,
+      })
+
+      for (const event of calendar.events) {
+        const parsed = parseCalendarEvent(event, mailbox)
+        if (parsed) messages.push(parsed)
+      }
+
+      events = calendar.events.length
+      calendarState = 'active'
+      // Only on the final page — a token taken from a partial read would skip
+      // everything after it.
+      if (calendar.nextSyncToken) calendarToken = calendar.nextSyncToken
+    } catch (thrown) {
+      if (thrown instanceof CalendarNotAuthorisedError) {
+        calendarState = 'unauthorised'
+        events = 'not authorised — reconnect to include the calendar'
+      } else if (thrown instanceof SyncTokenExpiredError) {
+        // Start again from a bounded read rather than retrying a dead token.
+        calendarToken = null
+        events = 'cursor expired, resyncing next run'
+      } else if (thrown instanceof GmailAuthError) {
+        await markNeedsReauth(supabase, connection.id, thrown.message)
+        return { mailbox, status: 'needs_reauth', error: thrown.message }
+      } else {
+        events = thrown instanceof Error ? thrown.message : 'calendar sync failed'
+      }
+    }
+  }
+
   let result
   try {
     result = await ingestMessages(supabase, connection.organization_id, messages)
@@ -306,6 +368,9 @@ async function syncConnection(
 
   if (backfillUntil) update.backfill_until = backfillUntil.toISOString()
 
+  if (calendarState !== connection.calendar_state) update.calendar_state = calendarState
+  if (calendarToken !== connection.calendar_sync_token) update.calendar_sync_token = calendarToken
+
   if (result.logged > 0) {
     const { data: current } = await supabase
       .from('mailbox_connections')
@@ -322,6 +387,7 @@ async function syncConnection(
     mailbox,
     fetched: messages.length,
     backfilled: backfillIds.length,
+    events,
     history:
       backfillUntil && backfillUntil <= windowStart
         ? 'complete'

@@ -1,8 +1,8 @@
 # Mailbox sync (PRD 6.4)
 
 > **Status:** built and tested, off until configured. Logging only — emails
-> written in Gmail appear on the contact's timeline in the CRM. Nothing is ever
-> sent from the CRM.
+> written in Gmail and meetings held in Google Calendar appear on the contact's
+> timeline in the CRM. Nothing is ever sent, created or cancelled from the CRM.
 
 The acceptance criterion is:
 
@@ -13,10 +13,14 @@ The acceptance criterion is:
 ## How it fits together
 
 ```
-Gmail  ──►  /api/gmail/sync (poller)  ──►  ingestMessages()  ──►  activities
-                                              ▲
-external connector ──► POST /api/activities/ingest
+Gmail     ──┐
+            ├──►  /api/gmail/sync (poller)  ──►  ingestMessages()  ──►  activities
+Calendar  ──┘                                        ▲
+                     external connector ──► POST /api/activities/ingest
 ```
+
+One poller, because both halves read the same Google account with the same
+token: refreshing it twice and running two crons would buy nothing.
 
 Two halves, kept apart on purpose. `src/lib/gmail.ts` knows about Gmail and
 produces the provider-neutral `IncomingMessage` shape. `src/lib/ingest.ts`
@@ -67,9 +71,11 @@ Nothing about that is load-bearing on the code: publishing the app later, or
 moving everyone into one Workspace and switching to Internal, stops the weekly
 reconnects and changes nothing else.
 
-Only two scopes are requested, and neither can send, delete or relabel mail:
+Three scopes are requested, and none of them can send, delete, relabel, create
+or cancel anything:
 
 - `https://www.googleapis.com/auth/gmail.readonly`
+- `https://www.googleapis.com/auth/calendar.readonly`
 - `https://www.googleapis.com/auth/userinfo.email`
 
 ### 2. Environment
@@ -129,14 +135,15 @@ from where it stopped.
 
 ## What is stored, and what is not
 
-- **Only messages involving a contact already in the CRM.** Everything else is
-  discarded on arrival and never written. Personal mail does not enter the
-  database.
+- **Only messages and meetings involving a contact already in the CRM.**
+  Everything else is discarded on arrival and never written. Personal mail and
+  private appointments do not enter the database.
 - **Never a deleted contact.** A record in the recycle bin does not quietly
   collect new mail.
 - **Quoted reply chains are stripped**, so an entry is what the person wrote
   rather than the whole conversation again.
-- **Drafts, chat, spam and binned mail are skipped.**
+- **Drafts, chat, spam and binned mail are skipped**, as are cancelled meetings,
+  meetings the owner declined, and solo calendar blocks.
 - Bodies are capped at 20,000 characters.
 - A logged email obeys the visibility rules of the contact it is attached to.
   Syncing makes nothing visible to anyone who could not already see the record.
@@ -209,6 +216,32 @@ it away from the application:
   reachable incrementally, so the connection re-anchors forwards and re-walks
   the window. Re-ingesting is free; missing mail is not.
 
+## Calendar
+
+Meetings ride the same connection, the same access token and the same run as
+email — one cron, one token refresh, one path through `ingestMessages()`. What
+is stored is a meeting involving a contact already in the CRM; everything else
+is discarded on arrival, so private appointments never reach the database.
+
+Three kinds of event are dropped before they are even matched, because they are
+not customer interactions: a cancelled event, one the mailbox owner declined,
+and a solo block with no other attendee.
+
+`singleEvents=true` expands a recurring meeting into its occurrences, so a
+weekly call lands on the timeline as the calls that happened rather than one
+rule describing them. The sync token is stored only when Google returns it on
+the final page — taking one from a partial read would skip everything after it,
+and a 410 answer means the series is broken and the next run does a bounded
+re-read.
+
+**Adding the scope did not widen anybody's existing grant.** A mailbox connected
+before calendar sync existed holds a token that reads mail and cannot read a
+calendar. Google answers 403, which is contained rather than fatal: the
+connection is marked `calendar_state = 'unauthorised'`, the Mailboxes page says
+so and invites a reconnect, and **the email sync carries on untouched**. Losing
+somebody's mail sync over a calendar permission would be a poor trade.
+Reconnecting resets the state to `unknown`, so it is tried again.
+
 ## `POST /api/activities/ingest`
 
 Still there, for a connector written outside this app (Outlook, or a separate
@@ -253,6 +286,3 @@ in the rep's Gmail Sent folder needs the `gmail.send` scope, threading headers
 (`threadId`, `In-Reply-To`, `References`) and a composer. It was deliberately
 left out: logging is what earns its keep on day one, and adding compose later is
 additive — nothing here would be thrown away.
-
-**Calendar.** `calendar.readonly` and a second poller. The ingest side already
-understands meetings.

@@ -109,15 +109,23 @@ backfill window.
 
 ### 3c. Data access (scopes)
 
-Exactly two, and neither can send, delete or relabel mail:
+Exactly three, and none of them can send, delete, relabel, create or cancel
+anything:
 
 - `https://www.googleapis.com/auth/gmail.readonly` — flagged **Restricted**,
   which is expected and is not a problem in Testing.
+- `https://www.googleapis.com/auth/calendar.readonly` — meetings on the
+  timeline. Also restricted, same story.
 - `https://www.googleapis.com/auth/userinfo.email` — how the CRM learns which
   mailbox was just connected, so it can label the connection.
 
 Nothing wider. `gmail.modify`, or `https://mail.google.com/`, would let the CRM
 delete somebody's mail, and no code path here would ever use it.
+
+**If the calendar scope was added after people had already connected**, their
+existing grants do not include it: Gmail keeps working and the Mailboxes page
+tells them the calendar is not included until they reconnect. Adding it to the
+console is what makes that reconnect grant it.
 
 To add or check them: **Data access → Add or remove scopes**, then paste each
 into the filter box — it is the only sane way through the list.

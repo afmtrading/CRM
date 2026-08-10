@@ -113,6 +113,13 @@ export async function GET(request: Request) {
       email_address: address,
       refresh_token: sealToken(refreshToken),
       history_id: existing?.history_id ?? null,
+      /*
+       * Back to 'unknown' so the calendar is tried again. Somebody reconnecting
+       * because their calendar was never authorised is doing it precisely to
+       * grant the wider scope, and leaving them marked unauthorised would mean
+       * it never got noticed.
+       */
+      calendar_state: 'unknown',
       status: 'active',
       last_error: null,
     },
