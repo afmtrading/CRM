@@ -14,7 +14,7 @@ Vercel. Implements **Phase 1 (MVP)** of the CRM PRD.
 ```bash
 npm install
 cp .env.example .env.local        # fill in your Supabase project's values
-npm run dev                       # http://localhost:3000
+npm run dev                       # http://localhost:3001
 ```
 
 ### 1. Create the Supabase project

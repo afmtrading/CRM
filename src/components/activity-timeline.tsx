@@ -1,7 +1,8 @@
-import { dueLabel } from '@/lib/format'
 import { DateTime } from '@/components/date-time'
+import { DueDate } from '@/components/due-date'
 import type { ActivityRow, ActivityType, RelatedToType, UserRow } from '@/lib/database.types'
 import { deleteActivity, logActivity, toggleActivityComplete } from '@/app/(app)/activities/actions'
+
 const TYPE_ICON: Record<ActivityType, string> = {
   call: '📞',
   email: '✉️',
@@ -9,12 +10,7 @@ const TYPE_ICON: Record<ActivityType, string> = {
   note: '📝',
   task: '☑️',
 }
-const DUE_TONE = {
-  overdue: 'text-red-600',
-  today: 'text-amber-600',
-  upcoming: 'text-slate-500',
-  none: 'text-slate-400',
-} as const
+
 /** Log-an-activity composer, shared by the contact, company and deal pages. */
 export function ActivityComposer({
   relatedToType,
@@ -61,6 +57,7 @@ export function ActivityComposer({
     </form>
   )
 }
+
 export function ActivityTimeline({
   activities,
   users,
@@ -79,7 +76,6 @@ export function ActivityTimeline({
   return (
     <ol className="divide-y divide-slate-100">
       {activities.map((activity) => {
-        const due = dueLabel(activity.due_date)
         const done = Boolean(activity.completed_at)
         return (
           <li key={activity.id} className="flex gap-3 py-3">
@@ -92,7 +88,7 @@ export function ActivityTimeline({
                   {activity.subject || activity.type}
                 </p>
                 {activity.type === 'task' && activity.due_date && !done && (
-                  <span className={`text-xs ${DUE_TONE[due.tone]}`}>Due {due.label}</span>
+                  <DueDate value={activity.due_date} prefix="Due " className="text-xs" />
                 )}
                 {activity.external_source && (
                   <span className="badge bg-slate-100 text-slate-500">

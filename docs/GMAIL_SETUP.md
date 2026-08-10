@@ -153,7 +153,7 @@ per-account credentials would be an additive change.
 
   ```
   https://crm.flo-ventures.com/api/gmail/callback
-  http://localhost:3000/api/gmail/callback
+  http://localhost:3001/api/gmail/callback
   ```
 
 - Authorised JavaScript origins: empty. This flow never runs in the browser.
@@ -162,6 +162,12 @@ The redirect URIs must match what the app sends **character for character** —
 scheme, host, port, path, no trailing slash. `https://` against `http://`, or a
 `www.` present on one side only, produces `redirect_uri_mismatch` and nothing
 more helpful.
+
+**The local port is 3001, not Next.js's default 3000**, because another app on
+the same machine holds 3000. If the console still lists the 3000 URI from the
+original setup, add the 3001 one beside it — connecting a mailbox locally fails
+with `redirect_uri_mismatch` until it is there. Removing the old entry is
+optional and harmless.
 
 Preview deployments get a fresh URL each time and therefore cannot match a
 registered URI. Gmail connect works on production and localhost only; that is
@@ -218,7 +224,7 @@ app: **Vercel → Settings → Domains**, with DNS pointed at Vercel.
 they are set, not to the one already running.
 
 Locally, the same values go in `.env.local` (gitignored) with
-`NEXT_PUBLIC_SITE_URL=http://localhost:3000`.
+`NEXT_PUBLIC_SITE_URL=http://localhost:3001`.
 
 ## Step 8 — Apply the migration
 
