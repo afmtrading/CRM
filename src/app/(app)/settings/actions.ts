@@ -7,6 +7,7 @@ import { requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
+import { resolveStatus, wouldRemoveLastAdmin, type UserSnapshot } from '@/lib/users'
 import type { OptionColor } from '@/lib/database.types'
 
 // -----------------------------------------------------------------------------
@@ -202,49 +203,108 @@ export async function inviteUser(_prev: InviteState, formData: FormData): Promis
   return { ok: `Invitation sent to ${email}.` }
 }
 
-export async function updateUserRole(formData: FormData) {
-  const context = await requireAdmin()
-  const id = String(formData.get('id') ?? '')
+/**
+ * Name, role and access in one edit, because that is how an administrator
+ * thinks about a colleague — not as three separate settings that each need
+ * saving.
+ *
+ * The role is parsed against the full list rather than coerced: treating
+ * anything that is not 'admin' as 'regular' would silently demote a manager to
+ * a rep, or a read-only user to one who can write.
+ */
+const userEditSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().max(120, 'A name has to be 120 characters or fewer'),
+  role: z.enum(userRoles),
+  status: z.enum(['active', 'disabled']),
+})
 
-  // Parsed against the full list rather than coerced: treating anything that is
-  // not 'admin' as 'regular' would silently demote a manager to a rep, or a
-  // read-only user to one who can write.
-  const parsedRole = z.enum(userRoles).safeParse(formData.get('role'))
-  if (!parsedRole.success) throw new Error('Unknown role')
-  const role = parsedRole.data
+/** The snapshot every guard below needs, fetched once. */
+async function loadUser(context: Awaited<ReturnType<typeof requireAdmin>>, id: string) {
+  const { data } = await scoped(context, 'users')
+    .select('id, role, status, auth_provider_id')
+    .eq('id', id)
+    .maybeSingle()
 
-  // Never let the last administrator demote themselves out of the organization.
-  if (id === context.user.id && role !== 'admin') {
-    const { count } = await scoped(context, 'users')
-      .select('id', { count: 'exact', head: true })
-      .eq('role', 'admin')
-      .eq('status', 'active')
-
-    if ((count ?? 0) <= 1) {
-      throw new Error('This organization needs at least one administrator.')
-    }
-  }
-
-  const { error } = await scoped(context, 'users').update({ role }).eq('id', id)
-  if (error) throw new Error(error.message)
-
-  revalidatePath('/settings/users')
+  if (!data) throw new Error('That person is not in this organization.')
+  return data as UserSnapshot
 }
 
-export async function updateUserStatus(formData: FormData) {
-  const context = await requireAdmin()
-  const id = String(formData.get('id') ?? '')
-  const status = String(formData.get('status') ?? 'active')
+async function countActiveAdmins(context: Awaited<ReturnType<typeof requireAdmin>>) {
+  const { count } = await scoped(context, 'users')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'admin')
+    .eq('status', 'active')
 
-  if (id === context.user.id && status === 'disabled') {
-    throw new Error('You cannot disable your own account.')
+  return count ?? 0
+}
+
+export async function updateUser(formData: FormData) {
+  const context = await requireAdmin()
+
+  const parsed = userEditSchema.safeParse(Object.fromEntries(formData))
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid change')
+  const { id, name, role, status } = parsed.data
+
+  const user = await loadUser(context, id)
+  const nextStatus = resolveStatus(status, user)
+
+  if (id === context.user.id && nextStatus === 'disabled') {
+    throw new Error('You cannot pause your own account.')
+  }
+
+  if (
+    wouldRemoveLastAdmin({
+      user,
+      activeAdminCount: await countActiveAdmins(context),
+      next: { role, status: nextStatus },
+    })
+  ) {
+    throw new Error('This organization needs at least one administrator who can sign in.')
   }
 
   const { error } = await scoped(context, 'users')
-    .update({ status: status === 'disabled' ? 'disabled' : 'active' })
+    .update({ name, role, status: nextStatus })
     .eq('id', id)
 
   if (error) throw new Error(error.message)
+  revalidatePath('/settings/users')
+}
+
+/**
+ * Removes somebody from the organization for good.
+ *
+ * Their work is not deleted with them. Every ownership column is
+ * `on delete set null`, so contacts, companies, deals and activities survive as
+ * unassigned records rather than disappearing with the person who happened to
+ * own them. What does go is theirs alone: saved filters, notifications, and any
+ * connected mailbox — which is the point, since a departed colleague's mailbox
+ * should stop being read. An assignment rule pointing at them goes too.
+ *
+ * Their sign-in account at the authentication layer is left alone. It may be
+ * shared with another organization, and losing the CRM record is already enough
+ * to end their access here.
+ *
+ * Pausing is the reversible option and is usually what somebody wants; this one
+ * has no undo, because users have no recycle bin.
+ */
+export async function deleteUser(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  if (id === context.user.id) {
+    throw new Error('You cannot delete your own account.')
+  }
+
+  const user = await loadUser(context, id)
+
+  if (wouldRemoveLastAdmin({ user, activeAdminCount: await countActiveAdmins(context) })) {
+    throw new Error('This organization needs at least one administrator who can sign in.')
+  }
+
+  const { error } = await scoped(context, 'users').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+
   revalidatePath('/settings/users')
 }
 
