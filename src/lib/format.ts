@@ -20,16 +20,43 @@ export function formatPercent(value: number): string {
   return `${Math.round((value ?? 0) * 100)}%`
 }
 
-export function formatDate(value: string | null | undefined): string {
+/**
+ * Dates come in two kinds, and treating them alike is the classic timezone bug.
+ *
+ * A **day** is a calendar date with no time in it — an expected close date, a
+ * birthday. It is the same day everywhere on earth, so it must never be shifted
+ * by a zone: a deal closing on the 15th that reads as the 14th for anyone west
+ * of UTC is simply wrong. `formatDay` pins to UTC to hold it still. Use it for
+ * the `date` columns: expected_close_date, actual_close_date, birthday.
+ *
+ * An **instant** is a moment — created_at, last_synced_at, occurred_at. It
+ * happened at one point in time and every reader should see it on their own
+ * clock. `formatDate`/`formatDateTime` take a zone, and rendering them on the
+ * server without one shows the server's zone, which on Vercel is UTC and is
+ * nobody's. That is what `<DateTime>` in `src/components/date-time.tsx` exists
+ * to avoid — prefer it over calling these directly from a server component.
+ */
+export function formatDay(value: string | null | undefined): string {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-CA', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+    timeZone: 'UTC',
   })
 }
 
-export function formatDateTime(value: string | null | undefined): string {
+export function formatDate(value: string | null | undefined, timeZone?: string): string {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('en-CA', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
+  })
+}
+
+export function formatDateTime(value: string | null | undefined, timeZone?: string): string {
   if (!value) return '—'
   return new Date(value).toLocaleString('en-CA', {
     year: 'numeric',
@@ -37,6 +64,7 @@ export function formatDateTime(value: string | null | undefined): string {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   })
 }
 

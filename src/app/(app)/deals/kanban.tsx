@@ -3,7 +3,7 @@
 import { useOptimistic, useState, useTransition } from 'react'
 import Link from 'next/link'
 
-import { formatCurrency, formatDate, formatPercent } from '@/lib/format'
+import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
 import type { DealRow, StageRow } from '@/lib/database.types'
 
 import { moveDealToStage } from './actions'
@@ -134,7 +134,7 @@ export function Kanban({
                         {formatPercent(deal.probability)}
                         {deal.probability_overridden && ' ✎'}
                       </span>
-                      <span>{formatDate(deal.expected_close_date)}</span>
+                      <span>{formatDay(deal.expected_close_date)}</span>
                     </div>
 
                     {deal.owner_id && ownerNames[deal.owner_id] && (

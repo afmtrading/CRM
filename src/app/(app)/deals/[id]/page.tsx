@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import { contactName, formatCurrency, formatDate, formatNumber, formatPercent } from '@/lib/format'
+import { contactName, formatCurrency, formatDay, formatNumber, formatPercent } from '@/lib/format'
 import type {
   ActivityRow,
   DealProductRow,
@@ -368,11 +368,11 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             </div>
             <div>
               <dt className="text-xs text-slate-500">Expected close</dt>
-              <dd className="mt-0.5 text-slate-800">{formatDate(deal.expected_close_date)}</dd>
+              <dd className="mt-0.5 text-slate-800">{formatDay(deal.expected_close_date)}</dd>
             </div>
             <div>
               <dt className="text-xs text-slate-500">Actual close</dt>
-              <dd className="mt-0.5 text-slate-800">{formatDate(deal.actual_close_date)}</dd>
+              <dd className="mt-0.5 text-slate-800">{formatDay(deal.actual_close_date)}</dd>
             </div>
           </dl>
         </Section>

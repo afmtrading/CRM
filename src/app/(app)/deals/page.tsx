@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { formatCurrency, formatDate, formatPercent } from '@/lib/format'
+import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
 import type { DealRow, PipelineRow, StageRow, UserRow } from '@/lib/database.types'
 import { DealStatusBadge, EmptyState, PageHeader } from '@/components/ui'
 
@@ -202,7 +202,7 @@ export default async function DealsPage({
                   <td className="text-slate-600">
                     {deal.owner_id ? (ownerNames[deal.owner_id] ?? '—') : '—'}
                   </td>
-                  <td className="text-slate-500">{formatDate(deal.expected_close_date)}</td>
+                  <td className="text-slate-500">{formatDay(deal.expected_close_date)}</td>
                 </tr>
               ))}
               {dealRows.length === 0 && (

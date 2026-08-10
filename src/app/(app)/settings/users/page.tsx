@@ -1,16 +1,13 @@
 import { requireAdmin, scoped } from '@/lib/tenancy'
-import { formatDateTime } from '@/lib/format'
+import { DateTime } from '@/components/date-time'
 import type { UserRow } from '@/lib/database.types'
 import { USER_ROLES } from '@/lib/field-options'
 import { ErrorNote, PageHeader, Section } from '@/components/ui'
-
 import { deleteUser, updateUser } from '../actions'
 import { DeleteUserButton } from './delete-user-button'
 import { InviteUserForm } from './invite-form'
 import { OrganizationForm } from './organization-form'
-
 export const metadata = { title: 'Users · FLO CRM' }
-
 /**
  * `invited` is not an option an administrator can pick — it is where everyone
  * starts and it ends the first time they sign in. The control offers the two
@@ -21,19 +18,16 @@ const ACCESS_OPTIONS = [
   { value: 'active', label: 'Allowed' },
   { value: 'disabled', label: 'Paused' },
 ]
-
 const STATUS_LABELS: Record<string, string> = {
   active: 'Signed in',
   invited: 'Invited',
   disabled: 'Paused',
 }
-
 const STATUS_STYLES: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-800',
   invited: 'bg-amber-100 text-amber-800',
   disabled: 'bg-slate-200 text-slate-600',
 }
-
 export default async function UserSettingsPage({
   searchParams,
 }: {
@@ -41,35 +35,29 @@ export default async function UserSettingsPage({
 }) {
   const params = await searchParams
   const context = await requireAdmin()
-
   const { data: users } = await scoped(context, 'users').select('*').order('created_at')
   const userList = (users ?? []) as UserRow[]
-
   const confirmation = params.saved
     ? `${params.saved} was updated.`
     : params.removed
       ? `${params.removed} was removed from this organization.`
       : null
-
   return (
     <>
       <PageHeader
         title="Users"
         description="People in this organization. Accounts are provisioned here — there is no public signup."
       />
-
       {params.error && (
         <div className="mb-5">
           <ErrorNote>{params.error}</ErrorNote>
         </div>
       )}
-
       {confirmation && (
         <p className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">
           {confirmation}
         </p>
       )}
-
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Section title={`${userList.length} user${userList.length === 1 ? '' : 's'}`}>
@@ -92,7 +80,6 @@ export default async function UserSettingsPage({
                     // layout without nesting a form inside another.
                     const formId = `user-${user.id}`
                     const isSelf = user.id === context.user.id
-
                     return (
                       <tr key={user.id}>
                         <td>
@@ -112,9 +99,7 @@ export default async function UserSettingsPage({
                             className="input w-40 py-1"
                           />
                         </td>
-
                         <td className="text-slate-600">{user.email}</td>
-
                         <td>
                           <label className="sr-only" htmlFor={`${formId}-role`}>
                             Role for {user.email}
@@ -133,7 +118,6 @@ export default async function UserSettingsPage({
                             ))}
                           </select>
                         </td>
-
                         <td>
                           {/*
                             Your own access is shown, not offered — but it still
@@ -174,9 +158,7 @@ export default async function UserSettingsPage({
                             {STATUS_LABELS[user.status] ?? user.status}
                           </span>
                         </td>
-
-                        <td className="text-slate-500">{formatDateTime(user.last_login_at)}</td>
-
+                        <td className="text-slate-500"><DateTime value={user.last_login_at} /></td>
                         <td>
                           <div className="flex items-center justify-end gap-3">
                             <button
@@ -201,7 +183,6 @@ export default async function UserSettingsPage({
                 </tbody>
               </table>
             </div>
-
             <p className="mt-4 text-xs text-slate-500">
               <strong>Paused</strong> blocks sign-in and can be undone at any time — use it for
               someone on leave or between roles. <strong>Delete</strong> cannot be undone: their
@@ -209,12 +190,10 @@ export default async function UserSettingsPage({
               connected mailbox and any assignment rule routing leads to them are destroyed.
             </p>
           </Section>
-
           <Section title="Organization">
             <OrganizationForm organization={context.organization} />
           </Section>
         </div>
-
         <Section title="Invite someone">
           <InviteUserForm />
         </Section>
