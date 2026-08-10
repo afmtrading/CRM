@@ -2,7 +2,7 @@ import { requireAdmin, scoped } from '@/lib/tenancy'
 import { formatDateTime } from '@/lib/format'
 import type { UserRow } from '@/lib/database.types'
 import { USER_ROLES } from '@/lib/field-options'
-import { PageHeader, Section } from '@/components/ui'
+import { ErrorNote, PageHeader, Section } from '@/components/ui'
 
 import { deleteUser, updateUser } from '../actions'
 import { DeleteUserButton } from './delete-user-button'
@@ -34,11 +34,22 @@ const STATUS_STYLES: Record<string, string> = {
   disabled: 'bg-slate-200 text-slate-600',
 }
 
-export default async function UserSettingsPage() {
+export default async function UserSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; saved?: string; removed?: string }>
+}) {
+  const params = await searchParams
   const context = await requireAdmin()
 
   const { data: users } = await scoped(context, 'users').select('*').order('created_at')
   const userList = (users ?? []) as UserRow[]
+
+  const confirmation = params.saved
+    ? `${params.saved} was updated.`
+    : params.removed
+      ? `${params.removed} was removed from this organization.`
+      : null
 
   return (
     <>
@@ -46,6 +57,18 @@ export default async function UserSettingsPage() {
         title="Users"
         description="People in this organization. Accounts are provisioned here — there is no public signup."
       />
+
+      {params.error && (
+        <div className="mb-5">
+          <ErrorNote>{params.error}</ErrorNote>
+        </div>
+      )}
+
+      {confirmation && (
+        <p className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">
+          {confirmation}
+        </p>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
@@ -112,24 +135,41 @@ export default async function UserSettingsPage() {
                         </td>
 
                         <td>
-                          <label className="sr-only" htmlFor={`${formId}-status`}>
-                            Access for {user.email}
-                          </label>
-                          <select
-                            id={`${formId}-status`}
-                            form={formId}
-                            name="status"
-                            defaultValue={user.status === 'disabled' ? 'disabled' : 'active'}
-                            disabled={isSelf}
-                            title={isSelf ? 'You cannot pause your own account' : undefined}
-                            className="input w-28 py-1 disabled:bg-slate-50 disabled:text-slate-400"
-                          >
-                            {ACCESS_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                          {/*
+                            Your own access is shown, not offered — but it still
+                            has to reach the server, because a disabled select
+                            submits nothing and the save would arrive incomplete.
+                          */}
+                          {isSelf ? (
+                            <>
+                              <input
+                                type="hidden"
+                                form={formId}
+                                name="status"
+                                value={user.status === 'disabled' ? 'disabled' : 'active'}
+                              />
+                              <span className="text-xs text-slate-400">Your own account</span>
+                            </>
+                          ) : (
+                            <>
+                              <label className="sr-only" htmlFor={`${formId}-status`}>
+                                Access for {user.email}
+                              </label>
+                              <select
+                                id={`${formId}-status`}
+                                form={formId}
+                                name="status"
+                                defaultValue={user.status === 'disabled' ? 'disabled' : 'active'}
+                                className="input w-28 py-1"
+                              >
+                                {ACCESS_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
+                          )}
                           <span className={`badge mt-1 ${STATUS_STYLES[user.status]}`}>
                             {STATUS_LABELS[user.status] ?? user.status}
                           </span>

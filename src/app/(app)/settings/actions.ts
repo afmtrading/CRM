@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
@@ -219,6 +220,17 @@ const userEditSchema = z.object({
   status: z.enum(['active', 'disabled']),
 })
 
+/**
+ * Guards on this page refuse ordinary, reasonable-looking actions — pausing the
+ * last administrator, deleting yourself. Thrown from a server action those
+ * become a full-page "server-side exception", which reads as a broken app
+ * rather than a rule. They come back as a message on the page instead.
+ */
+function backToUsers(params: Record<string, string>): never {
+  const query = new URLSearchParams(params)
+  redirect(`/settings/users?${query.toString()}`)
+}
+
 /** The snapshot every guard below needs, fetched once. */
 async function loadUser(context: Awaited<ReturnType<typeof requireAdmin>>, id: string) {
   const { data } = await scoped(context, 'users')
@@ -226,7 +238,9 @@ async function loadUser(context: Awaited<ReturnType<typeof requireAdmin>>, id: s
     .eq('id', id)
     .maybeSingle()
 
-  if (!data) throw new Error('That person is not in this organization.')
+  // Most likely a stale page — somebody else removed them while this one was
+  // open. That is not an exception, it is out-of-date information.
+  if (!data) backToUsers({ error: 'That person is no longer in this organization.' })
   return data as UserSnapshot
 }
 
@@ -243,14 +257,16 @@ export async function updateUser(formData: FormData) {
   const context = await requireAdmin()
 
   const parsed = userEditSchema.safeParse(Object.fromEntries(formData))
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid change')
+  if (!parsed.success) {
+    backToUsers({ error: parsed.error.issues[0]?.message ?? 'That change could not be saved.' })
+  }
   const { id, name, role, status } = parsed.data
 
   const user = await loadUser(context, id)
   const nextStatus = resolveStatus(status, user)
 
   if (id === context.user.id && nextStatus === 'disabled') {
-    throw new Error('You cannot pause your own account.')
+    backToUsers({ error: 'You cannot pause your own account.' })
   }
 
   if (
@@ -260,15 +276,20 @@ export async function updateUser(formData: FormData) {
       next: { role, status: nextStatus },
     })
   ) {
-    throw new Error('This organization needs at least one administrator who can sign in.')
+    backToUsers({
+      error:
+        'This organization needs at least one administrator who can sign in. Give somebody else the administrator role first.',
+    })
   }
 
   const { error } = await scoped(context, 'users')
     .update({ name, role, status: nextStatus })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) backToUsers({ error: error.message })
+
   revalidatePath('/settings/users')
+  backToUsers({ saved: name || user.id })
 }
 
 /**
@@ -293,19 +314,23 @@ export async function deleteUser(formData: FormData) {
   const id = String(formData.get('id') ?? '')
 
   if (id === context.user.id) {
-    throw new Error('You cannot delete your own account.')
+    backToUsers({ error: 'You cannot delete your own account.' })
   }
 
   const user = await loadUser(context, id)
 
   if (wouldRemoveLastAdmin({ user, activeAdminCount: await countActiveAdmins(context) })) {
-    throw new Error('This organization needs at least one administrator who can sign in.')
+    backToUsers({
+      error:
+        'This organization needs at least one administrator who can sign in. Give somebody else the administrator role first.',
+    })
   }
 
   const { error } = await scoped(context, 'users').delete().eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) backToUsers({ error: error.message })
 
   revalidatePath('/settings/users')
+  backToUsers({ removed: String(formData.get('label') ?? 'That person') })
 }
 
 // -----------------------------------------------------------------------------

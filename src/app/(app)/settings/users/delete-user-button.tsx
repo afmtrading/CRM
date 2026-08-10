@@ -31,6 +31,7 @@ export function DeleteUserButton({
       }}
     >
       <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="label" value={label} />
       <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
         Delete
       </button>
