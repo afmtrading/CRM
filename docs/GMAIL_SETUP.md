@@ -109,15 +109,23 @@ backfill window.
 
 ### 3c. Data access (scopes)
 
-Exactly two, and neither can send, delete or relabel mail:
+Exactly three, and none of them can send, delete, relabel, create or cancel
+anything:
 
 - `https://www.googleapis.com/auth/gmail.readonly` — flagged **Restricted**,
   which is expected and is not a problem in Testing.
+- `https://www.googleapis.com/auth/calendar.readonly` — meetings on the
+  timeline. Also restricted, same story.
 - `https://www.googleapis.com/auth/userinfo.email` — how the CRM learns which
   mailbox was just connected, so it can label the connection.
 
 Nothing wider. `gmail.modify`, or `https://mail.google.com/`, would let the CRM
 delete somebody's mail, and no code path here would ever use it.
+
+**If the calendar scope was added after people had already connected**, their
+existing grants do not include it: Gmail keeps working and the Mailboxes page
+tells them the calendar is not included until they reconnect. Adding it to the
+console is what makes that reconnect grant it.
 
 To add or check them: **Data access → Add or remove scopes**, then paste each
 into the filter box — it is the only sane way through the list.
@@ -153,7 +161,7 @@ per-account credentials would be an additive change.
 
   ```
   https://crm.flo-ventures.com/api/gmail/callback
-  http://localhost:3000/api/gmail/callback
+  http://localhost:3001/api/gmail/callback
   ```
 
 - Authorised JavaScript origins: empty. This flow never runs in the browser.
@@ -162,6 +170,12 @@ The redirect URIs must match what the app sends **character for character** —
 scheme, host, port, path, no trailing slash. `https://` against `http://`, or a
 `www.` present on one side only, produces `redirect_uri_mismatch` and nothing
 more helpful.
+
+**The local port is 3001, not Next.js's default 3000**, because another app on
+the same machine holds 3000. If the console still lists the 3000 URI from the
+original setup, add the 3001 one beside it — connecting a mailbox locally fails
+with `redirect_uri_mismatch` until it is there. Removing the old entry is
+optional and harmless.
 
 Preview deployments get a fresh URL each time and therefore cannot match a
 registered URI. Gmail connect works on production and localhost only; that is
@@ -218,7 +232,7 @@ app: **Vercel → Settings → Domains**, with DNS pointed at Vercel.
 they are set, not to the one already running.
 
 Locally, the same values go in `.env.local` (gitignored) with
-`NEXT_PUBLIC_SITE_URL=http://localhost:3000`.
+`NEXT_PUBLIC_SITE_URL=http://localhost:3001`.
 
 ## Step 8 — Apply the migration
 
@@ -291,7 +305,10 @@ As a CRM user whose address is on the test-user list:
 4. Grant the read-only permissions. The screen will say the app wants to *read*
    your email — there is no send or delete in the list, because those scopes
    were never requested.
-5. You land back on Mailboxes with the address listed and *backfilling 30 days*.
+5. You land back on Mailboxes with the address listed and *history import
+   queued*. New mail starts arriving from the first poll; the 30 days of
+   archive import over the runs that follow, a chunk at a time, and the line
+   shows how far back it has reached.
 
 The first sync happens on the next scheduled run, not instantly. Trigger the
 curl from step 9 if you would rather not wait.

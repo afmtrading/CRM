@@ -1,8 +1,8 @@
 # Mailbox sync (PRD 6.4)
 
 > **Status:** built and tested, off until configured. Logging only — emails
-> written in Gmail appear on the contact's timeline in the CRM. Nothing is ever
-> sent from the CRM.
+> written in Gmail and meetings held in Google Calendar appear on the contact's
+> timeline in the CRM. Nothing is ever sent, created or cancelled from the CRM.
 
 The acceptance criterion is:
 
@@ -13,10 +13,14 @@ The acceptance criterion is:
 ## How it fits together
 
 ```
-Gmail  ──►  /api/gmail/sync (poller)  ──►  ingestMessages()  ──►  activities
-                                              ▲
-external connector ──► POST /api/activities/ingest
+Gmail     ──┐
+            ├──►  /api/gmail/sync (poller)  ──►  ingestMessages()  ──►  activities
+Calendar  ──┘                                        ▲
+                     external connector ──► POST /api/activities/ingest
 ```
+
+One poller, because both halves read the same Google account with the same
+token: refreshing it twice and running two crons would buy nothing.
 
 Two halves, kept apart on purpose. `src/lib/gmail.ts` knows about Gmail and
 produces the provider-neutral `IncomingMessage` shape. `src/lib/ingest.ts`
@@ -67,9 +71,11 @@ Nothing about that is load-bearing on the code: publishing the app later, or
 moving everyone into one Workspace and switching to Internal, stops the weekly
 reconnects and changes nothing else.
 
-Only two scopes are requested, and neither can send, delete or relabel mail:
+Three scopes are requested, and none of them can send, delete, relabel, create
+or cancel anything:
 
 - `https://www.googleapis.com/auth/gmail.readonly`
+- `https://www.googleapis.com/auth/calendar.readonly`
 - `https://www.googleapis.com/auth/userinfo.email`
 
 ### 2. Environment
@@ -129,14 +135,15 @@ from where it stopped.
 
 ## What is stored, and what is not
 
-- **Only messages involving a contact already in the CRM.** Everything else is
-  discarded on arrival and never written. Personal mail does not enter the
-  database.
+- **Only messages and meetings involving a contact already in the CRM.**
+  Everything else is discarded on arrival and never written. Personal mail and
+  private appointments do not enter the database.
 - **Never a deleted contact.** A record in the recycle bin does not quietly
   collect new mail.
 - **Quoted reply chains are stripped**, so an entry is what the person wrote
   rather than the whole conversation again.
-- **Drafts, chat, spam and binned mail are skipped.**
+- **Drafts, chat, spam and binned mail are skipped**, as are cancelled meetings,
+  meetings the owner declined, and solo calendar blocks.
 - Bodies are capped at 20,000 characters.
 - A logged email obeys the visibility rules of the contact it is attached to.
   Syncing makes nothing visible to anyone who could not already see the record.
@@ -167,11 +174,12 @@ it away from the application:
 - **The cursor advances last.** `history_id` is written only after the run's
   messages are stored, so a failure repeats the window instead of skipping it.
 - **History expiry is handled.** Gmail keeps roughly a week of history and
-  answers 404 afterwards. The poller falls back to a bounded backfill rather
-  than stopping — silently stopping looks exactly like "no new mail".
-- **A backfill anchors forward.** The mailbox's current cursor is read *before*
-  fetching, so after one backfill the connection goes incremental instead of
-  backfilling forever.
+  answers 404 afterwards. Silently stopping would look exactly like "no new
+  mail", so the connection re-anchors and reopens the walk instead.
+- **A new connection anchors forwards immediately.** The mailbox's current
+  cursor is read at the start of the run, so a mailbox is watching for new mail
+  from its very first poll rather than after its archive has finished
+  importing.
 - **A dead grant stops the connection.** `invalid_grant` — revoked, password
   changed, or the seven-day testing-mode expiry — marks it `needs_reauth` and
   surfaces on the Mailboxes page with a Reconnect button, rather than failing
@@ -188,14 +196,51 @@ it away from the application:
   incremental backlog genuinely drains over successive runs instead of being
   skipped. Gmail may re-deliver the boundary record; that costs nothing,
   because ingestion is idempotent.
-- **A backfill is a one-shot, and its ceiling is a real limit.** Unlike the
-  incremental path it has no cursor to stop short on — after one run the
-  connection anchors to now. If a first import returns the full 75 the older
-  part of the window was not imported and nothing retries it; the run reports
-  `"truncated": true` so this is visible rather than assumed. To import more,
-  widen the window on the Mailboxes page, then disconnect and reconnect —
-  disconnecting clears the cursor, which is what makes the next run backfill
-  again.
+- **The history import walks backwards, over as many runs as it takes.**
+  `backfill_until` records how far back it has reached; each run takes another
+  chunk of whatever budget the incremental path did not use and moves it
+  earlier. A year of archive therefore imports without one heroic request, and
+  without delaying this morning's email — the two cursors are independent, and
+  new mail always gets first call on the budget.
+- **The walk finishes by reaching the window edge**, not by setting a flag. So
+  widening the window on the Mailboxes page starts it moving again by itself,
+  with no disconnect and reconnect.
+- **A chunk is skipped below ten messages.** The walk moves its cursor to the
+  oldest message it fetched, and Gmail may hand that same message back if it
+  treats `before:` as inclusive. A boundary that cannot move is a walk that
+  never ends.
+- **The cursor comes from Gmail's timestamps, not the parsed messages.** A chunk
+  of nothing but drafts and spam parses to nothing at all, and a cursor derived
+  from what survived parsing would stall on that window forever.
+- **An expired history cursor reopens the walk.** Mail from the gap is no longer
+  reachable incrementally, so the connection re-anchors forwards and re-walks
+  the window. Re-ingesting is free; missing mail is not.
+
+## Calendar
+
+Meetings ride the same connection, the same access token and the same run as
+email — one cron, one token refresh, one path through `ingestMessages()`. What
+is stored is a meeting involving a contact already in the CRM; everything else
+is discarded on arrival, so private appointments never reach the database.
+
+Three kinds of event are dropped before they are even matched, because they are
+not customer interactions: a cancelled event, one the mailbox owner declined,
+and a solo block with no other attendee.
+
+`singleEvents=true` expands a recurring meeting into its occurrences, so a
+weekly call lands on the timeline as the calls that happened rather than one
+rule describing them. The sync token is stored only when Google returns it on
+the final page — taking one from a partial read would skip everything after it,
+and a 410 answer means the series is broken and the next run does a bounded
+re-read.
+
+**Adding the scope did not widen anybody's existing grant.** A mailbox connected
+before calendar sync existed holds a token that reads mail and cannot read a
+calendar. Google answers 403, which is contained rather than fatal: the
+connection is marked `calendar_state = 'unauthorised'`, the Mailboxes page says
+so and invites a reconnect, and **the email sync carries on untouched**. Losing
+somebody's mail sync over a calendar permission would be a poor trade.
+Reconnecting resets the state to `unknown`, so it is tried again.
 
 ## `POST /api/activities/ingest`
 
@@ -241,6 +286,3 @@ in the rep's Gmail Sent folder needs the `gmail.send` scope, threading headers
 (`threadId`, `In-Reply-To`, `References`) and a composer. It was deliberately
 left out: logging is what earns its keep on day one, and adding compose later is
 additive — nothing here would be thrown away.
-
-**Calendar.** `calendar.readonly` and a second poller. The ingest side already
-understands meetings.

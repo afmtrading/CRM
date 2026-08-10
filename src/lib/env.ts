@@ -75,6 +75,6 @@ export function googleRedirectUri(): string {
 export function siteUrl(): string {
   return (
     read('NEXT_PUBLIC_SITE_URL') ??
-    (read('VERCEL_URL') ? `https://${read('VERCEL_URL')}` : 'http://localhost:3000')
+    (read('VERCEL_URL') ? `https://${read('VERCEL_URL')}` : 'http://localhost:3001')
   )
 }

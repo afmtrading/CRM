@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDate, formatDateTime, formatDay } from '../src/lib/format'
+import { dueLabel, formatDate, formatDateTime, formatDay } from '../src/lib/format'
 
 /*
  * These tests run in whatever zone the machine is in, so they assert on the
@@ -70,5 +70,59 @@ describe('formatDate', () => {
     expect(formatDate(instant, 'UTC')).toContain('11')
     // formatDay always answers with the UTC day, whoever is asking.
     expect(formatDay(instant)).toContain('11')
+  })
+})
+
+describe('dueLabel', () => {
+  /**
+   * Days are counted on the calendar, not in elapsed hours, and which calendar
+   * is the whole question. These build the due date relative to "now" in a
+   * chosen zone so the assertions hold whenever CI happens to run.
+   */
+  const inZone = (date: Date, timeZone: string) =>
+    new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone,
+    }).format(date)
+
+  const atNoonOn = (day: string) => `${day}T12:00:00.000Z`
+
+  it('calls a task due later today "Today"', () => {
+    const today = inZone(new Date(), 'UTC')
+    expect(dueLabel(atNoonOn(today), 'UTC')).toEqual({ label: 'Today', tone: 'today' })
+  })
+
+  it('calls tomorrow "Tomorrow"', () => {
+    const tomorrow = inZone(new Date(Date.now() + 86_400_000), 'UTC')
+    expect(dueLabel(atNoonOn(tomorrow), 'UTC')).toEqual({ label: 'Tomorrow', tone: 'upcoming' })
+  })
+
+  it('counts whole days for something overdue', () => {
+    const twoDaysAgo = inZone(new Date(Date.now() - 2 * 86_400_000), 'UTC')
+    expect(dueLabel(atNoonOn(twoDaysAgo), 'UTC')).toEqual({
+      label: '2d overdue',
+      tone: 'overdue',
+    })
+  })
+
+  /*
+   * The reported class of bug: at 9 p.m. in Toronto it is already tomorrow in
+   * UTC, so a task due tonight is "Today" to the person looking at it and
+   * "1d overdue" to a server in London. The zone argument is what decides.
+   */
+  it('reads the same instant differently depending on whose calendar is asked', () => {
+    const tonightInToronto = '2026-08-11T01:00:00.000Z' // 9 p.m. on the 10th, Toronto
+
+    const toronto = dueLabel(tonightInToronto, 'America/Toronto')
+    const utc = dueLabel(tonightInToronto, 'UTC')
+
+    // Both describe the same moment; they disagree because the day does.
+    expect(toronto.label).not.toBe(utc.label)
+  })
+
+  it('has nothing to say about a task with no due date', () => {
+    expect(dueLabel(null, 'UTC')).toEqual({ label: '—', tone: 'none' })
   })
 })

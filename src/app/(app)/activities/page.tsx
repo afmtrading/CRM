@@ -1,17 +1,23 @@
 import Link from 'next/link'
+
 import { requireSession, scoped } from '@/lib/tenancy'
-import { dueLabel } from '@/lib/format'
 import { DateTime } from '@/components/date-time'
+import { DueDate } from '@/components/due-date'
 import type { ActivityRow, UserRow } from '@/lib/database.types'
 import { EmptyState, PageHeader } from '@/components/ui'
+
 import { toggleActivityComplete } from './actions'
+
 export const metadata = { title: 'Activities · FLO CRM' }
+
 const TABS = [
   { key: 'mine', label: 'My open tasks' },
   { key: 'all-tasks', label: 'All open tasks' },
   { key: 'timeline', label: 'Everything' },
 ] as const
+
 type Tab = (typeof TABS)[number]['key']
+
 /** Where an activity's subject links back to. */
 function relatedHref(activity: ActivityRow) {
   switch (activity.related_to_type) {
@@ -23,6 +29,7 @@ function relatedHref(activity: ActivityRow) {
       return `/deals/${activity.related_to_id}`
   }
 }
+
 export default async function ActivitiesPage({
   searchParams,
 }: {
@@ -31,7 +38,9 @@ export default async function ActivitiesPage({
   const params = await searchParams
   const context = await requireSession()
   const tab: Tab = TABS.some((t) => t.key === params.tab) ? (params.tab as Tab) : 'mine'
+
   let query = scoped(context, 'activities').select('*')
+
   if (tab === 'timeline') {
     query = query.order('occurred_at', { ascending: false })
   } else {
@@ -41,18 +50,22 @@ export default async function ActivitiesPage({
       .order('due_date', { ascending: true, nullsFirst: false })
     if (tab === 'mine') query = query.eq('owner_id', context.user.id)
   }
+
   const [{ data: activities }, { data: users }] = await Promise.all([
     query.limit(200),
     scoped(context, 'users').select('*').order('name'),
   ])
+
   const rows = (activities ?? []) as ActivityRow[]
   const userNames = new Map(((users ?? []) as UserRow[]).map((user) => [user.id, user.name || user.email]))
+
   return (
     <>
       <PageHeader
         title="Activities"
         description="Calls, emails, meetings, notes and tasks logged against contacts, companies and deals."
       />
+
       <div className="mb-4 flex gap-2">
         {TABS.map((item) => (
           <Link
@@ -68,6 +81,7 @@ export default async function ActivitiesPage({
           </Link>
         ))}
       </div>
+
       {rows.length === 0 ? (
         <EmptyState
           title={tab === 'timeline' ? 'Nothing logged yet' : 'No open tasks'}
@@ -88,8 +102,8 @@ export default async function ActivitiesPage({
             </thead>
             <tbody>
               {rows.map((activity) => {
-                const due = dueLabel(activity.due_date)
                 const done = Boolean(activity.completed_at)
+
                 return (
                   <tr key={activity.id} className="hover:bg-slate-50">
                     <td className="capitalize text-slate-600">{activity.type}</td>
@@ -104,21 +118,11 @@ export default async function ActivitiesPage({
                     <td className="text-slate-600">
                       {activity.owner_id ? (userNames.get(activity.owner_id) ?? '—') : '—'}
                     </td>
-                    <td
-                      className={
-                        tab === 'timeline'
-                          ? 'text-slate-500'
-                          : due.tone === 'overdue'
-                            ? 'font-medium text-red-600'
-                            : due.tone === 'today'
-                              ? 'font-medium text-amber-600'
-                              : 'text-slate-500'
-                      }
-                    >
+                    <td className="text-slate-500">
                       {tab === 'timeline' ? (
                         <DateTime value={activity.occurred_at ?? activity.created_at} />
                       ) : (
-                        due.label
+                        <DueDate value={activity.due_date} />
                       )}
                     </td>
                     <td className="text-right">

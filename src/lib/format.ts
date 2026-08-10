@@ -81,18 +81,41 @@ export function initials(value: string): string {
     .join('')
 }
 
-/** Relative day label for due dates, so overdue work reads as overdue. */
-export function dueLabel(due: string | null | undefined): { label: string; tone: 'overdue' | 'today' | 'upcoming' | 'none' } {
+export type DueTone = 'overdue' | 'today' | 'upcoming' | 'none'
+
+/** The calendar day a moment falls on, in a given zone, as `YYYY-MM-DD`. */
+function dayIn(date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
+  }).format(date)
+}
+
+/**
+ * Relative day label for due dates, so overdue work reads as overdue.
+ *
+ * "Today" is a question about the reader's calendar, not the server's. A task
+ * due tonight is still today at 9 p.m. in Toronto while it is already tomorrow
+ * in UTC — so the whole thing hinges on which zone decides where a day ends.
+ * Omit `timeZone` in the browser to get the reader's own; `<DueDate>` in
+ * `src/components/due-date.tsx` is what arranges that on a server-rendered page.
+ */
+export function dueLabel(
+  due: string | null | undefined,
+  timeZone?: string,
+): { label: string; tone: DueTone } {
   if (!due) return { label: '—', tone: 'none' }
 
-  const dueDate = new Date(due)
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfDue = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate())
-  const days = Math.round((startOfDue.getTime() - startOfToday.getTime()) / 86_400_000)
+  // Compared as calendar days rather than elapsed hours: a task due in 20 hours
+  // is "tomorrow" if it lands after midnight, and "today" if it does not.
+  const dueDay = dayIn(new Date(due), timeZone)
+  const today = dayIn(new Date(), timeZone)
+  const days = Math.round((Date.parse(`${dueDay}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000)
 
   if (days < 0) return { label: `${Math.abs(days)}d overdue`, tone: 'overdue' }
   if (days === 0) return { label: 'Today', tone: 'today' }
   if (days === 1) return { label: 'Tomorrow', tone: 'upcoming' }
-  return { label: formatDate(due), tone: 'upcoming' }
+  return { label: formatDate(due, timeZone), tone: 'upcoming' }
 }

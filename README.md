@@ -14,7 +14,7 @@ Vercel. Implements **Phase 1 (MVP)** of the CRM PRD.
 ```bash
 npm install
 cp .env.example .env.local        # fill in your Supabase project's values
-npm run dev                       # http://localhost:3000
+npm run dev                       # http://localhost:3001
 ```
 
 ### 1. Create the Supabase project
@@ -180,10 +180,10 @@ docs/GMAIL_SETUP.md     click-by-click Google Cloud + deployment runbook
 
 ## Gmail sync
 
-**Built and tested; off until configured.** Emails written in Gmail appear on
-the contact's timeline by themselves, provided the contact is already in the
-CRM — everything else is discarded on arrival. Logging only: nothing is ever
-sent from the CRM.
+**Built and tested; off until configured.** Emails written in Gmail and meetings
+held in Google Calendar appear on the contact's timeline by themselves, provided
+the contact is already in the CRM — everything else is discarded on arrival.
+Logging only: nothing is ever sent, created or cancelled from the CRM.
 
 It stays invisible until an administrator has created a Google Cloud project
 and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `MAILBOX_TOKEN_KEY`;
@@ -193,7 +193,7 @@ through the setup; **[docs/SYNC.md](docs/SYNC.md)** explains the design.
 
 ## Known gap
 
-**Calendar sync (PRD 6.4).** `POST /api/activities/ingest` already understands
-meetings and writes them to the timeline, so the CRM side is done. What is
-missing is the Google half: the `calendar.readonly` scope and a second poller
-alongside the Gmail one. Everything else in Phase 1 is implemented.
+**Sending from the CRM.** Composing an email in the CRM and having it appear in
+the rep's Gmail Sent folder needs the `gmail.send` scope, threading headers and
+a composer. Deliberately left out — logging is what earns its keep, and compose
+is additive if it is ever wanted. Everything else in Phase 1 is implemented.

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   HistoryExpiredError,
   backfillQuery,
+  backfillWindowStart,
   buildAuthUrl,
   decodeBase64Url,
   extractPlainTextBody,
@@ -206,6 +207,34 @@ describe('backfillQuery', () => {
 
   it('excludes chats from the backfill', () => {
     expect(backfillQuery(7)).toContain('-in:chats')
+  })
+
+  it('bounds the far end once the walk has started, so each chunk is older', () => {
+    const now = new Date('2026-08-09T00:00:00.000Z')
+    const reached = new Date('2026-08-05T12:00:00.000Z')
+
+    const query = backfillQuery(30, now, reached)
+
+    expect(query).toContain(`before:${Math.floor(reached.getTime() / 1000)}`)
+    expect(query).toContain(`after:${Math.floor((now.getTime() - 30 * 86_400_000) / 1000)}`)
+  })
+
+  it('leaves the far end open before the walk has started', () => {
+    expect(backfillQuery(30, new Date('2026-08-09T00:00:00.000Z'), null)).not.toContain('before:')
+  })
+})
+
+describe('backfillWindowStart', () => {
+  it('is the far edge of the window, which is where a walk finishes', () => {
+    const now = new Date('2026-08-09T00:00:00.000Z')
+    expect(backfillWindowStart(30, now).toISOString()).toBe('2026-07-10T00:00:00.000Z')
+  })
+
+  it('moves earlier when the window is widened, which reopens a finished walk', () => {
+    const now = new Date('2026-08-09T00:00:00.000Z')
+    expect(backfillWindowStart(365, now).getTime()).toBeLessThan(
+      backfillWindowStart(30, now).getTime(),
+    )
   })
 })
 

@@ -24,9 +24,17 @@ const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me'
  * Deliberately minimal. `gmail.readonly` is the narrowest scope that can read
  * message bodies; `gmail.modify` and `https://mail.google.com/` would also
  * allow deleting someone's mail, which the CRM has no business doing.
+ * `calendar.readonly` is the same bargain for meetings — it cannot create,
+ * move or cancel anything.
+ *
+ * Adding a scope does not widen an existing grant. Anyone who connected before
+ * calendar was added holds a token that reads mail and not calendars, and stays
+ * that way until they reconnect; `calendar_state` on the connection is how that
+ * is noticed without breaking their Gmail sync.
  */
 export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
 ]
 
@@ -229,9 +237,24 @@ export function parseGmailMessage(
 }
 
 /** `after:` takes whole seconds; Gmail rejects a millisecond timestamp. */
-export function backfillQuery(days: number, now = new Date()): string {
+/**
+ * The search behind a backfill chunk.
+ *
+ * `days` is the far edge of the window. `before` is how far the walk has got
+ * so far, so successive runs ask for progressively older mail rather than the
+ * same newest batch every time. Whole seconds because that is all Gmail
+ * accepts — a fractional epoch is silently ignored and returns the lot.
+ */
+export function backfillQuery(days: number, now = new Date(), before?: Date | null): string {
   const since = Math.floor((now.getTime() - days * 86_400_000) / 1000)
-  return `after:${since} -in:chats`
+  const parts = [`after:${since}`, '-in:chats']
+  if (before) parts.push(`before:${Math.floor(before.getTime() / 1000)}`)
+  return parts.join(' ')
+}
+
+/** The far edge of a backfill window: nothing older than this is wanted. */
+export function backfillWindowStart(days: number, now = new Date()): Date {
+  return new Date(now.getTime() - days * 86_400_000)
 }
 
 // -----------------------------------------------------------------------------
@@ -441,9 +464,11 @@ export async function listRecentMessageIds(
   accessToken: string,
   days: number,
   limit: number,
+  /** Where the walk has reached. Omit for the newest chunk. */
+  before?: Date | null,
 ): Promise<string[]> {
   const query = new URLSearchParams({
-    q: backfillQuery(days),
+    q: backfillQuery(days, new Date(), before),
     maxResults: String(Math.min(limit, 500)),
   })
 

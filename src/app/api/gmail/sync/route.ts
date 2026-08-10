@@ -6,8 +6,15 @@ import { googleClientId, googleClientSecret, isGoogleConfigured } from '@/lib/en
 import { isTokenKeyConfigured, openToken } from '@/lib/crypto'
 import { ingestMessages } from '@/lib/ingest'
 import {
+  CalendarNotAuthorisedError,
+  SyncTokenExpiredError,
+  listEvents,
+  parseCalendarEvent,
+} from '@/lib/calendar'
+import {
   GmailAuthError,
   HistoryExpiredError,
+  backfillWindowStart,
   getMessage,
   getProfile,
   listHistory,
@@ -37,8 +44,17 @@ import type { IncomingMessage } from '@/lib/sync'
  */
 const MAX_MESSAGES_PER_RUN = 75
 const MAX_CONNECTIONS_PER_RUN = 25
+/** One list call returns many, so this is generous without being a stress test. */
+const MAX_EVENTS_PER_RUN = 150
 /** Gmail is happy with a handful of concurrent reads; this is not a stress test. */
 const FETCH_CONCURRENCY = 5
+/**
+ * Below this, a backfill chunk is not worth starting. The walk moves its cursor
+ * to the oldest message it fetched, so a chunk of one or two barely advances,
+ * and a chunk of exactly one could re-fetch the same message forever if Gmail
+ * treats `before:` as inclusive. Ten guarantees the boundary moves.
+ */
+const MIN_BACKFILL_CHUNK = 10
 
 /** Long enough for a full run; the ceilings above are what keep it in bounds. */
 export const maxDuration = 60
@@ -50,6 +66,9 @@ type Connection = {
   refresh_token: string | null
   history_id: string | null
   backfill_days: number
+  backfill_until: string | null
+  calendar_sync_token: string | null
+  calendar_state: string
 }
 
 type ConnectionResult = {
@@ -58,13 +77,15 @@ type ConnectionResult = {
   duplicates?: number
   unmatched?: number
   fetched?: number
-  backfilled?: boolean
+  /** How many of this run's messages came from the history walk. */
+  backfilled?: number
+  /** Calendar events read this run, or why none were. */
+  events?: number | string
+  /** How far back the walk has reached, or 'complete'. */
+  history?: string
   /**
-   * The run hit its ceiling. On the incremental path this is routine and
-   * self-correcting — the cursor stopped short and the next run continues.
-   * On a backfill it is not: the window's older mail was not imported and
-   * nothing will retry it, so a large first import wants a wider window and a
-   * disconnect/reconnect rather than patience.
+   * More new mail was waiting than one run takes. Routine and self-correcting:
+   * the incremental cursor stopped short and the next run continues from there.
    */
   truncated?: boolean
   error?: string
@@ -96,7 +117,9 @@ export async function POST(request: Request) {
   // same few mailboxes being polled every time.
   const { data, error } = await supabase
     .from('mailbox_connections')
-    .select('id, organization_id, email_address, refresh_token, history_id, backfill_days')
+    .select(
+      'id, organization_id, email_address, refresh_token, history_id, backfill_days, backfill_until, calendar_sync_token, calendar_state',
+    )
     .eq('status', 'active')
     .eq('provider', 'gmail')
     .order('last_synced_at', { ascending: true, nullsFirst: true })
@@ -151,9 +174,22 @@ async function syncConnection(
     return await recordError(supabase, connection.id, mailbox, thrown)
   }
 
+  /*
+   * Two independent jobs, and keeping them apart is the point.
+   *
+   * Forwards: the incremental cursor, which delivers today's mail. It gets
+   * first call on the run's budget, because new email is what the CRM is for.
+   *
+   * Backwards: the history walk, which takes whatever budget is left and moves
+   * `backfill_until` a little further into the past each run. Importing a year
+   * of archive therefore never delays this morning's email, and never has to
+   * finish in one heroic request.
+   */
+  const windowStart = backfillWindowStart(connection.backfill_days)
+  let backfillUntil = connection.backfill_until ? new Date(connection.backfill_until) : null
   let messageIds: string[] = []
+  let backfillIds: string[] = []
   let nextHistoryId: string | null = null
-  let backfilled = false
   let truncated = false
 
   try {
@@ -167,35 +203,35 @@ async function syncConnection(
         nextHistoryId = history.historyId
         truncated = history.truncated
       } catch (thrown) {
-        // Gmail keeps about a week of history. Once the cursor ages out the
-        // incremental path is gone for good, and silently stopping would look
-        // exactly like "no new mail" — so fall back to a bounded backfill.
+        // Gmail keeps about a week of history. Once the cursor ages out, mail
+        // from the gap is unreachable incrementally and silently stopping would
+        // look exactly like "no new mail" — so re-anchor and reopen the walk,
+        // which re-covers the window. Re-ingesting is free; missing is not.
         if (!(thrown instanceof HistoryExpiredError)) throw thrown
-        messageIds = await listRecentMessageIds(
-          accessToken,
-          connection.backfill_days,
-          MAX_MESSAGES_PER_RUN,
-        )
         nextHistoryId = anchorHistoryId
-        backfilled = true
-        truncated = messageIds.length >= MAX_MESSAGES_PER_RUN
+        backfillUntil = null
       }
     } else {
-      // First run after connecting: bring recent correspondence with it.
-      messageIds = await listRecentMessageIds(
+      // First run after connecting. Anchor forwards immediately so new mail is
+      // never waiting on the archive, and let the walk below bring the history.
+      nextHistoryId = anchorHistoryId
+    }
+
+    const budget = MAX_MESSAGES_PER_RUN - messageIds.length
+    const walking = !backfillUntil || backfillUntil > windowStart
+
+    if (walking && budget >= MIN_BACKFILL_CHUNK) {
+      backfillIds = await listRecentMessageIds(
         accessToken,
         connection.backfill_days,
-        MAX_MESSAGES_PER_RUN,
+        budget,
+        backfillUntil,
       )
-      nextHistoryId = anchorHistoryId
-      backfilled = true
-      /*
-       * A backfill has no cursor of its own to stop short on, so hitting the
-       * ceiling means the older part of the window is not imported and will
-       * not be retried — the cursor jumps to now. Reported rather than hidden;
-       * see the note on the response shape.
-       */
-      truncated = messageIds.length >= MAX_MESSAGES_PER_RUN
+
+      // Nothing older left in the window: the walk is done. Recorded as the
+      // window edge rather than a flag, so widening the window on the Mailboxes
+      // page starts it moving again by itself.
+      if (backfillIds.length < budget) backfillUntil = windowStart
     }
   } catch (thrown) {
     if (thrown instanceof GmailAuthError) {
@@ -206,20 +242,36 @@ async function syncConnection(
   }
 
   /*
-   * Deliberately not sliced. Both producers above already bound what they
-   * return, and the cursor stored below matches that set exactly — trimming
-   * here would put the two out of step again, which is the bug this replaced.
+   * Deliberately not sliced. Every producer above already bounded what it
+   * returns, and the cursors stored below match those sets exactly — trimming
+   * here would put them out of step again, which is the bug this replaced.
    */
+  const backfillSet = new Set(backfillIds)
+  const allIds = [...new Set([...messageIds, ...backfillIds])]
   const messages: IncomingMessage[] = []
+  /*
+   * The oldest thing the walk actually reached, taken from Gmail's own
+   * timestamp rather than from the parsed result — a chunk of nothing but
+   * drafts and spam parses to nothing at all, and a cursor derived from the
+   * parsed messages would then never move and the walk would stall on the same
+   * window forever.
+   */
+  let oldestWalked: number | null = null
 
   try {
-    for (let i = 0; i < messageIds.length; i += FETCH_CONCURRENCY) {
+    for (let i = 0; i < allIds.length; i += FETCH_CONCURRENCY) {
       const batch = await Promise.all(
-        messageIds.slice(i, i + FETCH_CONCURRENCY).map((id) => getMessage(accessToken, id)),
+        allIds.slice(i, i + FETCH_CONCURRENCY).map((id) => getMessage(accessToken, id)),
       )
 
       for (const raw of batch) {
         if (!raw) continue
+
+        if (raw.id && backfillSet.has(raw.id) && raw.internalDate) {
+          const at = Number(raw.internalDate)
+          if (Number.isFinite(at) && (oldestWalked === null || at < oldestWalked)) oldestWalked = at
+        }
+
         const parsed = parseGmailMessage(raw, mailbox)
         if (parsed) messages.push(parsed)
       }
@@ -232,6 +284,56 @@ async function syncConnection(
     return await recordError(supabase, connection.id, mailbox, thrown)
   }
 
+  /*
+   * The calendar rides along on the same connection and the same access token,
+   * rather than being a second poller with its own cron and its own refresh.
+   *
+   * Its failures are contained here on purpose. A connection made before the
+   * calendar scope existed holds a token that reads mail and not calendars, and
+   * losing somebody's email sync over that would be a poor trade — so the
+   * calendar half is marked unauthorised and the mailbox carries on.
+   */
+  let events: number | string = 0
+  let calendarState = connection.calendar_state
+  let calendarToken = connection.calendar_sync_token
+
+  if (calendarState === 'unauthorised') {
+    events = 'not authorised — reconnect to include the calendar'
+  } else {
+    try {
+      const calendar = await listEvents(accessToken, {
+        syncToken: calendarToken,
+        days: connection.backfill_days,
+        limit: MAX_EVENTS_PER_RUN,
+      })
+
+      for (const event of calendar.events) {
+        const parsed = parseCalendarEvent(event, mailbox)
+        if (parsed) messages.push(parsed)
+      }
+
+      events = calendar.events.length
+      calendarState = 'active'
+      // Only on the final page — a token taken from a partial read would skip
+      // everything after it.
+      if (calendar.nextSyncToken) calendarToken = calendar.nextSyncToken
+    } catch (thrown) {
+      if (thrown instanceof CalendarNotAuthorisedError) {
+        calendarState = 'unauthorised'
+        events = 'not authorised — reconnect to include the calendar'
+      } else if (thrown instanceof SyncTokenExpiredError) {
+        // Start again from a bounded read rather than retrying a dead token.
+        calendarToken = null
+        events = 'cursor expired, resyncing next run'
+      } else if (thrown instanceof GmailAuthError) {
+        await markNeedsReauth(supabase, connection.id, thrown.message)
+        return { mailbox, status: 'needs_reauth', error: thrown.message }
+      } else {
+        events = thrown instanceof Error ? thrown.message : 'calendar sync failed'
+      }
+    }
+  }
+
   let result
   try {
     result = await ingestMessages(supabase, connection.organization_id, messages)
@@ -240,14 +342,12 @@ async function syncConnection(
   }
 
   /*
-   * The cursor advances only now, after the messages are written. If anything
+   * Both cursors advance only now, after the messages are written. If anything
    * above failed, the next run repeats this window — which is free, because
    * re-ingesting the same message is a no-op.
    *
-   * A backfill anchors to the cursor read at the start of the run, so the next
-   * run is incremental. If that read failed the cursor stays null and the next
-   * run backfills again — wasteful, but it re-ingests harmlessly rather than
-   * skipping mail.
+   * If the forward anchor could not be read the cursor stays null and the next
+   * run anchors instead; the walk meanwhile continues from where it got to.
    */
   const update: Record<string, unknown> = {
     last_synced_at: new Date().toISOString(),
@@ -255,6 +355,21 @@ async function syncConnection(
   }
 
   if (nextHistoryId) update.history_id = nextHistoryId
+
+  /*
+   * The walk moves to the oldest message it actually read. Gmail may hand that
+   * same message back next time if it treats `before:` as inclusive, which is
+   * why a chunk is never started below MIN_BACKFILL_CHUNK — a boundary that
+   * cannot move is a walk that never ends.
+   */
+  if (oldestWalked !== null && (!backfillUntil || oldestWalked < backfillUntil.getTime())) {
+    backfillUntil = new Date(oldestWalked)
+  }
+
+  if (backfillUntil) update.backfill_until = backfillUntil.toISOString()
+
+  if (calendarState !== connection.calendar_state) update.calendar_state = calendarState
+  if (calendarToken !== connection.calendar_sync_token) update.calendar_sync_token = calendarToken
 
   if (result.logged > 0) {
     const { data: current } = await supabase
@@ -268,7 +383,18 @@ async function syncConnection(
 
   await supabase.from('mailbox_connections').update(update).eq('id', connection.id)
 
-  return { mailbox, fetched: messages.length, backfilled, truncated, ...result }
+  return {
+    mailbox,
+    fetched: messages.length,
+    backfilled: backfillIds.length,
+    events,
+    history:
+      backfillUntil && backfillUntil <= windowStart
+        ? 'complete'
+        : (backfillUntil?.toISOString() ?? 'not started'),
+    truncated,
+    ...result,
+  }
 }
 
 /**

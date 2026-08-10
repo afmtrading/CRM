@@ -1,10 +1,13 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { dueLabel, formatCurrency } from '@/lib/format'
+import { formatCurrency } from '@/lib/format'
 import type { ActivityRow, PipelineValueReportRow } from '@/lib/database.types'
 import { PageHeader, Section, StatCard, StatGrid } from '@/components/ui'
-import { AlertIcon, ContactsIcon, CurrencyIcon, DealsIcon } from '@/components/icons'
+import { ContactsIcon, CurrencyIcon, DealsIcon } from '@/components/icons'
+import { DueDate } from '@/components/due-date'
+
+import { OpenTasksCard } from './open-tasks-card'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +43,6 @@ export default async function DashboardPage({
   const weighted = reportRows.reduce((sum, row) => sum + Number(row.weighted_value), 0)
 
   const tasks = (myTasks.data ?? []) as ActivityRow[]
-  const overdue = tasks.filter((task) => dueLabel(task.due_date).tone === 'overdue').length
 
   return (
     <>
@@ -78,14 +80,7 @@ export default async function DashboardPage({
           icon={CurrencyIcon}
           tone="violet"
         />
-        <StatCard
-          label="My open tasks"
-          value={String(tasks.length)}
-          href="/activities"
-          icon={AlertIcon}
-          tone={overdue > 0 ? 'red' : 'amber'}
-          trend={overdue > 0 ? { label: `${overdue} overdue`, direction: 'down' } : undefined}
-        />
+        <OpenTasksCard dueDates={tasks.map((task) => task.due_date)} />
       </StatGrid>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -102,7 +97,6 @@ export default async function DashboardPage({
           ) : (
             <ul className="divide-y divide-slate-100">
               {tasks.map((task) => {
-                const due = dueLabel(task.due_date)
                 const href =
                   task.related_to_type === 'contact'
                     ? `/contacts/${task.related_to_id}`
@@ -115,17 +109,7 @@ export default async function DashboardPage({
                     <Link href={href} className="truncate text-sm text-slate-800 hover:text-brand-700">
                       {task.subject || 'Task'}
                     </Link>
-                    <span
-                      className={`shrink-0 text-xs ${
-                        due.tone === 'overdue'
-                          ? 'font-medium text-red-600'
-                          : due.tone === 'today'
-                            ? 'font-medium text-amber-600'
-                            : 'text-slate-400'
-                      }`}
-                    >
-                      {due.label}
-                    </span>
+                    <DueDate value={task.due_date} className="shrink-0 text-xs" />
                   </li>
                 )
               })}
