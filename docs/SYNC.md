@@ -35,11 +35,17 @@ error message means. What follows is the shape of it and the reasoning.
 
 ### 1. Google Cloud
 
-Owned by **tradingafm@gmail.com**, which is also the support address on the
-consent screen. A project with the Gmail API enabled, an **External** consent
-screen left in **Testing**, the two scopes below, every user's address on the
-test-user list, and a Web application client whose redirect URIs are
-`https://your-domain/api/gmail/callback` and the localhost equivalent.
+**One project for the whole CRM** — `FLO CRM` / `flo-crm-505116`, owned by
+`info@flo-ventures.com`. The accounts inside the CRM are not separate projects;
+each person connects their own mailbox as a test user of this one app, and
+`organization_id` plus RLS keeps one account's mail away from another's. The
+project is deliberately not inside any single account's Google account, since
+every account's sync depends on it.
+
+The Gmail API enabled, an **External** consent screen left in **Testing**, the
+two scopes below, every user's address on the test-user list, and a Web
+application client whose redirect URIs are
+`https://crm.flo-ventures.com/api/gmail/callback` and the localhost equivalent.
 
 #### Why External/Testing, and what it costs
 
@@ -93,7 +99,7 @@ Supabase instead:
 ```sql
 select cron.schedule('gmail-sync', '*/10 * * * *', $$
   select net.http_post(
-    url     := 'https://your-domain/api/gmail/sync',
+    url     := 'https://crm.flo-ventures.com/api/gmail/sync',
     headers := '{"Authorization": "Bearer <SYNC_INGEST_SECRET>"}'::jsonb
   );
 $$);
@@ -102,7 +108,7 @@ $$);
 Or by hand, to test:
 
 ```
-curl -X POST https://your-domain/api/gmail/sync \
+curl -X POST https://crm.flo-ventures.com/api/gmail/sync \
   -H "Authorization: Bearer $SYNC_INGEST_SECRET"
 ```
 
