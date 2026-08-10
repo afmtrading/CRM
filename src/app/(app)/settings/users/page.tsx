@@ -4,11 +4,29 @@ import type { UserRow } from '@/lib/database.types'
 import { USER_ROLES } from '@/lib/field-options'
 import { PageHeader, Section } from '@/components/ui'
 
-import { updateUserRole, updateUserStatus } from '../actions'
+import { deleteUser, updateUser } from '../actions'
+import { DeleteUserButton } from './delete-user-button'
 import { InviteUserForm } from './invite-form'
 import { OrganizationForm } from './organization-form'
 
 export const metadata = { title: 'Users · FLO CRM' }
+
+/**
+ * `invited` is not an option an administrator can pick — it is where everyone
+ * starts and it ends the first time they sign in. The control offers the two
+ * states that are actually a decision, and the column says which of the three
+ * they are in.
+ */
+const ACCESS_OPTIONS = [
+  { value: 'active', label: 'Allowed' },
+  { value: 'disabled', label: 'Paused' },
+]
+
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Signed in',
+  invited: 'Invited',
+  disabled: 'Paused',
+}
 
 const STATUS_STYLES: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-800',
@@ -32,60 +50,124 @@ export default async function UserSettingsPage() {
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Section title={`${userList.length} user${userList.length === 1 ? '' : 's'}`}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Last login</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {userList.map((user) => (
-                  <tr key={user.id}>
-                    <td className="font-medium text-slate-800">{user.name || '—'}</td>
-                    <td className="text-slate-600">{user.email}</td>
-                    <td>
-                      <form action={updateUserRole} className="flex items-center gap-1">
-                        <input type="hidden" name="id" value={user.id} />
-                        <select name="role" defaultValue={user.role} className="input w-36 py-1">
-                          {USER_ROLES.map((role) => (
-                            <option key={role.value} value={role.value} title={role.description}>
-                              {role.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button type="submit" className="text-xs text-slate-500 hover:text-brand-700">
-                          Save
-                        </button>
-                      </form>
-                    </td>
-                    <td>
-                      <span className={`badge ${STATUS_STYLES[user.status]}`}>{user.status}</span>
-                    </td>
-                    <td className="text-slate-500">{formatDateTime(user.last_login_at)}</td>
-                    <td className="text-right">
-                      {user.id !== context.user.id && (
-                        <form action={updateUserStatus}>
-                          <input type="hidden" name="id" value={user.id} />
-                          <input
-                            type="hidden"
-                            name="status"
-                            value={user.status === 'disabled' ? 'active' : 'disabled'}
-                          />
-                          <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                            {user.status === 'disabled' ? 'Re-enable' : 'Disable'}
-                          </button>
-                        </form>
-                      )}
-                    </td>
+            <div className="-mx-5 overflow-x-auto px-5">
+              <table className="table min-w-[46rem]">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Access</th>
+                    <th>Last login</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {userList.map((user) => {
+                    // One form per person, spanning the row. The inputs live in
+                    // their own cells and join it by id, which keeps the table
+                    // layout without nesting a form inside another.
+                    const formId = `user-${user.id}`
+                    const isSelf = user.id === context.user.id
+
+                    return (
+                      <tr key={user.id}>
+                        <td>
+                          <form id={formId} action={updateUser}>
+                            <input type="hidden" name="id" value={user.id} />
+                          </form>
+                          <label className="sr-only" htmlFor={`${formId}-name`}>
+                            Name for {user.email}
+                          </label>
+                          <input
+                            id={`${formId}-name`}
+                            form={formId}
+                            name="name"
+                            defaultValue={user.name}
+                            placeholder="No name yet"
+                            maxLength={120}
+                            className="input w-40 py-1"
+                          />
+                        </td>
+
+                        <td className="text-slate-600">{user.email}</td>
+
+                        <td>
+                          <label className="sr-only" htmlFor={`${formId}-role`}>
+                            Role for {user.email}
+                          </label>
+                          <select
+                            id={`${formId}-role`}
+                            form={formId}
+                            name="role"
+                            defaultValue={user.role}
+                            className="input w-36 py-1"
+                          >
+                            {USER_ROLES.map((role) => (
+                              <option key={role.value} value={role.value} title={role.description}>
+                                {role.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td>
+                          <label className="sr-only" htmlFor={`${formId}-status`}>
+                            Access for {user.email}
+                          </label>
+                          <select
+                            id={`${formId}-status`}
+                            form={formId}
+                            name="status"
+                            defaultValue={user.status === 'disabled' ? 'disabled' : 'active'}
+                            disabled={isSelf}
+                            title={isSelf ? 'You cannot pause your own account' : undefined}
+                            className="input w-28 py-1 disabled:bg-slate-50 disabled:text-slate-400"
+                          >
+                            {ACCESS_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <span className={`badge mt-1 ${STATUS_STYLES[user.status]}`}>
+                            {STATUS_LABELS[user.status] ?? user.status}
+                          </span>
+                        </td>
+
+                        <td className="text-slate-500">{formatDateTime(user.last_login_at)}</td>
+
+                        <td>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              type="submit"
+                              form={formId}
+                              className="text-xs text-slate-500 hover:text-brand-700"
+                            >
+                              Save
+                            </button>
+                            {!isSelf && (
+                              <DeleteUserButton
+                                action={deleteUser}
+                                id={user.id}
+                                label={user.name || user.email}
+                              />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-4 text-xs text-slate-500">
+              <strong>Paused</strong> blocks sign-in and can be undone at any time — use it for
+              someone on leave or between roles. <strong>Delete</strong> cannot be undone: their
+              records stay in the CRM as unassigned, but their saved filters, notifications,
+              connected mailbox and any assignment rule routing leads to them are destroyed.
+            </p>
           </Section>
 
           <Section title="Organization">
