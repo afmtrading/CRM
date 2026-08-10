@@ -348,25 +348,48 @@ export async function getProfile(
   }
 }
 
-type HistoryEntry = { messagesAdded?: { message?: { id?: string } }[] }
+type HistoryEntry = { id?: string | number; messagesAdded?: { message?: { id?: string } }[] }
+
+export type HistoryWindow = {
+  messageIds: string[]
+  /**
+   * Safe to store **only once every id above has been ingested**. When the
+   * window was truncated this names the last record actually read, not the
+   * mailbox's current position.
+   */
+  historyId: string | null
+  /** More was waiting than `limit` allowed. The next run continues from here. */
+  truncated: boolean
+}
 
 /**
- * Message ids added since `startHistoryId`.
+ * Message ids added since `startHistoryId`, up to `limit`.
  *
  * Gmail keeps roughly a week of history and answers 404 once a cursor has aged
  * out. That is not an error to swallow — it means the incremental path is no
  * longer usable and the caller must fall back to a bounded backfill, which is
  * why it gets its own exception type.
+ *
+ * The limit is enforced *here*, next to the cursor, rather than by the caller
+ * slicing the result. Those two have to agree: a caller that ingests 75 of 800
+ * ids and then stores the history id from the last page moves the cursor past
+ * 725 messages that were never fetched, and nothing ever comes back for them.
+ * Returning a cursor that matches the ids returned makes that mistake
+ * unavailable rather than merely discouraged.
  */
 export async function listHistory(
   accessToken: string,
   startHistoryId: string,
-): Promise<{ messageIds: string[]; historyId: string | null }> {
+  limit: number,
+): Promise<HistoryWindow> {
   const ids = new Set<string>()
   let pageToken: string | undefined
   let historyId: string | null = null
+  // The last record wholly consumed — where a truncated run resumes.
+  let lastConsumed: string | null = null
+  let truncated = false
 
-  do {
+  pages: do {
     const query = new URLSearchParams({
       startHistoryId,
       historyTypes: 'messageAdded',
@@ -380,16 +403,37 @@ export async function listHistory(
     if (status !== 200) throw new Error(`Gmail history request failed (${status})`)
 
     for (const entry of (body.history ?? []) as HistoryEntry[]) {
-      for (const added of entry.messagesAdded ?? []) {
-        if (added.message?.id) ids.add(added.message.id)
+      const added = (entry.messagesAdded ?? [])
+        .map((item) => item.message?.id)
+        .filter((id): id is string => Boolean(id))
+
+      /*
+       * Stop on a record boundary. A cursor can only name a whole history
+       * record, so half a record would have to be re-read next time anyway —
+       * and taking the first record whatever its size guarantees progress
+       * instead of a mailbox that stalls forever on one oversized change.
+       */
+      if (ids.size > 0 && ids.size + added.length > limit) {
+        truncated = true
+        break pages
       }
+
+      for (const id of added) ids.add(id)
+      if (entry.id !== undefined) lastConsumed = String(entry.id)
     }
 
     if (body.historyId) historyId = String(body.historyId)
     pageToken = body.nextPageToken ? String(body.nextPageToken) : undefined
-  } while (pageToken && ids.size < 1000)
+  } while (pageToken)
 
-  return { messageIds: [...ids], historyId }
+  return {
+    messageIds: [...ids],
+    // Truncated: resume from the last record read. Gmail may re-deliver that
+    // record, which costs nothing — ingestion is idempotent — where skipping
+    // one would lose mail silently.
+    historyId: truncated ? lastConsumed : historyId,
+    truncated,
+  }
 }
 
 /** The backfill path: everything in the last N days, newest first. */

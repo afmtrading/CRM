@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  HistoryExpiredError,
   backfillQuery,
   buildAuthUrl,
   decodeBase64Url,
   extractPlainTextBody,
   headerValue,
   htmlToText,
+  listHistory,
   parseGmailMessage,
   splitAddressList,
   stripQuotedReply,
@@ -237,5 +239,106 @@ describe('buildAuthUrl', () => {
 describe('decodeBase64Url', () => {
   it('decodes the URL-safe alphabet Gmail uses', () => {
     expect(decodeBase64Url(encode('a?b=c&d'))).toBe('a?b=c&d')
+  })
+})
+
+describe('listHistory', () => {
+  const realFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = realFetch
+  })
+
+  /** One history record carrying `count` added messages, numbered from `from`. */
+  const record = (id: number, from: number, count: number) => ({
+    id,
+    messagesAdded: Array.from({ length: count }, (_, i) => ({ message: { id: `m${from + i}` } })),
+  })
+
+  /** Serves the given pages in order, so pagination can be driven without a network. */
+  const serve = (pages: Record<string, unknown>[], status = 200) => {
+    let call = 0
+    globalThis.fetch = vi.fn(async () => {
+      const body = pages[Math.min(call, pages.length - 1)]
+      call += 1
+      return { status, json: async () => body } as unknown as Response
+    }) as typeof fetch
+    return () => call
+  }
+
+  it('returns every message and the mailbox cursor when nothing is truncated', async () => {
+    serve([{ history: [record(11, 1, 2), record(12, 3, 1)], historyId: '99' }])
+
+    const window = await listHistory('token', '10', 75)
+
+    expect(window.messageIds).toEqual(['m1', 'm2', 'm3'])
+    expect(window.historyId).toBe('99')
+    expect(window.truncated).toBe(false)
+  })
+
+  it('follows pagination', async () => {
+    serve([
+      { history: [record(11, 1, 1)], nextPageToken: 'p2' },
+      { history: [record(12, 2, 1)], historyId: '99' },
+    ])
+
+    const window = await listHistory('token', '10', 75)
+
+    expect(window.messageIds).toEqual(['m1', 'm2'])
+    expect(window.historyId).toBe('99')
+  })
+
+  /*
+   * The regression this whole change exists for. The caller stores the cursor
+   * after ingesting what it was handed, so a cursor past unreturned messages
+   * loses them permanently and silently.
+   */
+  it('stops short rather than advancing the cursor past messages it did not return', async () => {
+    serve([{ history: [record(11, 1, 2), record(12, 3, 2)], historyId: '99' }])
+
+    const window = await listHistory('token', '10', 3)
+
+    expect(window.messageIds).toEqual(['m1', 'm2'])
+    expect(window.truncated).toBe(true)
+    // The last record wholly read — not the mailbox's current position.
+    expect(window.historyId).toBe('11')
+    expect(window.historyId).not.toBe('99')
+  })
+
+  it('resumes from the truncation point, losing nothing across two runs', async () => {
+    serve([{ history: [record(11, 1, 2), record(12, 3, 2)], historyId: '99' }])
+    const first = await listHistory('token', '10', 3)
+
+    // Second run, starting where the first stopped: Gmail returns the rest.
+    serve([{ history: [record(12, 3, 2)], historyId: '99' }])
+    const second = await listHistory('token', first.historyId!, 3)
+
+    expect([...first.messageIds, ...second.messageIds]).toEqual(['m1', 'm2', 'm3', 'm4'])
+    expect(second.truncated).toBe(false)
+    expect(second.historyId).toBe('99')
+  })
+
+  it('takes a single oversized record whole, so a mailbox cannot stall on it', async () => {
+    serve([{ history: [record(11, 1, 5)], historyId: '99' }])
+
+    const window = await listHistory('token', '10', 2)
+
+    // Progress beats the ceiling: half a record is not a cursor position.
+    expect(window.messageIds).toHaveLength(5)
+    expect(window.truncated).toBe(false)
+  })
+
+  it('does not double-count a message reported in two records', async () => {
+    serve([{ history: [record(11, 1, 1), record(12, 1, 1)], historyId: '99' }])
+
+    const window = await listHistory('token', '10', 75)
+
+    expect(window.messageIds).toEqual(['m1'])
+  })
+
+  it('treats an expired cursor as its own kind of failure', async () => {
+    serve([{}], 404)
+
+    await expect(listHistory('token', '10', 75)).rejects.toBeInstanceOf(HistoryExpiredError)
   })
 })

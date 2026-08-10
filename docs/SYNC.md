@@ -181,8 +181,21 @@ it away from the application:
   where the mailbox stopped instead of re-scanning the backfill window every
   week. A cursor that has genuinely aged out still falls back to a backfill on
   the next run, so keeping it can only save work.
-- **Ceilings per run:** 75 messages per mailbox, 25 mailboxes. A backlog drains
-  over successive runs.
+- **Ceilings per run:** 75 messages per mailbox, 25 mailboxes.
+- **The ceiling is enforced beside the cursor, not after it.** `listHistory`
+  takes the limit and returns a cursor covering exactly the ids it returned,
+  stopping on a history-record boundary. The two cannot disagree, so an
+  incremental backlog genuinely drains over successive runs instead of being
+  skipped. Gmail may re-deliver the boundary record; that costs nothing,
+  because ingestion is idempotent.
+- **A backfill is a one-shot, and its ceiling is a real limit.** Unlike the
+  incremental path it has no cursor to stop short on — after one run the
+  connection anchors to now. If a first import returns the full 75 the older
+  part of the window was not imported and nothing retries it; the run reports
+  `"truncated": true` so this is visible rather than assumed. To import more,
+  widen the window on the Mailboxes page, then disconnect and reconnect —
+  disconnecting clears the cursor, which is what makes the next run backfill
+  again.
 
 ## `POST /api/activities/ingest`
 

@@ -59,6 +59,14 @@ type ConnectionResult = {
   unmatched?: number
   fetched?: number
   backfilled?: boolean
+  /**
+   * The run hit its ceiling. On the incremental path this is routine and
+   * self-correcting — the cursor stopped short and the next run continues.
+   * On a backfill it is not: the window's older mail was not imported and
+   * nothing will retry it, so a large first import wants a wider window and a
+   * disconnect/reconnect rather than patience.
+   */
+  truncated?: boolean
   error?: string
   status?: string
 }
@@ -146,13 +154,18 @@ async function syncConnection(
   let messageIds: string[] = []
   let nextHistoryId: string | null = null
   let backfilled = false
+  let truncated = false
 
   try {
     if (connection.history_id) {
       try {
-        const history = await listHistory(accessToken, connection.history_id)
+        // The ceiling goes to listHistory rather than being applied to its
+        // result, so the cursor it returns covers exactly these ids and no
+        // more. Anything left over is picked up by the next run.
+        const history = await listHistory(accessToken, connection.history_id, MAX_MESSAGES_PER_RUN)
         messageIds = history.messageIds
         nextHistoryId = history.historyId
+        truncated = history.truncated
       } catch (thrown) {
         // Gmail keeps about a week of history. Once the cursor ages out the
         // incremental path is gone for good, and silently stopping would look
@@ -165,6 +178,7 @@ async function syncConnection(
         )
         nextHistoryId = anchorHistoryId
         backfilled = true
+        truncated = messageIds.length >= MAX_MESSAGES_PER_RUN
       }
     } else {
       // First run after connecting: bring recent correspondence with it.
@@ -175,6 +189,13 @@ async function syncConnection(
       )
       nextHistoryId = anchorHistoryId
       backfilled = true
+      /*
+       * A backfill has no cursor of its own to stop short on, so hitting the
+       * ceiling means the older part of the window is not imported and will
+       * not be retried — the cursor jumps to now. Reported rather than hidden;
+       * see the note on the response shape.
+       */
+      truncated = messageIds.length >= MAX_MESSAGES_PER_RUN
     }
   } catch (thrown) {
     if (thrown instanceof GmailAuthError) {
@@ -184,13 +205,17 @@ async function syncConnection(
     return await recordError(supabase, connection.id, mailbox, thrown)
   }
 
-  const capped = messageIds.slice(0, MAX_MESSAGES_PER_RUN)
+  /*
+   * Deliberately not sliced. Both producers above already bound what they
+   * return, and the cursor stored below matches that set exactly — trimming
+   * here would put the two out of step again, which is the bug this replaced.
+   */
   const messages: IncomingMessage[] = []
 
   try {
-    for (let i = 0; i < capped.length; i += FETCH_CONCURRENCY) {
+    for (let i = 0; i < messageIds.length; i += FETCH_CONCURRENCY) {
       const batch = await Promise.all(
-        capped.slice(i, i + FETCH_CONCURRENCY).map((id) => getMessage(accessToken, id)),
+        messageIds.slice(i, i + FETCH_CONCURRENCY).map((id) => getMessage(accessToken, id)),
       )
 
       for (const raw of batch) {
@@ -243,7 +268,7 @@ async function syncConnection(
 
   await supabase.from('mailbox_connections').update(update).eq('id', connection.id)
 
-  return { mailbox, fetched: messages.length, backfilled, ...result }
+  return { mailbox, fetched: messages.length, backfilled, truncated, ...result }
 }
 
 /**
