@@ -1,24 +1,17 @@
 import Link from 'next/link'
-
 import { requireBulk, scoped } from '@/lib/tenancy'
-import { formatDateTime } from '@/lib/format'
+import { DateTime } from '@/components/date-time'
 import type { CustomFieldDefinitionRow, ImportJobRow } from '@/lib/database.types'
 import { PageHeader, Section } from '@/components/ui'
-
 import { ImportWizard } from './import-wizard'
-
 export const metadata = { title: 'Import · FLO CRM' }
-
 export default async function ImportPage() {
   const context = await requireBulk()
-
   const [{ data: customFields }, { data: jobs }] = await Promise.all([
     scoped(context, 'custom_field_definitions').select('*'),
     scoped(context, 'import_jobs').select('*').order('created_at', { ascending: false }).limit(10),
   ])
-
   const jobList = (jobs ?? []) as ImportJobRow[]
-
   return (
     <>
       <PageHeader
@@ -30,9 +23,7 @@ export default async function ImportPage() {
           </Link>
         }
       />
-
       <ImportWizard customFields={(customFields ?? []) as CustomFieldDefinitionRow[]} />
-
       {jobList.length > 0 && (
         <div className="mt-6">
           <Section title="Recent imports">
@@ -55,7 +46,7 @@ export default async function ImportPage() {
                     <td className="text-slate-600">{job.status}</td>
                     <td className="text-right text-emerald-700">{job.rows_processed}</td>
                     <td className="text-right text-red-700">{job.rows_failed}</td>
-                    <td className="text-slate-500">{formatDateTime(job.created_at)}</td>
+                    <td className="text-slate-500"><DateTime value={job.created_at} /></td>
                   </tr>
                 ))}
               </tbody>

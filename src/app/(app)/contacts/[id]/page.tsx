@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
 import { requireSession, scoped, firstRow } from "@/lib/tenancy";
 import {
   contactName,
   formatCurrency,
-  formatDate,
-  formatDateTime,
+  formatDay,
 } from "@/lib/format";
+import { DateTime } from "@/components/date-time";
 import {
   CONTACT_CARDS,
   daysUntilBirthday,
@@ -50,9 +49,7 @@ import {
   OptionBadges,
   optionColor,
 } from "@/components/contact-cards";
-
 import { deleteContact, mergeContactsAction, setContactTags } from "../actions";
-
 export default async function ContactDetailPage({
   params,
   searchParams,
@@ -63,7 +60,6 @@ export default async function ContactDetailPage({
   const { id } = await params;
   const { merged } = await searchParams;
   const context = await requireSession();
-
   const contact = await firstRow<
     ContactRow & {
       companies: { id: string; name: string; domain: string | null } | null;
@@ -74,9 +70,7 @@ export default async function ContactDetailPage({
       .eq("id", id)
       .maybeSingle(),
   );
-
   if (!contact) notFound();
-
   const [
     { data: activities },
     { data: deals },
@@ -117,13 +111,11 @@ export default async function ContactDetailPage({
       p_exclude_id: contact.id,
     }),
   ]);
-
   const interests = (
     (productInterest ?? []) as { products: { id: string; name: string } | null }[]
   )
     .map((row) => row.products)
     .filter((product): product is { id: string; name: string } => product !== null);
-
   const duplicateList = (duplicates ?? []) as ContactRow[];
   const userList = (users ?? []) as UserRow[];
   const tagList = (tags ?? []) as TagRow[];
@@ -133,36 +125,30 @@ export default async function ContactDetailPage({
   const dealRows = (deals ?? []) as (DealRow & {
     stages: { name: string } | null;
   })[];
-
   const options = (fieldOptions ?? []) as FieldOptionRow[];
   const optionsFor = (key: string) =>
     options.filter((option) => option.field_key === key);
-
   const userName = (userId: string | null) => {
     if (!userId) return null;
     const user = userList.find((candidate) => candidate.id === userId);
     return user ? user.name || user.email : null;
   };
-
   // Custom fields are grouped by the card their admin assigned them to.
   const customFields = (customFieldDefs ?? []) as CustomFieldDefinitionRow[];
   const customByCard = (card: ContactCard) =>
     customFields.filter((field) => field.card === card);
   const customValues = (contact.custom_fields ?? {}) as Record<string, unknown>;
-
   const name = contactName(contact);
   const notesHtml = renderMarkdown(contact.notes);
   const untilBirthday = daysUntilBirthday(contact.birthday);
   const extraLinks = Array.isArray(contact.links)
     ? (contact.links as ContactLink[])
     : [];
-
   // The Digital card falls back to the company's domain, so a contact inherits
   // their employer's website without it being typed twice.
   const companyWebsite = safeUrl(
     contact.website ?? contact.companies?.domain ?? null,
   );
-
   return (
     <>
       <PageHeader
@@ -188,14 +174,12 @@ export default async function ContactDetailPage({
           </>
         }
       />
-
       {merged && (
         <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">
           Contacts merged. Deals and activities from the duplicate now live
           here.
         </p>
       )}
-
       {contact.duplicate_of_id && (
         <p className="mb-4 rounded-xl border border-slate-300 bg-slate-100 px-3.5 py-2.5 text-sm text-slate-700">
           This record was merged into{" "}
@@ -208,7 +192,6 @@ export default async function ContactDetailPage({
           . It is kept so existing links still resolve.
         </p>
       )}
-
       {untilBirthday !== null && untilBirthday <= 7 && (
         <p className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
           <CalendarIcon className="h-4 w-4 shrink-0" />
@@ -217,7 +200,6 @@ export default async function ContactDetailPage({
             : `${name}'s birthday is in ${untilBirthday} day${untilBirthday === 1 ? "" : "s"}.`}
         </p>
       )}
-
       {/* Merge flow (PRD 6.2): fold a duplicate into this record. */}
       {duplicateList.length > 0 && !contact.duplicate_of_id && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
@@ -252,7 +234,6 @@ export default async function ContactDetailPage({
           </ul>
         </div>
       )}
-
       {/* Contact details spans the full width above everything else — it is
           what someone opened the page for. */}
       <div className="mb-5">
@@ -266,7 +247,6 @@ export default async function ContactDetailPage({
               </p>
             </div>
           </div>
-
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Company">
               {contact.companies ? (
@@ -299,7 +279,6 @@ export default async function ContactDetailPage({
           </dl>
         </Section>
       </div>
-
       {/*
         The remaining cards sit in the right-hand column on a wide screen. Below
         lg the layout is a single column and they come first, ahead of the
@@ -323,7 +302,6 @@ export default async function ContactDetailPage({
               />
             </div>
           </Section>
-
           <Section
             title="Deals"
             actions={
@@ -367,7 +345,7 @@ export default async function ContactDetailPage({
                         <td>
                           <DealStatusBadge status={deal.status} />
                         </td>
-                        <td>{formatDate(deal.expected_close_date)}</td>
+                        <td>{formatDay(deal.expected_close_date)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -376,7 +354,6 @@ export default async function ContactDetailPage({
             )}
           </Section>
         </div>
-
         <div className="order-1 space-y-5 lg:order-2">
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[1].label}>
@@ -437,7 +414,6 @@ export default async function ContactDetailPage({
               />
             </dl>
           </Section>
-
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
@@ -454,7 +430,7 @@ export default async function ContactDetailPage({
               <Field label="Birthday" wide>
                 {contact.birthday ? (
                   <span className="flex flex-wrap items-center gap-2">
-                    {formatDate(contact.birthday)}
+                    {formatDay(contact.birthday)}
                     {untilBirthday !== null && (
                       <span className="text-xs text-slate-500">
                         {untilBirthday === 0
@@ -487,7 +463,6 @@ export default async function ContactDetailPage({
               </Field>
             </dl>
           </Section>
-
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[3].label}>
             <dl className="grid gap-3">
@@ -514,7 +489,6 @@ export default async function ContactDetailPage({
                 values={customValues}
                 fieldOptions={options}
               />
-
               {extraLinks.length > 0 && (
                 <div>
                   <dt className="text-xs font-medium text-slate-500">
@@ -534,7 +508,6 @@ export default async function ContactDetailPage({
               )}
             </dl>
           </Section>
-
           {/* ---------------------------------------------------------------- */}
           <Section title="Record history">
             <dl className="space-y-3">
@@ -543,7 +516,7 @@ export default async function ContactDetailPage({
                   {userName(contact.created_by) ?? "Unknown"}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {formatDateTime(contact.created_at)}
+                  <DateTime value={contact.created_at} />
                 </span>
               </Field>
               <Field label="Updated by">
@@ -551,12 +524,11 @@ export default async function ContactDetailPage({
                   {userName(contact.updated_by) ?? "Unknown"}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {formatDateTime(contact.updated_at)}
+                  <DateTime value={contact.updated_at} />
                 </span>
               </Field>
             </dl>
           </Section>
-
           <Section title="Tags">
             {tagList.length === 0 ? (
               <p className="text-sm text-slate-500">

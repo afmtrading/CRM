@@ -1,8 +1,7 @@
-import { dueLabel, formatDateTime } from '@/lib/format'
+import { dueLabel } from '@/lib/format'
+import { DateTime } from '@/components/date-time'
 import type { ActivityRow, ActivityType, RelatedToType, UserRow } from '@/lib/database.types'
-
 import { deleteActivity, logActivity, toggleActivityComplete } from '@/app/(app)/activities/actions'
-
 const TYPE_ICON: Record<ActivityType, string> = {
   call: '📞',
   email: '✉️',
@@ -10,14 +9,12 @@ const TYPE_ICON: Record<ActivityType, string> = {
   note: '📝',
   task: '☑️',
 }
-
 const DUE_TONE = {
   overdue: 'text-red-600',
   today: 'text-amber-600',
   upcoming: 'text-slate-500',
   none: 'text-slate-400',
 } as const
-
 /** Log-an-activity composer, shared by the contact, company and deal pages. */
 export function ActivityComposer({
   relatedToType,
@@ -34,7 +31,6 @@ export function ActivityComposer({
     <form action={logActivity} className="space-y-2">
       <input type="hidden" name="related_to_type" value={relatedToType} />
       <input type="hidden" name="related_to_id" value={relatedToId} />
-
       <div className="flex flex-wrap gap-2">
         <select name="type" className="input max-w-32" defaultValue="note">
           <option value="note">Note</option>
@@ -58,16 +54,13 @@ export function ActivityComposer({
           ))}
         </select>
       </div>
-
       <textarea name="body" className="input min-h-20" placeholder="Details…" />
-
       <button type="submit" className="btn-primary">
         Log activity
       </button>
     </form>
   )
 }
-
 export function ActivityTimeline({
   activities,
   users,
@@ -80,23 +73,19 @@ export function ActivityTimeline({
   emptyMessage?: string
 }) {
   const userNames = new Map(users.map((user) => [user.id, user.name || user.email]))
-
   if (activities.length === 0) {
     return <p className="py-4 text-sm text-slate-500">{emptyMessage}</p>
   }
-
   return (
     <ol className="divide-y divide-slate-100">
       {activities.map((activity) => {
         const due = dueLabel(activity.due_date)
         const done = Boolean(activity.completed_at)
-
         return (
           <li key={activity.id} className="flex gap-3 py-3">
             <span className="text-lg leading-6" aria-hidden>
               {TYPE_ICON[activity.type]}
             </span>
-
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-2">
                 <p className={`text-sm font-medium ${done ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
@@ -111,17 +100,14 @@ export function ActivityTimeline({
                   </span>
                 )}
               </div>
-
               {activity.body && (
                 <p className="mt-1 text-sm whitespace-pre-wrap text-slate-600">{activity.body}</p>
               )}
-
               <p className="mt-1 text-xs text-slate-400">
                 {activity.owner_id ? (userNames.get(activity.owner_id) ?? 'Unknown') : 'Unassigned'} ·{' '}
-                {formatDateTime(activity.occurred_at ?? activity.created_at)}
+                <DateTime value={activity.occurred_at ?? activity.created_at} />
               </p>
             </div>
-
             <div className="flex shrink-0 items-start gap-1">
               {activity.type === 'task' && (
                 <form action={toggleActivityComplete}>
