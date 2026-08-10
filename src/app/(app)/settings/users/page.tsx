@@ -165,8 +165,8 @@ export default async function UserSettingsPage() {
             <p className="mt-4 text-xs text-slate-500">
               <strong>Paused</strong> blocks sign-in and can be undone at any time — use it for
               someone on leave or between roles. <strong>Delete</strong> cannot be undone: their
-              records stay in the CRM as unassigned, but their saved filters, notifications and
-              connected mailbox are destroyed.
+              records stay in the CRM as unassigned, but their saved filters, notifications,
+              connected mailbox and any assignment rule routing leads to them are destroyed.
             </p>
           </Section>
 

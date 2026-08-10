@@ -20,8 +20,10 @@ export function DeleteUserButton({
       onSubmit={(event) => {
         const confirmed = window.confirm(
           `Remove ${label} from this organization?\n\n` +
-            'Their contacts, companies and deals stay in the CRM as unassigned records. ' +
-            'Their saved filters, notifications and any connected mailbox are deleted.\n\n' +
+            'Their contacts, companies and deals stay in the CRM as unassigned records.\n\n' +
+            'Deleted with them: their saved filters, notifications, any connected mailbox, ' +
+            'and any assignment rule that routes leads to them — so check your routing if ' +
+            'they had one.\n\n' +
             'This cannot be undone. To keep the account and only block sign-in, set their ' +
             'access to Paused instead.',
         )
