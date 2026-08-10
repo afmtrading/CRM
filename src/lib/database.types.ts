@@ -197,6 +197,8 @@ export type MailboxConnectionRow = {
   /** Gmail's incremental cursor. Null means the next run backfills. */
   history_id: string | null
   backfill_days: number
+  /** How far back the history import has reached. Null = not started. */
+  backfill_until: string | null
   status: 'active' | 'needs_reauth' | 'disabled'
   last_error: string | null
   last_synced_at: string | null
@@ -540,6 +542,7 @@ export interface Database {
         | 'provider'
         | 'history_id'
         | 'backfill_days'
+        | 'backfill_until'
         | 'status'
         | 'last_error'
         | 'last_synced_at'

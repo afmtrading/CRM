@@ -167,11 +167,12 @@ it away from the application:
 - **The cursor advances last.** `history_id` is written only after the run's
   messages are stored, so a failure repeats the window instead of skipping it.
 - **History expiry is handled.** Gmail keeps roughly a week of history and
-  answers 404 afterwards. The poller falls back to a bounded backfill rather
-  than stopping — silently stopping looks exactly like "no new mail".
-- **A backfill anchors forward.** The mailbox's current cursor is read *before*
-  fetching, so after one backfill the connection goes incremental instead of
-  backfilling forever.
+  answers 404 afterwards. Silently stopping would look exactly like "no new
+  mail", so the connection re-anchors and reopens the walk instead.
+- **A new connection anchors forwards immediately.** The mailbox's current
+  cursor is read at the start of the run, so a mailbox is watching for new mail
+  from its very first poll rather than after its archive has finished
+  importing.
 - **A dead grant stops the connection.** `invalid_grant` — revoked, password
   changed, or the seven-day testing-mode expiry — marks it `needs_reauth` and
   surfaces on the Mailboxes page with a Reconnect button, rather than failing
@@ -188,14 +189,25 @@ it away from the application:
   incremental backlog genuinely drains over successive runs instead of being
   skipped. Gmail may re-deliver the boundary record; that costs nothing,
   because ingestion is idempotent.
-- **A backfill is a one-shot, and its ceiling is a real limit.** Unlike the
-  incremental path it has no cursor to stop short on — after one run the
-  connection anchors to now. If a first import returns the full 75 the older
-  part of the window was not imported and nothing retries it; the run reports
-  `"truncated": true` so this is visible rather than assumed. To import more,
-  widen the window on the Mailboxes page, then disconnect and reconnect —
-  disconnecting clears the cursor, which is what makes the next run backfill
-  again.
+- **The history import walks backwards, over as many runs as it takes.**
+  `backfill_until` records how far back it has reached; each run takes another
+  chunk of whatever budget the incremental path did not use and moves it
+  earlier. A year of archive therefore imports without one heroic request, and
+  without delaying this morning's email — the two cursors are independent, and
+  new mail always gets first call on the budget.
+- **The walk finishes by reaching the window edge**, not by setting a flag. So
+  widening the window on the Mailboxes page starts it moving again by itself,
+  with no disconnect and reconnect.
+- **A chunk is skipped below ten messages.** The walk moves its cursor to the
+  oldest message it fetched, and Gmail may hand that same message back if it
+  treats `before:` as inclusive. A boundary that cannot move is a walk that
+  never ends.
+- **The cursor comes from Gmail's timestamps, not the parsed messages.** A chunk
+  of nothing but drafts and spam parses to nothing at all, and a cursor derived
+  from what survived parsing would stall on that window forever.
+- **An expired history cursor reopens the walk.** Mail from the gap is no longer
+  reachable incrementally, so the connection re-anchors forwards and re-walks
+  the window. Re-ingesting is free; missing mail is not.
 
 ## `POST /api/activities/ingest`
 

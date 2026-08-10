@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
 import { requireSession, scoped, firstRow } from "@/lib/tenancy";
 import {
   contactName,
@@ -47,7 +48,9 @@ import {
   Field,
   OptionBadges,
 } from "@/components/contact-cards";
+
 import { deleteCompany, setCompanyTags } from "../actions";
+
 export default async function CompanyDetailPage({
   params,
 }: {
@@ -55,10 +58,13 @@ export default async function CompanyDetailPage({
 }) {
   const { id } = await params;
   const context = await requireSession();
+
   const company = await firstRow<CompanyRow>(
     scoped(context, "companies").select("*").eq("id", id).maybeSingle(),
   );
+
   if (!company) notFound();
+
   const [
     { data: contacts },
     { data: deals },
@@ -100,6 +106,7 @@ export default async function CompanyDetailPage({
       .select("*, products(id, name), deals!inner(id, company_id, status, currency)")
       .eq("deals.company_id", id),
   ]);
+
   const userList = (users ?? []) as UserRow[];
   const tagList = (tags ?? []) as TagRow[];
   const selectedTagIds = new Set(
@@ -109,6 +116,7 @@ export default async function CompanyDetailPage({
     stages: { name: string } | null;
   })[];
   const contactRows = (contacts ?? []) as ContactRow[];
+
   /*
    * What this client buys, derived rather than stored: a company_products table
    * would be a second copy of something the won deals already say, and the two
@@ -120,10 +128,12 @@ export default async function CompanyDetailPage({
     products: { id: string; name: string } | null;
     deals: { status: string; currency: string } | null;
   };
+
   const purchases = new Map<
     string,
     { id: string; name: string; won: number; open: number; currency: string }
   >();
+
   for (const line of (lineItems ?? []) as CompanyLine[]) {
     if (!line.products || !line.deals) continue;
     const key = `${line.products.id}:${line.deals.currency}`;
@@ -138,19 +148,24 @@ export default async function CompanyDetailPage({
     if (line.deals.status === "open") entry.open += Number(line.line_total);
     purchases.set(key, entry);
   }
+
   const purchaseRows = [...purchases.values()].sort((a, b) => b.won - a.won);
+
   const options = (fieldOptions ?? []) as FieldOptionRow[];
   const optionsFor = (key: string) =>
     options.filter((option) => option.field_key === key);
+
   const userName = (userId: string | null) => {
     if (!userId) return null;
     const user = userList.find((candidate) => candidate.id === userId);
     return user ? user.name || user.email : null;
   };
+
   const customFields = (customFieldDefs ?? []) as CustomFieldDefinitionRow[];
   const customByCard = (card: ContactCard) =>
     customFields.filter((field) => field.card === card);
   const customValues = (company.custom_fields ?? {}) as Record<string, unknown>;
+
   const website = safeUrl(company.domain);
   const notesHtml = renderMarkdown(company.notes);
   const extraLinks = Array.isArray(company.links)
@@ -159,6 +174,7 @@ export default async function CompanyDetailPage({
   const addresses = Array.isArray(company.addresses)
     ? (company.addresses as CompanyAddress[])
     : [];
+
   return (
     <>
       <PageHeader
@@ -190,6 +206,7 @@ export default async function CompanyDetailPage({
           </>
         }
       />
+
       {/* Company info leads, above the activity feed, for the same reason it
           does on a contact: the record is what someone opened the page for. */}
       <div className="mb-5">
@@ -234,6 +251,7 @@ export default async function CompanyDetailPage({
               values={customValues}
               fieldOptions={options}
             />
+
             {addresses.length > 0 && (
               <div className="sm:col-span-2 lg:col-span-3">
                 <dt className="text-xs font-medium text-slate-500">
@@ -259,6 +277,7 @@ export default async function CompanyDetailPage({
           </dl>
         </Section>
       </div>
+
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
         <div className="order-2 space-y-5 lg:order-1 lg:col-span-2">
           <Section
@@ -350,6 +369,7 @@ export default async function CompanyDetailPage({
               </div>
             )}
           </Section>
+
           <Section title="Activity">
             <ActivityComposer
               relatedToType="company"
@@ -366,6 +386,7 @@ export default async function CompanyDetailPage({
               />
             </div>
           </Section>
+
           <Section
             title="Deals"
             actions={
@@ -418,6 +439,7 @@ export default async function CompanyDetailPage({
             )}
           </Section>
         </div>
+
         <div className="order-1 space-y-5 lg:order-2">
           <Section title={COMPANY_CARDS[2].label}>
             <dl className="grid gap-3">
@@ -444,6 +466,7 @@ export default async function CompanyDetailPage({
                 values={customValues}
                 fieldOptions={options}
               />
+
               {extraLinks.length > 0 && (
                 <div>
                   <dt className="text-xs font-medium text-slate-500">
@@ -463,6 +486,7 @@ export default async function CompanyDetailPage({
               )}
             </dl>
           </Section>
+
           <Section title={COMPANY_CARDS[1].label}>
             <dl className="space-y-3">
               <Field label="Owner">
@@ -487,6 +511,7 @@ export default async function CompanyDetailPage({
               </Field>
             </dl>
           </Section>
+
           <Section title="Products">
             {purchaseRows.length === 0 ? (
               <p className="text-sm text-slate-500">
@@ -521,6 +546,7 @@ export default async function CompanyDetailPage({
               </ul>
             )}
           </Section>
+
           <Section title="Tags">
             {tagList.length === 0 ? (
               <p className="text-sm text-slate-500">
@@ -560,6 +586,7 @@ export default async function CompanyDetailPage({
               </form>
             )}
           </Section>
+
           <Section title="Record history">
             <dl className="space-y-3">
               <Field label="Created by">

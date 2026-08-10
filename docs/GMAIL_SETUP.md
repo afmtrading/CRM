@@ -297,7 +297,10 @@ As a CRM user whose address is on the test-user list:
 4. Grant the read-only permissions. The screen will say the app wants to *read*
    your email — there is no send or delete in the list, because those scopes
    were never requested.
-5. You land back on Mailboxes with the address listed and *backfilling 30 days*.
+5. You land back on Mailboxes with the address listed and *history import
+   queued*. New mail starts arriving from the first poll; the 30 days of
+   archive import over the runs that follow, a chunk at a time, and the line
+   shows how far back it has reached.
 
 The first sync happens on the next scheduled run, not instantly. Trigger the
 curl from step 9 if you would rather not wait.

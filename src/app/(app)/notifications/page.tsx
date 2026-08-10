@@ -1,19 +1,26 @@
 import Link from 'next/link'
+
 import { requireSession, scoped } from '@/lib/tenancy'
-import { DateTime } from '@/components/date-time'
 import type { NotificationRow } from '@/lib/database.types'
+import { DateTime } from '@/components/date-time'
 import { EmptyState, PageHeader, Section } from '@/components/ui'
 import { AlertIcon, BellIcon } from '@/components/icons'
+
 import { markAllNotificationsRead, markNotificationRead } from './actions'
+
 export const metadata = { title: 'Notifications · FLO CRM' }
+
 export default async function NotificationsPage() {
   const context = await requireSession()
+
   const { data } = await scoped(context, 'notifications')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(100)
+
   const notifications = (data ?? []) as NotificationRow[]
   const unread = notifications.filter((notification) => notification.read_at === null)
+
   return (
     <>
       <PageHeader
@@ -33,6 +40,7 @@ export default async function NotificationsPage() {
           ) : undefined
         }
       />
+
       {notifications.length === 0 ? (
         <EmptyState
           title="Nothing to report"
@@ -43,6 +51,7 @@ export default async function NotificationsPage() {
           <ul className="divide-y divide-slate-100">
             {notifications.map((notification) => {
               const isUnread = notification.read_at === null
+
               return (
                 <li key={notification.id} className="flex items-start gap-3 py-3 first:pt-0">
                   <span
@@ -58,6 +67,7 @@ export default async function NotificationsPage() {
                       <BellIcon className="h-4 w-4" />
                     )}
                   </span>
+
                   <div className="min-w-0 flex-1">
                     <p
                       className={`text-sm ${
@@ -78,6 +88,7 @@ export default async function NotificationsPage() {
                       )}
                     </p>
                   </div>
+
                   {isUnread && (
                     <form action={markNotificationRead} className="shrink-0">
                       <input type="hidden" name="id" value={notification.id} />

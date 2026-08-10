@@ -229,9 +229,24 @@ export function parseGmailMessage(
 }
 
 /** `after:` takes whole seconds; Gmail rejects a millisecond timestamp. */
-export function backfillQuery(days: number, now = new Date()): string {
+/**
+ * The search behind a backfill chunk.
+ *
+ * `days` is the far edge of the window. `before` is how far the walk has got
+ * so far, so successive runs ask for progressively older mail rather than the
+ * same newest batch every time. Whole seconds because that is all Gmail
+ * accepts — a fractional epoch is silently ignored and returns the lot.
+ */
+export function backfillQuery(days: number, now = new Date(), before?: Date | null): string {
   const since = Math.floor((now.getTime() - days * 86_400_000) / 1000)
-  return `after:${since} -in:chats`
+  const parts = [`after:${since}`, '-in:chats']
+  if (before) parts.push(`before:${Math.floor(before.getTime() / 1000)}`)
+  return parts.join(' ')
+}
+
+/** The far edge of a backfill window: nothing older than this is wanted. */
+export function backfillWindowStart(days: number, now = new Date()): Date {
+  return new Date(now.getTime() - days * 86_400_000)
 }
 
 // -----------------------------------------------------------------------------
@@ -441,9 +456,11 @@ export async function listRecentMessageIds(
   accessToken: string,
   days: number,
   limit: number,
+  /** Where the walk has reached. Omit for the newest chunk. */
+  before?: Date | null,
 ): Promise<string[]> {
   const query = new URLSearchParams({
-    q: backfillQuery(days),
+    q: backfillQuery(days, new Date(), before),
     maxResults: String(Math.min(limit, 500)),
   })
 

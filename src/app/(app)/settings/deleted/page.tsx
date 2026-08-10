@@ -1,11 +1,15 @@
 import Link from 'next/link'
+
 import { requireAdmin, scoped } from '@/lib/tenancy'
 import { contactName, formatCurrency } from '@/lib/format'
 import { DateTime } from '@/components/date-time'
 import type { CompanyRow, ContactRow, ProductRow, UserRow } from '@/lib/database.types'
 import { Avatar, EmptyState, PageHeader, Section } from '@/components/ui'
+
 import { restoreCompany, restoreContact, restoreProduct } from '../actions'
+
 export const metadata = { title: 'Deleted records · FLO CRM' }
+
 /**
  * The recycle bin.
  *
@@ -15,6 +19,7 @@ export const metadata = { title: 'Deleted records · FLO CRM' }
  */
 export default async function DeletedRecordsPage() {
   const context = await requireAdmin()
+
   const [{ data: contacts }, { data: companies }, { data: products }, { data: users }] =
     await Promise.all([
       scoped(context, 'contacts')
@@ -34,22 +39,27 @@ export default async function DeletedRecordsPage() {
         .limit(200),
       scoped(context, 'users').select('*'),
     ])
+
   const contactRows = (contacts ?? []) as ContactRow[]
   const companyRows = (companies ?? []) as CompanyRow[]
   const productRows = (products ?? []) as ProductRow[]
   const userList = (users ?? []) as UserRow[]
+
   const deleterName = (id: string | null) => {
     if (!id) return 'Unknown'
     const user = userList.find((candidate) => candidate.id === id)
     return user ? user.name || user.email : 'Unknown'
   }
+
   const total = contactRows.length + companyRows.length + productRows.length
+
   return (
     <>
       <PageHeader
         title="Deleted records"
         description="Deleted records. Restoring puts one back where it was, with its owner, activities and deals intact. A deleted product stays readable on the deals that already list it, so their totals never move."
       />
+
       {total === 0 ? (
         <EmptyState
           title="Nothing has been deleted"
@@ -105,6 +115,7 @@ export default async function DeletedRecordsPage() {
               </div>
             </Section>
           )}
+
           {companyRows.length > 0 && (
             <Section title={`Companies (${companyRows.length})`}>
               <div className="overflow-x-auto">

@@ -1,11 +1,11 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-
 import { DateTime } from '@/components/date-time'
 import { DueDate } from '@/components/due-date'
 import type { ActivityRow, UserRow } from '@/lib/database.types'
 import { EmptyState, PageHeader } from '@/components/ui'
+
 import { toggleActivityComplete } from './actions'
 
 export const metadata = { title: 'Activities · FLO CRM' }
@@ -40,6 +40,7 @@ export default async function ActivitiesPage({
   const tab: Tab = TABS.some((t) => t.key === params.tab) ? (params.tab as Tab) : 'mine'
 
   let query = scoped(context, 'activities').select('*')
+
   if (tab === 'timeline') {
     query = query.order('occurred_at', { ascending: false })
   } else {
