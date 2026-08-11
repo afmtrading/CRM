@@ -110,16 +110,25 @@ describe('dueLabel', () => {
   /*
    * The reported class of bug: at 9 p.m. in Toronto it is already tomorrow in
    * UTC, so a task due tonight is "Today" to the person looking at it and
-   * "1d overdue" to a server in London. The zone argument is what decides.
+   * overdue to a server in London. The zone argument is what decides.
+   *
+   * Built relative to now rather than pinned to a date — an earlier version of
+   * this test hard-coded an instant, which quietly stopped testing anything the
+   * moment that date arrived and then failed outright the day after.
    */
   it('reads the same instant differently depending on whose calendar is asked', () => {
-    const tonightInToronto = '2026-08-11T01:00:00.000Z' // 9 p.m. on the 10th, Toronto
+    // 01:00 UTC is always the previous evening in Toronto, whatever the season,
+    // so this one moment sits on two different calendar days.
+    const threeDaysOut = new Date(Date.now() + 3 * 86_400_000)
+    const instant = `${threeDaysOut.toISOString().slice(0, 10)}T01:00:00.000Z`
 
-    const toronto = dueLabel(tonightInToronto, 'America/Toronto')
-    const utc = dueLabel(tonightInToronto, 'UTC')
+    const toronto = dueLabel(instant, 'America/Toronto')
+    const utc = dueLabel(instant, 'UTC')
 
     // Both describe the same moment; they disagree because the day does.
     expect(toronto.label).not.toBe(utc.label)
+    expect(toronto.tone).toBe('upcoming')
+    expect(utc.tone).toBe('upcoming')
   })
 
   it('has nothing to say about a task with no due date', () => {
