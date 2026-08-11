@@ -4,6 +4,16 @@ import { LoginForm } from './login-form'
 
 export const metadata = { title: 'Sign in · FLO CRM' }
 
+/**
+ * Raw slugs used to reach the page and be shown to the person as-is.
+ * "missing-code" is not an explanation of anything.
+ */
+const ERRORS: Record<string, string> = {
+  'missing-code': 'That sign-in link could not be read. Ask for a fresh one below.',
+  'auth-required': 'Sign in to continue.',
+  expired: 'That sign-in link has expired. Ask for a fresh one below.',
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -24,7 +34,10 @@ export default async function LoginPage({
         </div>
 
         {configured ? (
-          <LoginForm next={params.next} initialError={params.error} />
+          <LoginForm
+            next={params.next}
+            initialError={params.error ? (ERRORS[params.error] ?? params.error) : undefined}
+          />
         ) : (
           <div className="card p-4 text-sm text-slate-600">
             <p className="font-medium text-slate-900">Supabase is not configured</p>
