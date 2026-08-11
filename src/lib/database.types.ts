@@ -689,6 +689,8 @@ export interface Database {
         Returns: ProductMixReportRow[]
       }
       set_deal_value_from_products: { Args: { p_deal_id: string }; Returns: void }
+      reorder_stage: { Args: { p_stage_id: string; p_position: number }; Returns: void }
+      move_stage: { Args: { p_stage_id: string; p_delta: number }; Returns: void }
       soft_delete_product: { Args: { p_product_id: string }; Returns: void }
       restore_product: { Args: { p_product_id: string }; Returns: void }
       soft_delete_contact: { Args: { p_contact_id: string }; Returns: void }

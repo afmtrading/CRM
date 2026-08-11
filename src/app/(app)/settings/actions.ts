@@ -116,23 +116,57 @@ export async function createStage(formData: FormData) {
   revalidatePath('/settings/pipelines')
 }
 
+/**
+ * Saves a stage's name, probability and position.
+ *
+ * The position does not go through this update. Writing the column directly is
+ * what made "2" mean "somewhere around second": nothing stopped two stages
+ * holding the same number, and the tie was then broken arbitrarily. It goes to
+ * reorder_stage, which renumbers the whole pipeline so the number typed is the
+ * position taken.
+ */
 export async function updateStage(formData: FormData) {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   const probability = Number(formData.get('default_probability') ?? 50) / 100
-  const order = Number(formData.get('order') ?? 0)
+  const position = Number(formData.get('order') ?? 0)
+
+  if (!name) throw new Error('A stage needs a name')
 
   const { error } = await scoped(context, 'stages')
-    .update({
-      name,
-      default_probability: Math.min(1, Math.max(0, probability)),
-      order,
-    })
+    .update({ name, default_probability: Math.min(1, Math.max(0, probability)) })
     .eq('id', id)
 
   if (error) throw new Error(error.message)
+
+  if (Number.isFinite(position)) {
+    const { error: orderError } = await context.supabase.rpc('reorder_stage', {
+      p_stage_id: id,
+      p_position: Math.max(0, Math.trunc(position)),
+    })
+    if (orderError) throw new Error(orderError.message)
+  }
+
   revalidatePath('/settings/pipelines')
+  revalidatePath('/deals')
+}
+
+/** One place up or down — what an arrow means, resolved in one transaction. */
+export async function moveStage(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+  const delta = formData.get('direction') === 'up' ? -1 : 1
+
+  const { error } = await context.supabase.rpc('move_stage', {
+    p_stage_id: id,
+    p_delta: delta,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/pipelines')
+  revalidatePath('/deals')
 }
 
 export async function deleteStage(formData: FormData) {

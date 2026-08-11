@@ -7,12 +7,47 @@ import {
   createStage,
   deletePipeline,
   deleteStage,
+  moveStage,
   renamePipeline,
   setDefaultPipeline,
   updateStage,
 } from '../actions'
 
 export const metadata = { title: 'Pipelines · FLO CRM' }
+
+/**
+ * One nudge up or down the list.
+ *
+ * Disabled at the ends rather than hidden, so the row does not change width as
+ * a stage travels and the buttons stay where the eye left them.
+ */
+function MoveButton({
+  stageId,
+  direction,
+  disabled,
+  label,
+}: {
+  stageId: string
+  direction: 'up' | 'down'
+  disabled: boolean
+  label: string
+}) {
+  return (
+    <form action={moveStage}>
+      <input type="hidden" name="id" value={stageId} />
+      <input type="hidden" name="direction" value={direction} />
+      <button
+        type="submit"
+        disabled={disabled}
+        aria-label={label}
+        title={label}
+        className="block px-1 text-xs leading-4 text-slate-400 hover:text-brand-700 disabled:cursor-default disabled:text-slate-200 disabled:hover:text-slate-200"
+      >
+        {direction === 'up' ? '▲' : '▼'}
+      </button>
+    </form>
+  )
+}
 
 export default async function PipelineSettingsPage() {
   const context = await requireAdmin()
@@ -99,50 +134,80 @@ export default async function PipelineSettingsPage() {
               <table className="table mb-3">
                 <thead>
                   <tr>
-                    <th className="w-20">Order</th>
+                    <th className="w-28">Position</th>
                     <th>Stage</th>
                     <th className="w-40">Default probability</th>
                     <th className="w-32" />
                   </tr>
                 </thead>
                 <tbody>
-                  {pipelineStages.map((stage) => (
-                    <tr key={stage.id}>
-                      <td colSpan={4} className="p-0">
-                        <form action={updateStage} className="flex items-center gap-2 px-3 py-2">
-                          <input type="hidden" name="id" value={stage.id} />
-                          <input
-                            name="order"
-                            type="number"
-                            defaultValue={stage.order}
-                            className="input w-20"
-                            aria-label="Order"
-                          />
-                          <input
-                            name="name"
-                            defaultValue={stage.name}
-                            className="input flex-1"
-                            aria-label="Stage name"
-                          />
-                          <div className="flex items-center gap-1">
-                            <input
-                              name="default_probability"
-                              type="number"
-                              min="0"
-                              max="100"
-                              defaultValue={Math.round(stage.default_probability * 100)}
-                              className="input w-24"
-                              aria-label="Default probability"
-                            />
-                            <span className="text-sm text-slate-500">%</span>
+                  {pipelineStages.map((stage, index) => {
+                    // The arrows sit in their own forms — a form cannot nest —
+                    // and join the row visually rather than structurally.
+                    const first = index === 0
+                    const last = index === pipelineStages.length - 1
+
+                    return (
+                      <tr key={stage.id}>
+                        <td colSpan={4} className="p-0">
+                          <div className="flex items-center gap-2 px-3 py-2">
+                            <div className="flex shrink-0 flex-col">
+                              <MoveButton
+                                stageId={stage.id}
+                                direction="up"
+                                disabled={first}
+                                label={`Move ${stage.name} up`}
+                              />
+                              <MoveButton
+                                stageId={stage.id}
+                                direction="down"
+                                disabled={last}
+                                label={`Move ${stage.name} down`}
+                              />
+                            </div>
+
+                            <form
+                              action={updateStage}
+                              className="flex flex-1 items-center gap-2"
+                              id={`stage-${stage.id}`}
+                            >
+                              <input type="hidden" name="id" value={stage.id} />
+                              <input
+                                name="order"
+                                type="number"
+                                min="0"
+                                defaultValue={stage.order}
+                                className="input w-16"
+                                aria-label={`Position of ${stage.name}`}
+                              />
+                              <input
+                                name="name"
+                                required
+                                defaultValue={stage.name}
+                                className="input flex-1"
+                                aria-label="Stage name"
+                              />
+                              <div className="flex items-center gap-1">
+                                <input
+                                  name="default_probability"
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  defaultValue={Math.round(stage.default_probability * 100)}
+                                  className="input w-24"
+                                  aria-label="Default probability"
+                                />
+                                <span className="text-sm text-slate-500">%</span>
+                              </div>
+                              <button type="submit" className="btn-secondary">
+                                Save
+                              </button>
+                            </form>
                           </div>
-                          <button type="submit" className="btn-secondary">
-                            Save
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
 
