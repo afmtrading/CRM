@@ -2,28 +2,52 @@ import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
-import type { DealRow, PipelineRow, StageRow, UserRow } from '@/lib/database.types'
+import type {
+  DealRow,
+  PipelineRow,
+  SavedFilterRow,
+  StageRow,
+  UserRow,
+} from '@/lib/database.types'
 import { DealStatusBadge, EmptyState, PageHeader } from '@/components/ui'
 import { Money } from '@/components/money'
 
+import { DealFilters } from './deal-filters'
 import { Kanban, type KanbanDeal } from './kanban'
 
 export const metadata = { title: 'Deals · FLO CRM' }
 
+/** Matches nothing, for the difference between "no filter" and "filtered to nothing". */
+const NO_SUCH_ID = '00000000-0000-0000-0000-000000000000'
+
 export default async function DealsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; pipeline?: string; owner?: string; status?: string }>
+  searchParams: Promise<{
+    view?: string
+    pipeline?: string
+    owner?: string
+    product?: string
+    status?: string
+  }>
 }) {
   const params = await searchParams
   const context = await requireSession()
 
   const view = params.view === 'list' ? 'list' : 'kanban'
 
-  const [{ data: pipelines }, { data: users }] = await Promise.all([
-    scoped(context, 'pipelines').select('*').order('name'),
-    scoped(context, 'users').select('*').order('name'),
-  ])
+  const [{ data: pipelines }, { data: users }, { data: products }, { data: savedViews }] =
+    await Promise.all([
+      scoped(context, 'pipelines').select('*').order('name'),
+      scoped(context, 'users').select('*').order('name'),
+      scoped(context, 'products').select('id, name').is('deleted_at', null).order('name'),
+      /*
+       * Yours plus anything a colleague chose to share — which is the row-level
+       * policy on saved_filters verbatim, so it is not restated here. Repeating
+       * it would be a second copy of the rule to keep in step with the first.
+       */
+      scoped(context, 'saved_filters').select('*').eq('entity_type', 'deal').order('name'),
+    ])
 
   const pipelineList = (pipelines ?? []) as PipelineRow[]
   const activePipeline =
@@ -60,13 +84,33 @@ export default async function DealsPage({
 
   let dealQuery = scoped(context, 'deals')
     .select('*, contacts(id, first_name, last_name), companies(id, name)')
-    .in('stage_id', stageIds.length > 0 ? stageIds : ['00000000-0000-0000-0000-000000000000'])
+    .in('stage_id', stageIds.length > 0 ? stageIds : [NO_SUCH_ID])
     .order('position')
     .order('created_at', { ascending: false })
 
   if (params.owner) dealQuery = dealQuery.eq('owner_id', params.owner)
-  if (params.status) dealQuery = dealQuery.eq('status', params.status)
-  else if (view === 'kanban') dealQuery = dealQuery.eq('status', 'open')
+
+  /*
+   * Status defaults to open on both views. A board of won and lost deals is a
+   * report rather than a pipeline, and "all" is one choice away in the picker.
+   */
+  const status = params.status ?? 'open'
+  if (status !== 'all') dealQuery = dealQuery.eq('status', status)
+
+  /*
+   * Product is a filter across a join, which no column predicate can express:
+   * resolve it to deal ids first. An unmatched product yields an id that cannot
+   * exist rather than no filter at all — silently showing everything would be
+   * the wrong answer to "which deals include this".
+   */
+  if (params.product) {
+    const { data: matches } = await scoped(context, 'deal_products')
+      .select('deal_id')
+      .eq('product_id', params.product)
+
+    const matchedIds = [...new Set(((matches ?? []) as { deal_id: string }[]).map((m) => m.deal_id))]
+    dealQuery = dealQuery.in('id', matchedIds.length ? matchedIds : [NO_SUCH_ID])
+  }
 
   const { data: deals } = await dealQuery.limit(500)
 
@@ -155,22 +199,14 @@ export default async function DealsPage({
               {pipeline.name}
             </Link>
           ))}
-
-        <div className="ml-auto flex gap-2">
-          <Link
-            href={linkParams({ owner: undefined })}
-            className={`rounded-md px-2 py-1 text-sm ${!params.owner ? 'font-medium text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            All owners
-          </Link>
-          <Link
-            href={linkParams({ owner: context.user.id })}
-            className={`rounded-md px-2 py-1 text-sm ${params.owner === context.user.id ? 'font-medium text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            Mine
-          </Link>
-        </div>
       </div>
+
+      <DealFilters
+        owners={userList.map((user) => ({ id: user.id, name: user.name || user.email }))}
+        products={(products ?? []) as { id: string; name: string }[]}
+        savedViews={(savedViews ?? []) as SavedFilterRow[]}
+        currentUserId={context.user.id}
+      />
 
       {stageList.length === 0 ? (
         <EmptyState
