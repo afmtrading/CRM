@@ -35,16 +35,28 @@ export async function createPipeline(formData: FormData) {
   revalidatePath('/settings/pipelines')
 }
 
+/**
+ * Renames a pipeline.
+ *
+ * A pipeline's name is a label on the board, not a key: deals point at stages,
+ * and stages at the pipeline's id, so nothing breaks when it changes. Which is
+ * exactly why it should be editable — "Trading desk" outliving the desk is
+ * silly when the fix is one word.
+ */
 export async function renamePipeline(formData: FormData) {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
+
   if (!name) throw new Error('A pipeline needs a name')
+  if (name.length > 120) throw new Error('That name is too long')
 
   const { error } = await scoped(context, 'pipelines').update({ name }).eq('id', id)
   if (error) throw new Error(error.message)
 
   revalidatePath('/settings/pipelines')
+  // The board and its picker are named from this too.
+  revalidatePath('/deals')
 }
 
 export async function setDefaultPipeline(formData: FormData) {
