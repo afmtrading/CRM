@@ -2,12 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession, scoped, firstRow } from "@/lib/tenancy";
-import {
-  contactName,
-  formatCurrency,
-  formatDay,
-} from "@/lib/format";
+import { contactName, formatDay } from "@/lib/format";
 import { DateTime } from "@/components/date-time";
+import { Money } from "@/components/money";
 import {
   COMPANY_CARDS,
   renderMarkdown,
@@ -207,79 +204,149 @@ export default async function CompanyDetailPage({
         }
       />
 
-      {/* Company info leads, above the activity feed, for the same reason it
-          does on a contact: the record is what someone opened the page for. */}
-      <div className="mb-5">
-        <Section title={COMPANY_CARDS[0].label}>
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Company name">{company.name}</Field>
-            <Field label="Website">
-              <ExternalLink url={website} />
-            </Field>
-            <Field label="Owner">
-              {userName(company.owner_id) ?? <Empty />}
-            </Field>
-            <Field label="Company phone">
-              <ContactMethod
-                value={company.phone}
-                kind="phone"
-                label={company.name}
+      {/*
+        Three regions rather than two columns: the record, the sidebar beside
+        it, and everything the record accumulates underneath. The sidebar is
+        given its own row placement so it can start level with the top of the
+        record instead of below it — the whole page used to begin with one
+        full-width card and a band of empty space to its right.
+      */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:items-start">
+        {/* Company info leads, above the activity feed, for the same reason it
+            does on a contact: the record is what someone opened the page for. */}
+        <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1">
+          <Section title={COMPANY_CARDS[0].label}>
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <Field label="Company name">{company.name}</Field>
+              <Field label="Website">
+                <ExternalLink url={website} />
+              </Field>
+              <Field label="Owner">
+                {userName(company.owner_id) ?? <Empty />}
+              </Field>
+              <Field label="Company phone">
+                <ContactMethod
+                  value={company.phone}
+                  kind="phone"
+                  label={company.name}
+                />
+              </Field>
+              <Field label="Company email">
+                <ContactMethod
+                  value={company.email}
+                  kind="email"
+                  label={company.name}
+                />
+              </Field>
+              <Field label="Contacts">{contactRows.length}</Field>
+              <Field label="Specialty market" wide>
+                <OptionBadges
+                  values={company.specialty_market}
+                  options={optionsFor("specialty_market")}
+                />
+              </Field>
+              <Field label="Company type" wide>
+                <OptionBadges
+                  values={company.customer_type}
+                  options={optionsFor("customer_type")}
+                />
+              </Field>
+              <CustomFieldValues
+                fields={customByCard("details")}
+                values={customValues}
+                fieldOptions={options}
               />
-            </Field>
-            <Field label="Company email">
-              <ContactMethod
-                value={company.email}
-                kind="email"
-                label={company.name}
-              />
-            </Field>
-            <Field label="Contacts">{contactRows.length}</Field>
-            <Field label="Specialty market" wide>
-              <OptionBadges
-                values={company.specialty_market}
-                options={optionsFor("specialty_market")}
-              />
-            </Field>
-            <Field label="Company type" wide>
-              <OptionBadges
-                values={company.customer_type}
-                options={optionsFor("customer_type")}
-              />
-            </Field>
-            <CustomFieldValues
-              fields={customByCard("details")}
-              values={customValues}
-              fieldOptions={options}
-            />
 
-            {addresses.length > 0 && (
-              <div className="sm:col-span-2 lg:col-span-3">
-                <dt className="text-xs font-medium text-slate-500">
-                  Addresses
-                </dt>
-                <dd className="mt-1 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {addresses.map((entry, index) => (
-                    <div
-                      key={`${entry.label}-${index}`}
-                      className="rounded-xl bg-slate-50 p-3"
-                    >
-                      <p className="text-xs font-medium text-slate-500">
-                        {entry.label || `Address ${index + 1}`}
-                      </p>
-                      <p className="mt-0.5 text-sm whitespace-pre-line text-slate-800">
-                        {entry.address}
-                      </p>
-                    </div>
-                  ))}
-                </dd>
+              {addresses.length > 0 && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-slate-500">
+                    Addresses
+                  </dt>
+                  <dd className="mt-1 grid gap-3 sm:grid-cols-2">
+                    {addresses.map((entry, index) => (
+                      <div
+                        key={`${entry.label}-${index}`}
+                        className="rounded-xl bg-slate-50 p-3"
+                      >
+                        <p className="text-xs font-medium text-slate-500">
+                          {entry.label || `Address ${index + 1}`}
+                        </p>
+                        <p className="mt-0.5 text-sm whitespace-pre-line text-slate-800">
+                          {entry.address}
+                        </p>
+                      </div>
+                    ))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </Section>
+        </div>
+
+        {/*
+          Deals sit directly under the record, ahead of the contact list and the
+          activity feed: what is being sold to this business is the reason to
+          open its page, and it was previously below both.
+        */}
+        <div className="order-3 space-y-5 lg:col-span-2 lg:col-start-1 lg:row-start-2">
+          <Section
+            title="Deals"
+            actions={
+              <Link
+                href={`/deals/new?company_id=${id}`}
+                className="btn-secondary py-1"
+              >
+                New deal
+              </Link>
+            }
+          >
+            {dealRows.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No deals linked to this company.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Deal</th>
+                      <th>Stage</th>
+                      <th>Value</th>
+                      <th>Status</th>
+                      <th>Expected close</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dealRows.map((deal) => (
+                      <tr key={deal.id}>
+                        <td>
+                          <Link
+                            href={`/deals/${deal.id}`}
+                            className="font-medium text-brand-700 hover:underline"
+                          >
+                            {deal.name}
+                          </Link>
+                        </td>
+                        <td>{deal.stages?.name ?? "—"}</td>
+                        <td>
+                          <Money
+                            value={Number(deal.value ?? 0)}
+                            currency={deal.currency}
+                            amountClassName="font-medium"
+                          />
+                        </td>
+                        <td>
+                          <DealStatusBadge status={deal.status} />
+                        </td>
+                        <td>{formatDay(deal.expected_close_date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-          </dl>
-        </Section>
-      </div>
+          </Section>
 
-      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
-        <div className="order-2 space-y-5 lg:order-1 lg:col-span-2">
           <Section
             title="Contacts"
             actions={
@@ -386,66 +453,21 @@ export default async function CompanyDetailPage({
               />
             </div>
           </Section>
-
-          <Section
-            title="Deals"
-            actions={
-              <Link
-                href={`/deals/new?company_id=${id}`}
-                className="btn-secondary py-1"
-              >
-                New deal
-              </Link>
-            }
-          >
-            {dealRows.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No deals linked to this company.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Deal</th>
-                      <th>Stage</th>
-                      <th>Value</th>
-                      <th>Status</th>
-                      <th>Expected close</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dealRows.map((deal) => (
-                      <tr key={deal.id}>
-                        <td>
-                          <Link
-                            href={`/deals/${deal.id}`}
-                            className="font-medium text-brand-700 hover:underline"
-                          >
-                            {deal.name}
-                          </Link>
-                        </td>
-                        <td>{deal.stages?.name ?? "—"}</td>
-                        <td>{formatCurrency(deal.value, deal.currency)}</td>
-                        <td>
-                          <DealStatusBadge status={deal.status} />
-                        </td>
-                        <td>{formatDay(deal.expected_close_date)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Section>
         </div>
 
-        <div className="order-1 space-y-5 lg:order-2">
+        {/*
+          The sidebar starts level with the record on a wide screen, and comes
+          straight after it on a narrow one — before the activity feed, which is
+          long and is not what most visits are for.
+        */}
+        <div className="order-2 space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
           <Section title={COMPANY_CARDS[2].label}>
+            {/*
+              No website field here: it is the first thing in Company info, and
+              a value repeated in two cards is a value that can look like it
+              disagrees with itself. This card is the social profiles.
+            */}
             <dl className="grid gap-3">
-              <Field label="Company website">
-                <ExternalLink url={website} />
-              </Field>
               <Field label="LinkedIn">
                 <ExternalLink url={socialUrl("linkedin", company.linkedin)} />
               </Field>
@@ -531,13 +553,17 @@ export default async function CompanyDetailPage({
                     >
                       {row.name}
                     </Link>
+                    {/* Already grouped by currency — the key is id + currency —
+                        so each line is one currency and needs saying which. */}
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {formatCurrency(row.won, row.currency)}
-                      </p>
+                      <Money
+                        value={row.won}
+                        currency={row.currency}
+                        amountClassName="text-sm font-semibold text-slate-900"
+                      />
                       {row.open > 0 && (
                         <p className="text-xs text-slate-500">
-                          {formatCurrency(row.open, row.currency)} open
+                          <Money value={row.open} currency={row.currency} /> open
                         </p>
                       )}
                     </div>
