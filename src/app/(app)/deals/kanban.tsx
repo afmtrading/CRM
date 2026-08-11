@@ -4,6 +4,7 @@ import { useOptimistic, useState, useTransition } from 'react'
 import Link from 'next/link'
 
 import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
+import { Money } from '@/components/money'
 import type { DealRow, StageRow } from '@/lib/database.types'
 
 import { moveDealToStage } from './actions'
@@ -24,10 +25,13 @@ export function Kanban({
   stages,
   deals,
   ownerNames,
+  productNames,
 }: {
   stages: StageRow[]
   deals: KanbanDeal[]
   ownerNames: Record<string, string>
+  /** Deal id → the distinct products on it, for the card. */
+  productNames: Record<string, string[]>
 }) {
   const [, startTransition] = useTransition()
   const [dragging, setDragging] = useState<string | null>(null)
@@ -111,15 +115,36 @@ export function Kanban({
                       dragging === deal.id ? 'opacity-50' : ''
                     }`}
                   >
-                    <Link
-                      href={`/deals/${deal.id}`}
-                      className="text-sm font-medium text-slate-900 hover:text-brand-700"
-                    >
-                      {deal.name}
-                    </Link>
+                    {/*
+                      The owner sits top-right, opposite the name: it is the
+                      thing people scan a board for after the name itself, and
+                      at the bottom it competed with the dates for the same
+                      glance.
+                    */}
+                    <div className="flex items-start justify-between gap-2">
+                      <Link
+                        href={`/deals/${deal.id}`}
+                        className="text-sm font-medium text-slate-900 hover:text-brand-700"
+                      >
+                        {deal.name}
+                      </Link>
 
-                    <p className="mt-1 text-sm font-semibold text-slate-700">
-                      {formatCurrency(deal.value, deal.currency)}
+                      {deal.owner_id && ownerNames[deal.owner_id] && (
+                        <span
+                          className="shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+                          title={ownerNames[deal.owner_id]}
+                        >
+                          {ownerNames[deal.owner_id]}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-1">
+                      <Money
+                        value={Number(deal.value ?? 0)}
+                        currency={deal.currency}
+                        amountClassName="text-sm font-semibold text-slate-700"
+                      />
                     </p>
 
                     <p className="mt-0.5 truncate text-xs text-slate-500">
@@ -129,6 +154,28 @@ export function Kanban({
                           : '—')}
                     </p>
 
+                    {/* What the deal is for, which is often the reason to open it. */}
+                    {(productNames[deal.id]?.length ?? 0) > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {productNames[deal.id].slice(0, 3).map((name) => (
+                          <span
+                            key={name}
+                            className="max-w-full truncate rounded bg-brand-50 px-1.5 py-0.5 text-[11px] text-brand-700"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                        {productNames[deal.id].length > 3 && (
+                          <span
+                            className="rounded px-1 py-0.5 text-[11px] text-slate-400"
+                            title={productNames[deal.id].slice(3).join(', ')}
+                          >
+                            +{productNames[deal.id].length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
                       <span title={deal.probability_overridden ? 'Probability set manually' : 'Stage default'}>
                         {formatPercent(deal.probability)}
@@ -136,12 +183,6 @@ export function Kanban({
                       </span>
                       <span>{formatDay(deal.expected_close_date)}</span>
                     </div>
-
-                    {deal.owner_id && ownerNames[deal.owner_id] && (
-                      <p className="mt-1 truncate text-xs text-slate-400">
-                        {ownerNames[deal.owner_id]}
-                      </p>
-                    )}
                   </article>
                 ))}
 

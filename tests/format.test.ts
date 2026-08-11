@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { dueLabel, formatDate, formatDateTime, formatDay } from '../src/lib/format'
+import {
+  currencyStyle,
+  dueLabel,
+  formatAmount,
+  formatDate,
+  formatDateTime,
+  formatDay,
+} from '../src/lib/format'
 
 /*
  * These tests run in whatever zone the machine is in, so they assert on the
@@ -133,5 +140,34 @@ describe('dueLabel', () => {
 
   it('has nothing to say about a task with no due date', () => {
     expect(dueLabel(null, 'UTC')).toEqual({ label: '—', tone: 'none' })
+  })
+})
+
+describe('currency presentation', () => {
+  it('formats an amount without a symbol, because the code stands beside it', () => {
+    // A leading `$` is ambiguous the moment a board holds both CAD and USD.
+    expect(formatAmount(1200)).toBe('1,200')
+    expect(formatAmount(1200)).not.toContain('$')
+  })
+
+  it('rounds to whole units, as the currency formatter does', () => {
+    expect(formatAmount(1200.4)).toBe('1,200')
+  })
+
+  it('gives each currency its own colour', () => {
+    const styles = ['CAD', 'USD', 'EUR', 'GBP'].map(currencyStyle)
+    expect(new Set(styles).size).toBe(4)
+  })
+
+  it('does not care about case', () => {
+    expect(currencyStyle('usd')).toBe(currencyStyle('USD'))
+  })
+
+  it('falls back rather than inventing a colour that collides with the four', () => {
+    const fallback = currencyStyle('JPY')
+    for (const known of ['CAD', 'USD', 'EUR', 'GBP']) {
+      expect(fallback).not.toBe(currencyStyle(known))
+    }
+    expect(currencyStyle(null)).toBe(fallback)
   })
 })
