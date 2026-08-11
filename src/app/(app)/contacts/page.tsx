@@ -337,11 +337,11 @@ export default async function ContactsPage({
                     */}
                     <tr>
                       <th>Name</th>
+                      <th>Owner</th>
                       <th>Priority</th>
                       <th>Role type</th>
                       <th>Credibility</th>
                       <th>Region</th>
-                      <th>Owner</th>
                       <th className="text-right">Actions</th>
                     </tr>
                   </thead>
@@ -382,6 +382,11 @@ export default async function ContactsPage({
                               </div>
                             </div>
                           </td>
+                          <td className="text-slate-600">
+                            {contact.owner_id
+                              ? (ownerNames.get(contact.owner_id) ?? "—")
+                              : "—"}
+                          </td>
                           <td>
                             {contact.priority ? (
                               <OptionBadge
@@ -419,11 +424,6 @@ export default async function ContactsPage({
                               values={regionsOf(contact.companies)}
                               options={regionOptions}
                             />
-                          </td>
-                          <td className="text-slate-600">
-                            {contact.owner_id
-                              ? (ownerNames.get(contact.owner_id) ?? "—")
-                              : "—"}
                           </td>
                           <td>
                             <div className="flex items-center justify-end gap-1">
