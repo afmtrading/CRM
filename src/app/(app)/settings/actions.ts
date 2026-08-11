@@ -589,7 +589,7 @@ export async function updateOrganization(formData: FormData) {
 // -----------------------------------------------------------------------------
 // Select field options
 //
-// The values behind Specialty market, Customer type, Role type, Priority and
+// The values behind Market, Customer type, Role type, Priority and
 // Credibility, each with its own colour. An organization owns its own lists —
 // editing one never touches another's.
 // -----------------------------------------------------------------------------

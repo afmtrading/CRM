@@ -151,14 +151,6 @@ export function contactName(contact: { first_name?: string | null; last_name?: s
   return name || contact.email || 'Unnamed contact'
 }
 
-export function initials(value: string): string {
-  return value
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join('')
-}
-
 export type DueTone = 'overdue' | 'today' | 'upcoming' | 'none'
 
 /** The calendar day a moment falls on, in a given zone, as `YYYY-MM-DD`. */

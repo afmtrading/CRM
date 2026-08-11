@@ -2,7 +2,6 @@ import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { applyFilter, fieldsFor, filterFromSearchParams, groupRows, parseFilterConfig } from '@/lib/filters'
-import { formatDate } from '@/lib/format'
 import type {
   CompanyRow,
   CustomFieldDefinitionRow,
@@ -11,7 +10,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { FilterBar } from '@/components/filter-bar'
-import { Avatar, EmptyState, PageHeader } from '@/components/ui'
+import { EmptyState, PageHeader } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
@@ -35,7 +34,31 @@ export default async function CompaniesPage({
     ])
 
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
+
+  /*
+   * Size is a custom field on the Company Rating card, so the column finds it
+   * by name the way the contacts list finds a region. A business that calls it
+   * something else leaves the column empty rather than having another field
+   * guessed into it.
+   */
   const marketOptions = allOptions.filter((option) => option.field_key === 'specialty_market')
+  const typeOptions = allOptions.filter((option) => option.field_key === 'customer_type')
+
+  const definitions = (customFields ?? []) as CustomFieldDefinitionRow[]
+  const sizeField = definitions.find(
+    (field) => field.label.toLowerCase() === 'size' || field.key.toLowerCase() === 'size',
+  )
+  const sizeOptions = sizeField
+    ? allOptions.filter(
+        (option) => option.entity_type === 'company' && option.field_key === sizeField.key,
+      )
+    : []
+  const sizeOf = (company: CompanyRow) => {
+    if (!sizeField) return []
+    const raw = (company.custom_fields ?? {})[sizeField.key]
+    if (raw === undefined || raw === null || raw === '') return []
+    return Array.isArray(raw) ? raw.map(String) : [String(raw)]
+  }
 
   const viewId = typeof params.view === 'string' ? params.view : null
   const savedView = viewId
@@ -44,11 +67,7 @@ export default async function CompaniesPage({
   const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
 
   const ownerList = (owners ?? []) as UserRow[]
-  const fields = fieldsFor(
-    'company',
-    (customFields ?? []) as CustomFieldDefinitionRow[],
-    allOptions,
-  ).map((field) =>
+  const fields = fieldsFor('company', definitions, allOptions).map((field) =>
     field.key === 'owner_id'
       ? { ...field, options: ownerList.map((u) => ({ value: u.id, label: u.name || u.email })) }
       : field,
@@ -116,38 +135,53 @@ export default async function CompaniesPage({
               )}
               <table className="table">
                 <thead>
+                  {/*
+                    What kind of business it is, not when it was typed in. The
+                    website left the row — it is one click away on the record
+                    and was mostly empty here — and the company type came in
+                    under the name, where it reads as part of naming it.
+                  */}
                   <tr>
                     <th>Name</th>
-                    <th>Website</th>
-                    <th>Specialty market</th>
-                    <th>Contacts</th>
+                    <th>Market</th>
                     <th>Owner</th>
-                    <th>Created</th>
+                    <th>Contacts</th>
+                    <th>Size</th>
                   </tr>
                 </thead>
                 <tbody>
                   {group.rows.map((company) => (
                     <tr key={company.id} className="transition-colors hover:bg-slate-50/70">
                       <td>
-                        <div className="flex items-center gap-3">
-                          <Avatar name={company.name} className="h-9 w-9 rounded-xl" />
+                        <div className="min-w-0">
                           <Link
                             href={`/companies/${company.id}`}
-                            className="font-medium text-slate-900 hover:text-brand-700"
+                            className="block truncate font-medium text-slate-900 hover:text-brand-700"
                           >
                             {company.name}
                           </Link>
+                          <div className="mt-1">
+                            {company.customer_type?.length ? (
+                              <OptionBadges
+                                values={company.customer_type}
+                                options={typeOptions}
+                              />
+                            ) : (
+                              <span className="text-xs text-slate-400">No company type</span>
+                            )}
+                          </div>
                         </div>
                       </td>
-                      <td className="text-slate-600">{company.domain ?? '—'}</td>
                       <td>
                         <OptionBadges values={company.specialty_market} options={marketOptions} />
                       </td>
-                      <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
                       <td className="text-slate-600">
                         {company.owner_id ? (ownerNames.get(company.owner_id) ?? '—') : '—'}
                       </td>
-                      <td className="text-slate-500">{formatDate(company.created_at)}</td>
+                      <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
+                      <td>
+                        <OptionBadges values={sizeOf(company)} options={sizeOptions} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

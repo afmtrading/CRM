@@ -140,8 +140,9 @@ export const OPTION_FIELDS: {
 }[] = [
   // These two describe the business, not the person, so they live on the
   // company record and are shared by every contact who works there.
-  { key: 'specialty_market', label: 'Specialty market', card: 'details', multiple: true, entity: 'company' },
-  { key: 'customer_type', label: 'Company type', card: 'details', multiple: true, entity: 'company' },
+  // The column keeps its original name; only what people read changed.
+  { key: 'specialty_market', label: 'Market', card: 'rating', multiple: true, entity: 'company' },
+  { key: 'customer_type', label: 'Company type', card: 'rating', multiple: true, entity: 'company' },
   { key: 'role_type', label: 'Role type', card: 'influence', multiple: true, entity: 'contact' },
   { key: 'priority', label: 'Priority', card: 'influence', multiple: false, entity: 'contact' },
   { key: 'credibility', label: 'Credibility', card: 'influence', multiple: false, entity: 'contact' },

@@ -1,7 +1,6 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { initials } from '@/lib/format'
 import { USER_ROLE_LABELS } from '@/lib/field-options'
 
 import { NavLink } from '@/components/nav-link'
@@ -125,10 +124,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="border-t border-slate-200/80 p-2 lg:p-3">
           <div className="flex items-center gap-2.5 rounded-xl px-1 py-2 lg:px-2">
-            <span className="avatar h-8 w-8 bg-brand-100 text-brand-700" title={displayName}>
-              {initials(displayName)}
-            </span>
-            <div className="hidden min-w-0 flex-1 lg:block">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-slate-800">{displayName}</p>
               <p className="truncate text-xs text-slate-500">
                 {USER_ROLE_LABELS[user.role] ?? user.role}
@@ -172,10 +168,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   for something this small. */}
               <details className="group relative">
                 <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl py-1.5 pr-2 pl-1.5 transition-colors hover:bg-slate-100">
-                  <span className="avatar h-8 w-8 bg-brand-100 text-brand-700">
-                    {initials(displayName)}
-                  </span>
-                  <span className="hidden max-w-32 truncate text-sm font-medium text-slate-700 sm:block">
+                  <span className="max-w-32 truncate text-sm font-medium text-slate-700">
                     {displayName}
                   </span>
                   <ChevronDownIcon className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />

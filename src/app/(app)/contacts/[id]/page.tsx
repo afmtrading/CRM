@@ -29,7 +29,6 @@ import {
   ActivityTimeline,
 } from "@/components/activity-timeline";
 import {
-  Avatar,
   DealStatusBadge,
   LifecycleBadge,
   PageHeader,
@@ -305,8 +304,7 @@ export default async function ContactDetailPage({
         {/* Contact details leads — it is what someone opened the page for. */}
         <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1">
           <Section title={CONTACT_CARDS[0].label}>
-            <div className="mb-4 flex items-center gap-3">
-              <Avatar name={name} className="h-11 w-11 text-sm" />
+            <div className="mb-4">
               <div className="min-w-0">
                 <p className="truncate font-semibold text-slate-900">{name}</p>
                 <p className="truncate text-xs text-slate-500">
@@ -522,7 +520,7 @@ export default async function ContactDetailPage({
               }
             >
               <dl className="grid gap-3 sm:grid-cols-2">
-                <Field label="Specialty market" wide>
+                <Field label="Market" wide>
                   <OptionBadges
                     values={company.specialty_market}
                     options={optionsFor("specialty_market")}

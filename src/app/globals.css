@@ -92,10 +92,6 @@ body {
 }
 
 /* Circular monogram used wherever a person or company is listed. */
-@utility avatar {
-  @apply flex shrink-0 items-center justify-center rounded-full text-xs font-semibold;
-}
-
 @utility table {
   @apply w-full border-collapse text-sm;
 

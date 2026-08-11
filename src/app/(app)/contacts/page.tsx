@@ -24,7 +24,6 @@ import {
   optionColor,
 } from "@/components/contact-cards";
 import {
-  Avatar,
   EmptyState,
   PageHeader,
   StatCard,
@@ -358,28 +357,25 @@ export default async function ContactsPage({
                               they work for read as one thing, and the row gets
                               a column back for what they are worth. */}
                           <td>
-                            <div className="flex items-center gap-3">
-                              <Avatar name={name} />
-                              <div className="min-w-0">
+                            <div className="min-w-0">
+                              <Link
+                                href={`/contacts/${contact.id}`}
+                                className="block truncate font-medium text-slate-900 hover:text-brand-700"
+                              >
+                                {name}
+                              </Link>
+                              {contact.companies ? (
                                 <Link
-                                  href={`/contacts/${contact.id}`}
-                                  className="block truncate font-medium text-slate-900 hover:text-brand-700"
+                                  href={`/companies/${contact.companies.id}`}
+                                  className="block truncate text-xs text-slate-500 hover:text-brand-700 hover:underline"
                                 >
-                                  {name}
+                                  {contact.companies.name}
                                 </Link>
-                                {contact.companies ? (
-                                  <Link
-                                    href={`/companies/${contact.companies.id}`}
-                                    className="block truncate text-xs text-slate-500 hover:text-brand-700 hover:underline"
-                                  >
-                                    {contact.companies.name}
-                                  </Link>
-                                ) : (
-                                  <span className="block truncate text-xs text-slate-400">
-                                    No company
-                                  </span>
-                                )}
-                              </div>
+                              ) : (
+                                <span className="block truncate text-xs text-slate-400">
+                                  No company
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="text-slate-600">
