@@ -61,13 +61,29 @@ export default async function ContactDetailPage({
   const { merged } = await searchParams;
   const context = await requireSession();
 
+  /*
+   * The company comes back with the fields the Company card mirrors, so that
+   * card is a read of the business rather than a second copy of it — edit the
+   * company and the contact page follows.
+   */
   const contact = await firstRow<
     ContactRow & {
-      companies: { id: string; name: string; domain: string | null } | null;
+      companies:
+        | {
+            id: string;
+            name: string;
+            domain: string | null;
+            specialty_market: string[];
+            customer_type: string[];
+            custom_fields: Record<string, unknown>;
+          }
+        | null;
     }
   >(
     scoped(context, "contacts")
-      .select("*, companies(id, name, domain)")
+      .select(
+        "*, companies(id, name, domain, specialty_market, customer_type, custom_fields)",
+      )
       .eq("id", id)
       .maybeSingle(),
   );
@@ -99,9 +115,11 @@ export default async function ContactDetailPage({
     scoped(context, "tags").select("*").order("name"),
     scoped(context, "contact_tags").select("tag_id").eq("contact_id", id),
     scoped(context, "field_options").select("*").order("order"),
+    // Both entities in one round trip: the contact's own definitions, and the
+    // company's, which the Company card below renders.
     scoped(context, "custom_field_definitions")
       .select("*")
-      .eq("entity_type", "contact")
+      .in("entity_type", ["contact", "company"])
       .order("order"),
     scoped(context, "contact_products")
       .select("product_id, products(id, name)")
@@ -142,10 +160,29 @@ export default async function ContactDetailPage({
   };
 
   // Custom fields are grouped by the card their admin assigned them to.
-  const customFields = (customFieldDefs ?? []) as CustomFieldDefinitionRow[];
+  const allCustomFields = (customFieldDefs ?? []) as CustomFieldDefinitionRow[];
+  const customFields = allCustomFields.filter(
+    (field) => field.entity_type === "contact",
+  );
   const customByCard = (card: ContactCard) =>
     customFields.filter((field) => field.card === card);
   const customValues = (contact.custom_fields ?? {}) as Record<string, unknown>;
+
+  /*
+   * The Company card's own fields. "Stock type", "Regions" and "Size" are
+   * custom fields on the business rather than columns, so the card takes
+   * whatever is defined on the company's Company info card instead of naming
+   * them — add a fourth one there and it appears here too, which is the point
+   * of mirroring rather than listing.
+   */
+  const company = contact.companies;
+  const companyCustomFields = allCustomFields.filter(
+    (field) => field.entity_type === "company" && field.card === "details",
+  );
+  const companyCustomValues = (company?.custom_fields ?? {}) as Record<
+    string,
+    unknown
+  >;
 
   const name = contactName(contact);
   const notesHtml = renderMarkdown(contact.notes);
@@ -256,7 +293,14 @@ export default async function ContactDetailPage({
         underneath. The record used to span the whole page with a band of empty
         space to its right, which is where Influence now starts.
       */}
-      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:items-start">
+      {/*
+        The row template is load-bearing. Without it the sidebar spans two rows
+        and the browser hands its extra height to both of them equally, which
+        stretched row one and left a band of blank space between the record and
+        the deals below it. `auto` pins row one to the record's own height and
+        `1fr` sends the overflow to row two, where it is absorbed.
+      */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:items-start">
         {/* Contact details leads — it is what someone opened the page for. */}
         <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1">
           <Section title={CONTACT_CARDS[0].label}>
@@ -460,6 +504,43 @@ export default async function ContactDetailPage({
               />
             </dl>
           </Section>
+
+          {/*
+            What kind of business this person works for. Read from the company
+            rather than stored again on the contact, so the two can never
+            disagree — and shown only when there is one, since a card of dashes
+            says nothing that the empty Company field above has not said.
+          */}
+          {company && (
+            <Section
+              title="Company"
+              actions={
+                <CardLink href={`/companies/${company.id}`}>
+                  {company.name}
+                </CardLink>
+              }
+            >
+              <dl className="grid gap-3 sm:grid-cols-2">
+                <Field label="Specialty market" wide>
+                  <OptionBadges
+                    values={company.specialty_market}
+                    options={optionsFor("specialty_market")}
+                  />
+                </Field>
+                <Field label="Company type" wide>
+                  <OptionBadges
+                    values={company.customer_type}
+                    options={optionsFor("customer_type")}
+                  />
+                </Field>
+                <CustomFieldValues
+                  fields={companyCustomFields}
+                  values={companyCustomValues}
+                  fieldOptions={options}
+                />
+              </dl>
+            </Section>
+          )}
 
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label}>

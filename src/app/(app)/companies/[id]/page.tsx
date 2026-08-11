@@ -211,7 +211,14 @@ export default async function CompanyDetailPage({
         record instead of below it — the whole page used to begin with one
         full-width card and a band of empty space to its right.
       */}
-      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:items-start">
+      {/*
+        The row template is load-bearing. Without it the sidebar spans two rows
+        and the browser hands its extra height to both of them equally, which
+        stretched row one and left a band of blank space between the record and
+        the deals below it. `auto` pins row one to the record's own height and
+        `1fr` sends the overflow to row two, where it is absorbed.
+      */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:items-start">
         {/* Company info leads, above the activity feed, for the same reason it
             does on a contact: the record is what someone opened the page for. */}
         <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1">
