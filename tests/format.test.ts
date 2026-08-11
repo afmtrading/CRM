@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   currencyStyle,
+  currencySymbol,
   dueLabel,
   formatAmount,
   formatDate,
   formatDateTime,
   formatDay,
+  totalsByCurrency,
 } from '../src/lib/format'
 
 /*
@@ -144,8 +146,9 @@ describe('dueLabel', () => {
 })
 
 describe('currency presentation', () => {
-  it('formats an amount without a symbol, because the code stands beside it', () => {
-    // A leading `$` is ambiguous the moment a board holds both CAD and USD.
+  it('formats the bare number, leaving the symbol and the code to <Money>', () => {
+    // Intl's currency styles would put CAD and USD on different footings —
+    // `$` for one and `US$` for the other — so the pieces are assembled here.
     expect(formatAmount(1200)).toBe('1,200')
     expect(formatAmount(1200)).not.toContain('$')
   })
@@ -169,5 +172,101 @@ describe('currency presentation', () => {
       expect(fallback).not.toBe(currencyStyle(known))
     }
     expect(currencyStyle(null)).toBe(fallback)
+  })
+})
+
+describe('currencySymbol', () => {
+  it('gives both dollars the same sign, because the code is what tells them apart', () => {
+    // Intl would render one of these as US$ depending on the locale, which
+    // reads as a difference in kind between two currencies that are equals on
+    // the board. The symbol is decoration; <Money> prints the code beside it.
+    expect(currencySymbol('CAD')).toBe('$')
+    expect(currencySymbol('USD')).toBe('$')
+  })
+
+  it('knows the other two', () => {
+    expect(currencySymbol('EUR')).toBe('€')
+    expect(currencySymbol('GBP')).toBe('£')
+  })
+
+  it('is case-insensitive, since the column is not', () => {
+    expect(currencySymbol('usd')).toBe('$')
+  })
+
+  it('shows nothing rather than guessing at a currency it does not know', () => {
+    expect(currencySymbol('JPY')).toBe('')
+    expect(currencySymbol(null)).toBe('')
+    expect(currencySymbol(undefined)).toBe('')
+  })
+})
+
+describe('totalsByCurrency', () => {
+  it('keeps each currency to itself rather than adding them into a lie', () => {
+    // The bug this replaces: 10 CAD + 100 USD was rendered as "$110", labelled
+    // with whichever currency happened to sort first.
+    expect(
+      totalsByCurrency([
+        { value: 10, currency: 'CAD' },
+        { value: 100, currency: 'USD' },
+      ]),
+    ).toEqual([
+      { currency: 'CAD', total: 10 },
+      { currency: 'USD', total: 100 },
+    ])
+  })
+
+  it('adds up the rows that do share a currency', () => {
+    expect(
+      totalsByCurrency([
+        { value: 100, currency: 'USD' },
+        { value: 250, currency: 'USD' },
+      ]),
+    ).toEqual([{ currency: 'USD', total: 350 }])
+  })
+
+  it('orders currencies the way the app lists them, not the way they arrived', () => {
+    const totals = totalsByCurrency([
+      { value: 1, currency: 'GBP' },
+      { value: 1, currency: 'USD' },
+      { value: 1, currency: 'EUR' },
+      { value: 1, currency: 'CAD' },
+    ])
+    expect(totals.map((entry) => entry.currency)).toEqual(['CAD', 'USD', 'EUR', 'GBP'])
+  })
+
+  it('puts anything unrecognised after the four the app offers', () => {
+    const totals = totalsByCurrency([
+      { value: 1, currency: 'JPY' },
+      { value: 1, currency: 'USD' },
+    ])
+    expect(totals.map((entry) => entry.currency)).toEqual(['USD', 'JPY'])
+  })
+
+  it('treats a currency as the same one however it was cased', () => {
+    expect(
+      totalsByCurrency([
+        { value: 5, currency: 'usd' },
+        { value: 5, currency: 'USD' },
+      ]),
+    ).toEqual([{ currency: 'USD', total: 10 }])
+  })
+
+  it('reads a value that arrived as a string, which is how numeric columns come back', () => {
+    expect(totalsByCurrency([{ value: '1200.50', currency: 'USD' }])).toEqual([
+      { currency: 'USD', total: 1200.5 },
+    ])
+  })
+
+  it('counts a missing value as nothing rather than dropping the row', () => {
+    expect(
+      totalsByCurrency([
+        { value: null, currency: 'USD' },
+        { value: 40, currency: 'USD' },
+      ]),
+    ).toEqual([{ currency: 'USD', total: 40 }])
+  })
+
+  it('has nothing to show for no rows, which is what an empty column is', () => {
+    expect(totalsByCurrency([])).toEqual([])
   })
 })

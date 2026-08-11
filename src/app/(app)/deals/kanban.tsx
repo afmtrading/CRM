@@ -3,8 +3,8 @@
 import { useOptimistic, useState, useTransition } from 'react'
 import Link from 'next/link'
 
-import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
-import { Money } from '@/components/money'
+import { formatDay, formatPercent } from '@/lib/format'
+import { Money, MoneyTotals } from '@/components/money'
 import type { DealRow, StageRow } from '@/lib/database.types'
 
 import { moveDealToStage } from './actions'
@@ -73,8 +73,6 @@ export function Kanban({
       <div className="flex gap-3 overflow-x-auto pb-4">
         {stages.map((stage) => {
           const stageDeals = optimisticDeals.filter((deal) => deal.stage_id === stage.id)
-          const total = stageDeals.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
-          const currency = stageDeals[0]?.currency ?? 'CAD'
 
           return (
             <div
@@ -92,8 +90,10 @@ export function Kanban({
               <header className="flex items-baseline justify-between px-3 py-2">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-800">{stage.name}</h2>
-                  <p className="text-xs text-slate-500">
-                    {stageDeals.length} · {formatCurrency(total, currency)}
+                  <p className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-slate-500">
+                    <span>{stageDeals.length}</span>
+                    <span className="text-slate-300">·</span>
+                    <MoneyTotals rows={stageDeals} />
                   </p>
                 </div>
                 <span className="text-xs text-slate-400">
