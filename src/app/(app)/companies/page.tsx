@@ -41,10 +41,18 @@ export default async function CompaniesPage({
    * something else leaves the column empty rather than having another field
    * guessed into it.
    */
+  const marketOptions = allOptions.filter((option) => option.field_key === 'specialty_market')
+  const typeOptions = allOptions.filter((option) => option.field_key === 'customer_type')
+
   const definitions = (customFields ?? []) as CustomFieldDefinitionRow[]
   const sizeField = definitions.find(
     (field) => field.label.toLowerCase() === 'size' || field.key.toLowerCase() === 'size',
   )
+  const sizeOptions = sizeField
+    ? allOptions.filter(
+        (option) => option.entity_type === 'company' && option.field_key === sizeField.key,
+      )
+    : []
   const sizeOf = (company: CompanyRow) => {
     if (!sizeField) return []
     const raw = (company.custom_fields ?? {})[sizeField.key]
@@ -152,22 +160,27 @@ export default async function CompaniesPage({
                           >
                             {company.name}
                           </Link>
-                          <span className="block truncate text-xs text-slate-500">
-                            {company.customer_type?.length
-                              ? company.customer_type.join(', ')
-                              : 'No company type'}
-                          </span>
+                          <div className="mt-1">
+                            {company.customer_type?.length ? (
+                              <OptionBadges
+                                values={company.customer_type}
+                                options={typeOptions}
+                              />
+                            ) : (
+                              <span className="text-xs text-slate-400">No company type</span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td>
-                        <OptionBadges values={company.specialty_market} />
+                        <OptionBadges values={company.specialty_market} options={marketOptions} />
                       </td>
                       <td className="text-slate-600">
                         {company.owner_id ? (ownerNames.get(company.owner_id) ?? '—') : '—'}
                       </td>
                       <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
                       <td>
-                        <OptionBadges values={sizeOf(company)} />
+                        <OptionBadges values={sizeOf(company)} options={sizeOptions} />
                       </td>
                     </tr>
                   ))}

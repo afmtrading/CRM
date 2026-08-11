@@ -1,43 +1,38 @@
 import Link from 'next/link'
 
 import type { FieldOptionRow, OptionColor } from '@/lib/database.types'
-import { prettyUrl } from '@/lib/field-options'
+import { OPTION_COLOR_CLASSES, prettyUrl } from '@/lib/field-options'
 import { MailIcon, PhoneIcon } from '@/components/icons'
 
-/**
- * A stored option, as text.
- *
- * These used to be coloured pills. A record page carried a dozen of them and
- * the colour stopped meaning anything — every value shouted, so none of them
- * did. The words are the information; the page reads quieter without a palette
- * competing with it.
- *
- * The `color` argument is still taken and still ignored, so an admin's choices
- * survive in the database and the call sites do not all have to change if the
- * colours are ever wanted back.
- */
-export function OptionBadge({ value }: { value: string; color?: OptionColor }) {
-  return <span>{value}</span>
+/** A select option rendered in its configured colour. */
+export function OptionBadge({ value, color }: { value: string; color: OptionColor }) {
+  return <span className={`badge ${OPTION_COLOR_CLASSES[color]}`}>{value}</span>
 }
 
 /**
- * Looks an option's colour up by value. Falls back to neutral when the stored
- * value is no longer in the list — an admin can rename or remove an option, and
- * a contact still holding the old value must not break the page.
+ * Looks an option's colour up by value. Falls back to a neutral badge when the
+ * stored value is no longer in the list — an admin can rename or remove an
+ * option, and a contact still holding the old value must not break the page.
  */
 export function optionColor(options: FieldOptionRow[], value: string): OptionColor {
   return options.find((option) => option.value === value)?.color ?? 'slate'
 }
 
-/** Several of them, read as a list rather than stacked as chips. */
 export function OptionBadges({
   values,
+  options,
 }: {
   values: string[] | null | undefined
-  options?: FieldOptionRow[]
+  options: FieldOptionRow[]
 }) {
   if (!values || values.length === 0) return <Empty />
-  return <span>{values.join(', ')}</span>
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {values.map((value) => (
+        <OptionBadge key={value} value={value} color={optionColor(options, value)} />
+      ))}
+    </div>
+  )
 }
 
 export function Empty() {
@@ -117,8 +112,9 @@ export function ExternalLink({ url, label }: { url: string | null; label?: strin
 /**
  * Renders whatever custom fields an admin assigned to a given card.
  *
- * Select and multi-select values read the same as the built-in ones — a custom
- * field should not look like a lesser citizen on the record.
+ * Select and multi-select values come back as coloured badges, using the same
+ * option list the built-in select fields draw from — a custom field should not
+ * look like a lesser citizen on the record.
  */
 export function CustomFieldValues({
   fields,

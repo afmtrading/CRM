@@ -148,13 +148,25 @@ export function ScoreMeter({ score }: { score: number }) {
   )
 }
 
-/** Plain text, like every other stored value — see OptionBadge for why. */
+const LIFECYCLE_STYLES: Record<LifecycleStage, string> = {
+  lead: 'bg-slate-100 text-slate-700',
+  qualified: 'bg-amber-100 text-amber-800',
+  customer: 'bg-emerald-100 text-emerald-800',
+  other: 'bg-slate-100 text-slate-600',
+}
+
 export function LifecycleBadge({ stage }: { stage: LifecycleStage }) {
-  return <span>{stage}</span>
+  return <span className={`badge ${LIFECYCLE_STYLES[stage]}`}>{stage}</span>
+}
+
+const DEAL_STATUS_STYLES: Record<DealStatus, string> = {
+  open: 'bg-blue-100 text-blue-700',
+  won: 'bg-emerald-100 text-emerald-700',
+  lost: 'bg-red-100 text-red-700',
 }
 
 export function DealStatusBadge({ status }: { status: DealStatus }) {
-  return <span>{status}</span>
+  return <span className={`badge ${DEAL_STATUS_STYLES[status]}`}>{status}</span>
 }
 
 export function ErrorNote({ children }: { children: React.ReactNode }) {
