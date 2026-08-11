@@ -29,7 +29,6 @@ import {
   ActivityTimeline,
 } from "@/components/activity-timeline";
 import {
-  Avatar,
   DealStatusBadge,
   LifecycleBadge,
   PageHeader,
@@ -381,7 +380,6 @@ export default async function CompanyDetailPage({
                         >
                           <td>
                             <div className="flex items-center gap-3">
-                              <Avatar name={name} className="h-8 w-8" />
                               <Link
                                 href={`/contacts/${contact.id}`}
                                 className="truncate font-medium text-slate-900 hover:text-brand-700"
@@ -465,7 +463,7 @@ export default async function CompanyDetailPage({
           */}
           <Section title={COMPANY_CARDS[3].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Specialty market" wide>
+              <Field label="Market" wide>
                 <OptionBadges
                   values={company.specialty_market}
                   options={optionsFor("specialty_market")}

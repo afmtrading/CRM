@@ -9,7 +9,6 @@ import type {
   CustomFieldDefinitionRow,
   FieldOptionRow,
 } from '@/lib/database.types'
-import { OPTION_COLOR_CLASSES } from '@/lib/field-options'
 import { PlusIcon } from '@/components/icons'
 
 /** One card's worth of form fields, matching the cards on the record itself. */
@@ -72,7 +71,7 @@ export function ChipGroup({
             className="peer sr-only"
           />
           <span
-            className={`badge transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[option.color]} opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
+            className={SELECTABLE_CHIP}
           >
             {option.value}
           </span>
@@ -81,6 +80,16 @@ export function ChipGroup({
     </div>
   )
 }
+
+/*
+ * One look for every toggleable chip. These used to carry each option's own
+ * colour, greyed out until picked; the colours are gone from the records now,
+ * so a picker that still showed them would be promising something the record
+ * will not keep. Selection reads as filled-versus-outlined instead, which is
+ * the same signal without the palette.
+ */
+const SELECTABLE_CHIP =
+  'badge bg-white text-slate-600 ring-1 ring-slate-200 transition-all peer-checked:bg-slate-800 peer-checked:text-white peer-checked:ring-slate-800 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40'
 
 /** Single-select rendered as radio chips, with a way back to nothing selected. */
 export function RadioChips({
@@ -112,7 +121,7 @@ export function RadioChips({
             className="peer sr-only"
           />
           <span
-            className={`badge transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[option.color]} opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
+            className={SELECTABLE_CHIP}
           >
             {option.value}
           </span>
@@ -161,7 +170,7 @@ export function ProductChips({
             defaultChecked={selected.includes(product.id)}
             className="peer sr-only"
           />
-          <span className="badge bg-brand-100 text-brand-700 opacity-45 grayscale transition-all peer-checked:opacity-100 peer-checked:grayscale-0 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40">
+          <span className={SELECTABLE_CHIP}>
             {product.name}
           </span>
         </label>

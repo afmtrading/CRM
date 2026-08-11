@@ -4,7 +4,7 @@ import { requireAdmin, scoped } from '@/lib/tenancy'
 import { contactName, formatCurrency } from '@/lib/format'
 import { DateTime } from '@/components/date-time'
 import type { CompanyRow, ContactRow, ProductRow, UserRow } from '@/lib/database.types'
-import { Avatar, EmptyState, PageHeader, Section } from '@/components/ui'
+import { EmptyState, PageHeader, Section } from '@/components/ui'
 
 import { restoreCompany, restoreContact, restoreProduct } from '../actions'
 
@@ -87,7 +87,6 @@ export default async function DeletedRecordsPage() {
                         <tr key={contact.id}>
                           <td>
                             <div className="flex items-center gap-3">
-                              <Avatar name={name} className="h-8 w-8" />
                               <Link
                                 href={`/contacts/${contact.id}`}
                                 className="font-medium text-slate-900 hover:text-brand-700"
@@ -134,7 +133,6 @@ export default async function DeletedRecordsPage() {
                       <tr key={company.id}>
                         <td>
                           <div className="flex items-center gap-3">
-                            <Avatar name={company.name} className="h-8 w-8 rounded-xl" />
                             <Link
                               href={`/companies/${company.id}`}
                               className="font-medium text-slate-900 hover:text-brand-700"

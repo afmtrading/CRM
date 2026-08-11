@@ -116,7 +116,7 @@ export function CompanyForm({
       {/* Second, so the form reads in the order the record does. */}
       <FormCard title={COMPANY_CARDS[3].label} description={COMPANY_CARDS[3].description}>
         <div className="sm:col-span-2">
-          <span className="label">Specialty market</span>
+          <span className="label">Market</span>
           <ChipGroup
             name="specialty_market"
             options={optionsFor('specialty_market')}

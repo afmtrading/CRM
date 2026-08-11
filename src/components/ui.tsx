@@ -1,7 +1,6 @@
 import Link from 'next/link'
 
 import type { LifecycleStage, DealStatus } from '@/lib/database.types'
-import { initials } from '@/lib/format'
 import { TrendingUpIcon, type IconComponent } from '@/components/icons'
 
 export function PageHeader({
@@ -125,25 +124,6 @@ export function StatGrid({ children }: { children: React.ReactNode }) {
   return <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
 }
 
-const AVATAR_TONES = [
-  'bg-blue-100 text-blue-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',
-  'bg-violet-100 text-violet-700',
-  'bg-rose-100 text-rose-700',
-  'bg-cyan-100 text-cyan-700',
-]
-
-/**
- * Monogram avatar. The tint is derived from the name so the same person keeps
- * the same colour across pages without storing anything.
- */
-export function Avatar({ name, className = 'h-9 w-9' }: { name: string; className?: string }) {
-  let hash = 0
-  for (let i = 0; i < name.length; i += 1) hash = (hash + name.charCodeAt(i)) % AVATAR_TONES.length
-  return <span className={`avatar ${className} ${AVATAR_TONES[hash]}`}>{initials(name) || '?'}</span>
-}
-
 /**
  * Lead score as a small stepped meter plus the raw number. The bars give the
  * list a shape to scan; the number stays for anyone who needs the real value.
@@ -168,25 +148,13 @@ export function ScoreMeter({ score }: { score: number }) {
   )
 }
 
-const LIFECYCLE_STYLES: Record<LifecycleStage, string> = {
-  lead: 'bg-slate-100 text-slate-700',
-  qualified: 'bg-amber-100 text-amber-800',
-  customer: 'bg-emerald-100 text-emerald-800',
-  other: 'bg-slate-100 text-slate-600',
-}
-
+/** Plain text, like every other stored value — see OptionBadge for why. */
 export function LifecycleBadge({ stage }: { stage: LifecycleStage }) {
-  return <span className={`badge ${LIFECYCLE_STYLES[stage]}`}>{stage}</span>
-}
-
-const DEAL_STATUS_STYLES: Record<DealStatus, string> = {
-  open: 'bg-blue-100 text-blue-700',
-  won: 'bg-emerald-100 text-emerald-700',
-  lost: 'bg-red-100 text-red-700',
+  return <span>{stage}</span>
 }
 
 export function DealStatusBadge({ status }: { status: DealStatus }) {
-  return <span className={`badge ${DEAL_STATUS_STYLES[status]}`}>{status}</span>
+  return <span>{status}</span>
 }
 
 export function ErrorNote({ children }: { children: React.ReactNode }) {
