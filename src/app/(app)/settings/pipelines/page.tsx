@@ -7,6 +7,7 @@ import {
   createStage,
   deletePipeline,
   deleteStage,
+  renamePipeline,
   setDefaultPipeline,
   updateStage,
 } from '../actions'
@@ -52,7 +53,30 @@ export default async function PipelineSettingsPage() {
               key={pipeline.id}
               title={pipeline.name}
               actions={
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/*
+                    The heading keeps showing the current name; this renames it.
+                    Same shape as the stage rows below — a field with its value
+                    in it and a Save beside it — rather than a separate mode.
+                  */}
+                  <form action={renamePipeline} className="flex items-center gap-1.5">
+                    <input type="hidden" name="id" value={pipeline.id} />
+                    <label className="sr-only" htmlFor={`pipeline-name-${pipeline.id}`}>
+                      Name for {pipeline.name}
+                    </label>
+                    <input
+                      id={`pipeline-name-${pipeline.id}`}
+                      name="name"
+                      defaultValue={pipeline.name}
+                      required
+                      maxLength={120}
+                      className="input w-44 py-1 text-xs"
+                    />
+                    <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                      Rename
+                    </button>
+                  </form>
+
                   {pipeline.is_default ? (
                     <span className="badge bg-brand-50 text-brand-700">default</span>
                   ) : (
