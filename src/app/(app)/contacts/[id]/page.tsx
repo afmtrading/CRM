@@ -6,6 +6,7 @@ import { contactName, formatDay } from "@/lib/format";
 import { DateTime } from "@/components/date-time";
 import { Money } from "@/components/money";
 import {
+  COMPANY_CARDS,
   CONTACT_CARDS,
   daysUntilBirthday,
   renderMarkdown,
@@ -169,15 +170,15 @@ export default async function ContactDetailPage({
   const customValues = (contact.custom_fields ?? {}) as Record<string, unknown>;
 
   /*
-   * The Company card's own fields. "Stock type", "Regions" and "Size" are
-   * custom fields on the business rather than columns, so the card takes
-   * whatever is defined on the company's Company info card instead of naming
-   * them — add a fourth one there and it appears here too, which is the point
-   * of mirroring rather than listing.
+   * The Company Rating card, mirrored from the business. "Stock type",
+   * "Regions" and "Size" are custom fields rather than columns, so the card
+   * takes whatever is filed under the company's own Company Rating card
+   * instead of naming them — file a fourth one there and it appears here too,
+   * which is the point of mirroring rather than listing.
    */
   const company = contact.companies;
   const companyCustomFields = allCustomFields.filter(
-    (field) => field.entity_type === "company" && field.card === "details",
+    (field) => field.entity_type === "company" && field.card === "rating",
   );
   const companyCustomValues = (company?.custom_fields ?? {}) as Record<
     string,
@@ -513,7 +514,7 @@ export default async function ContactDetailPage({
           */}
           {company && (
             <Section
-              title="Company"
+              title={COMPANY_CARDS[3].label}
               actions={
                 <CardLink href={`/companies/${company.id}`}>
                   {company.name}

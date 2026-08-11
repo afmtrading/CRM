@@ -103,6 +103,19 @@ export function CompanyForm({
           />
         </div>
         <div className="sm:col-span-2">
+          <span className="label">Addresses</span>
+          <AddressesEditor defaultValue={addresses} />
+        </div>
+        <CustomFieldInputs
+          fields={customByCard('details')}
+          values={custom}
+          fieldOptions={fieldOptions}
+        />
+      </FormCard>
+
+      {/* Second, so the form reads in the order the record does. */}
+      <FormCard title={COMPANY_CARDS[3].label} description={COMPANY_CARDS[3].description}>
+        <div className="sm:col-span-2">
           <span className="label">Specialty market</span>
           <ChipGroup
             name="specialty_market"
@@ -118,12 +131,8 @@ export function CompanyForm({
             selected={company?.customer_type ?? []}
           />
         </div>
-        <div className="sm:col-span-2">
-          <span className="label">Addresses</span>
-          <AddressesEditor defaultValue={addresses} />
-        </div>
         <CustomFieldInputs
-          fields={customByCard('details')}
+          fields={customByCard('rating')}
           values={custom}
           fieldOptions={fieldOptions}
         />
