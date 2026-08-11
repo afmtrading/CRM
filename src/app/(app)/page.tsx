@@ -6,6 +6,9 @@ import type { ActivityRow, PipelineValueReportRow } from '@/lib/database.types'
 import { PageHeader, Section, StatCard, StatGrid } from '@/components/ui'
 import { ContactsIcon, CurrencyIcon, DealsIcon } from '@/components/icons'
 import { DueDate } from '@/components/due-date'
+import { MailboxNudge } from '@/components/mailbox-nudge'
+import { isGoogleConfigured } from '@/lib/env'
+import { isTokenKeyConfigured } from '@/lib/crypto'
 
 import { OpenTasksCard } from './open-tasks-card'
 
@@ -19,7 +22,11 @@ export default async function DashboardPage({
   const { error } = await searchParams
   const context = await requireSession()
 
-  const [contacts, openDeals, myTasks, report] = await Promise.all([
+  // Only worth asking when connecting is actually possible: the feature has to
+  // be configured, and a read-only role cannot connect one at all.
+  const mailboxOffered = isGoogleConfigured() && isTokenKeyConfigured() && context.canWrite
+
+  const [contacts, openDeals, myTasks, report, mailboxes] = await Promise.all([
     scoped(context, 'contacts')
       .select('id', { count: 'exact', head: true })
       .is('duplicate_of_id', null)
@@ -33,6 +40,9 @@ export default async function DashboardPage({
       .order('due_date', { ascending: true, nullsFirst: false })
       .limit(8),
     context.supabase.rpc('report_pipeline_value', { p_pipeline_id: null, p_owner_id: null }),
+    mailboxOffered
+      ? scoped(context, 'mailbox_connections').select('id, status').eq('user_id', context.user.id)
+      : Promise.resolve({ data: [] as { id: string; status: string }[] }),
   ])
 
   const currency = context.organization.default_currency
@@ -44,12 +54,31 @@ export default async function DashboardPage({
 
   const tasks = (myTasks.data ?? []) as ActivityRow[]
 
+  /*
+   * Nothing at all once a mailbox is syncing. Somebody whose only connection
+   * has expired is shown the reconnect nudge instead of the connect one — the
+   * weekly expiry is silent otherwise, and a mailbox that quietly stopped
+   * collecting mail is worse than one that was never connected.
+   */
+  const connections = (mailboxes.data ?? []) as { id: string; status: string }[]
+  const nudge = !mailboxOffered
+    ? null
+    : connections.some((connection) => connection.status === 'active')
+      ? null
+      : connections.some((connection) => connection.status === 'needs_reauth')
+        ? ('reconnect' as const)
+        : connections.length === 0
+          ? ('connect' as const)
+          : null
+
   return (
     <>
       <PageHeader
         title={`Welcome back, ${context.user.name?.split(' ')[0] || context.user.email}`}
         description={context.organization.name}
       />
+
+      {nudge && <MailboxNudge nudge={nudge} />}
 
       {error === 'admin-required' && (
         <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
