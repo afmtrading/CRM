@@ -49,5 +49,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/07_products.sql
 echo "→ mailbox connection tests"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/08_mailboxes.sql"
 
+echo "→ stage ordering tests"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/09_stage_ordering.sql"
+
 echo
 echo "All database tests passed."
