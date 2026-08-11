@@ -8,7 +8,7 @@ import {
   groupRows,
   parseFilterConfig,
 } from "@/lib/filters";
-import { contactName, formatDate } from "@/lib/format";
+import { contactName } from "@/lib/format";
 import type {
   FieldOptionRow,
   ContactRow,
@@ -19,11 +19,14 @@ import type {
 } from "@/lib/database.types";
 import { FilterBar } from "@/components/filter-bar";
 import {
+  OptionBadge,
+  OptionBadges,
+  optionColor,
+} from "@/components/contact-cards";
+import {
   Avatar,
   EmptyState,
-  LifecycleBadge,
   PageHeader,
-  ScoreMeter,
   StatCard,
   StatGrid,
 } from "@/components/ui";
@@ -62,17 +65,19 @@ export default async function ContactsPage({
     { data: customFields },
     { data: owners },
     { data: companies },
-    { data: contactFieldOptions },
+    { data: fieldOptionRows },
   ] = await Promise.all([
     scoped(context, "saved_filters").select("*").eq("entity_type", "contact"),
+    // Company definitions come back too: the list shows a region, which is a
+    // field of the business rather than of the person.
     scoped(context, "custom_field_definitions")
       .select("*")
-      .eq("entity_type", "contact"),
+      .in("entity_type", ["contact", "company"]),
     scoped(context, "users").select("*").order("name"),
     scoped(context, "companies").select("id, name").order("name"),
     scoped(context, "field_options")
       .select("*")
-      .eq("entity_type", "contact")
+      .in("entity_type", ["contact", "company"])
       .order("order"),
   ]);
 
@@ -112,10 +117,42 @@ export default async function ContactsPage({
   const ownerList = (owners ?? []) as UserRow[];
   const companyList = (companies ?? []) as Pick<CompanyRow, "id" | "name">[];
 
+  const allDefinitions = (customFields ?? []) as CustomFieldDefinitionRow[];
+  const allOptions = (fieldOptionRows ?? []) as FieldOptionRow[];
+
+  const contactDefinitions = allDefinitions.filter(
+    (field) => field.entity_type === "contact",
+  );
+  const contactOptions = allOptions.filter(
+    (option) => option.entity_type === "contact",
+  );
+  const optionsFor = (key: string) =>
+    contactOptions.filter((option) => option.field_key === key);
+
+  /*
+   * Region is a custom field on the company, so the column has to find it by
+   * name rather than by column. Matched the way the migration that created the
+   * card matched it — if a business calls the field something else entirely,
+   * the column stays empty rather than guessing at a different field.
+   */
+  const regionField = allDefinitions.find(
+    (field) =>
+      field.entity_type === "company" &&
+      (["regions", "region"].includes(field.label.toLowerCase()) ||
+        ["regions", "region"].includes(field.key.toLowerCase())),
+  );
+  const regionOptions = regionField
+    ? allOptions.filter(
+        (option) =>
+          option.entity_type === "company" &&
+          option.field_key === regionField.key,
+      )
+    : [];
+
   const fields = fieldsFor(
     "contact",
-    (customFields ?? []) as CustomFieldDefinitionRow[],
-    (contactFieldOptions ?? []) as FieldOptionRow[],
+    contactDefinitions,
+    contactOptions,
   ).map((field) => {
     if (field.key === "owner_id") {
       return {
@@ -139,7 +176,7 @@ export default async function ContactsPage({
   });
 
   let query = scoped(context, "contacts")
-    .select("*, companies(id, name)", { count: "exact" })
+    .select("*, companies(id, name, custom_fields)", { count: "exact" })
     // Merged-away records stay in the table as tombstones; the list shows survivors.
     .is("duplicate_of_id", null)
     .is("deleted_at", null);
@@ -151,8 +188,20 @@ export default async function ContactsPage({
   const [totalStat, newThisMonth, customers, unassigned] = await statsPromise;
 
   const rows = (contacts ?? []) as (ContactRow & {
-    companies: { id: string; name: string } | null;
+    companies: {
+      id: string;
+      name: string;
+      custom_fields: Record<string, unknown>;
+    } | null;
   })[];
+
+  /** The regions on a contact's employer, as a list whichever way it is stored. */
+  const regionsOf = (company: { custom_fields: Record<string, unknown> } | null) => {
+    if (!company || !regionField) return [];
+    const raw = company.custom_fields?.[regionField.key];
+    if (raw === undefined || raw === null || raw === "") return [];
+    return Array.isArray(raw) ? raw.map(String) : [String(raw)];
+  };
 
   const ownerNames = new Map(
     ownerList.map((user) => [user.id, user.name || user.email]),
@@ -279,13 +328,20 @@ export default async function ContactsPage({
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
+                    {/*
+                      The list answers "who is worth calling" rather than "when
+                      was this typed in": priority, role and credibility are
+                      what a rep sorts on, and the region is the company's, not
+                      the person's. Email and lifecycle stage left the row —
+                      the mail icon covers one, the record page the other.
+                    */}
                     <tr>
                       <th>Name</th>
-                      <th>Company</th>
-                      <th>Stage</th>
-                      <th>Score</th>
                       <th>Owner</th>
-                      <th>Created</th>
+                      <th>Priority</th>
+                      <th>Role type</th>
+                      <th>Credibility</th>
+                      <th>Region</th>
                       <th className="text-right">Actions</th>
                     </tr>
                   </thead>
@@ -297,9 +353,10 @@ export default async function ContactsPage({
                           key={contact.id}
                           className="transition-colors hover:bg-slate-50/70"
                         >
-                          {/* Email and phone ride under the name rather than
-                              taking their own columns — the row stays scannable
-                              and the contact details stay together. */}
+                          {/* The company rides under the name rather than
+                              taking its own column — who someone is and who
+                              they work for read as one thing, and the row gets
+                              a column back for what they are worth. */}
                           <td>
                             <div className="flex items-center gap-3">
                               <Avatar name={name} />
@@ -310,39 +367,63 @@ export default async function ContactsPage({
                                 >
                                   {name}
                                 </Link>
-                                <span className="block truncate text-xs text-slate-500">
-                                  {contact.email ??
-                                    contact.phone ??
-                                    "No contact details"}
-                                </span>
+                                {contact.companies ? (
+                                  <Link
+                                    href={`/companies/${contact.companies.id}`}
+                                    className="block truncate text-xs text-slate-500 hover:text-brand-700 hover:underline"
+                                  >
+                                    {contact.companies.name}
+                                  </Link>
+                                ) : (
+                                  <span className="block truncate text-xs text-slate-400">
+                                    No company
+                                  </span>
+                                )}
                               </div>
                             </div>
-                          </td>
-                          <td className="text-slate-600">
-                            {contact.companies ? (
-                              <Link
-                                href={`/companies/${contact.companies.id}`}
-                                className="hover:text-brand-700 hover:underline"
-                              >
-                                {contact.companies.name}
-                              </Link>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td>
-                            <LifecycleBadge stage={contact.lifecycle_stage} />
-                          </td>
-                          <td>
-                            <ScoreMeter score={contact.lead_score} />
                           </td>
                           <td className="text-slate-600">
                             {contact.owner_id
                               ? (ownerNames.get(contact.owner_id) ?? "—")
                               : "—"}
                           </td>
-                          <td className="text-slate-500">
-                            {formatDate(contact.created_at)}
+                          <td>
+                            {contact.priority ? (
+                              <OptionBadge
+                                value={contact.priority}
+                                color={optionColor(
+                                  optionsFor("priority"),
+                                  contact.priority,
+                                )}
+                              />
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <OptionBadges
+                              values={contact.role_type}
+                              options={optionsFor("role_type")}
+                            />
+                          </td>
+                          <td>
+                            {contact.credibility ? (
+                              <OptionBadge
+                                value={contact.credibility}
+                                color={optionColor(
+                                  optionsFor("credibility"),
+                                  contact.credibility,
+                                )}
+                              />
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <OptionBadges
+                              values={regionsOf(contact.companies)}
+                              options={regionOptions}
+                            />
                           </td>
                           <td>
                             <div className="flex items-center justify-end gap-1">
