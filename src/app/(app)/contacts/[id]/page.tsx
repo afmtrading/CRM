@@ -2,12 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession, scoped, firstRow } from "@/lib/tenancy";
-import {
-  contactName,
-  formatCurrency,
-  formatDay,
-} from "@/lib/format";
+import { contactName, formatDay } from "@/lib/format";
 import { DateTime } from "@/components/date-time";
+import { Money } from "@/components/money";
 import {
   CONTACT_CARDS,
   daysUntilBirthday,
@@ -253,77 +250,74 @@ export default async function ContactDetailPage({
         </div>
       )}
 
-      {/* Contact details spans the full width above everything else — it is
-          what someone opened the page for. */}
-      <div className="mb-5">
-        <Section title={CONTACT_CARDS[0].label}>
-          <div className="mb-4 flex items-center gap-3">
-            <Avatar name={name} className="h-11 w-11 text-sm" />
-            <div className="min-w-0">
-              <p className="truncate font-semibold text-slate-900">{name}</p>
-              <p className="truncate text-xs text-slate-500">
-                {contact.job_title ?? "No job title"}
-              </p>
-            </div>
-          </div>
-
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Company">
-              {contact.companies ? (
-                <CardLink href={`/companies/${contact.companies.id}`}>
-                  {contact.companies.name}
-                </CardLink>
-              ) : (
-                <Empty />
-              )}
-            </Field>
-            <Field label="Job title">{contact.job_title || <Empty />}</Field>
-            <Field label="Primary email" wide>
-              <ContactMethod value={contact.email} kind="email" label={name} />
-            </Field>
-            <Field label="Mobile phone" wide>
-              <ContactMethod value={contact.phone} kind="phone" label={name} />
-            </Field>
-            <Field label="Office phone" wide>
-              <ContactMethod
-                value={contact.office_phone}
-                kind="phone"
-                label={name}
-              />
-            </Field>
-            <CustomFieldValues
-              fields={customByCard("details")}
-              values={customValues}
-              fieldOptions={options}
-            />
-          </dl>
-        </Section>
-      </div>
-
       {/*
-        The remaining cards sit in the right-hand column on a wide screen. Below
-        lg the layout is a single column and they come first, ahead of the
-        activity feed.
+        Three regions rather than two columns, the same as a company: the
+        record, the sidebar beside it, and everything the record accumulates
+        underneath. The record used to span the whole page with a band of empty
+        space to its right, which is where Influence now starts.
       */}
-      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
-        <div className="order-2 space-y-5 lg:order-1 lg:col-span-2">
-          <Section title="Activity">
-            <ActivityComposer
-              relatedToType="contact"
-              relatedToId={id}
-              users={userList}
-              currentUserId={context.user.id}
-            />
-            <div className="mt-4 border-t border-slate-100 pt-2">
-              <ActivityTimeline
-                activities={(activities ?? []) as ActivityRow[]}
-                users={userList}
-                returnTo={`/contacts/${id}`}
-                emptyMessage="No calls, emails, meetings, notes or tasks logged for this contact yet."
-              />
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:items-start">
+        {/* Contact details leads — it is what someone opened the page for. */}
+        <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1">
+          <Section title={CONTACT_CARDS[0].label}>
+            <div className="mb-4 flex items-center gap-3">
+              <Avatar name={name} className="h-11 w-11 text-sm" />
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-900">{name}</p>
+                <p className="truncate text-xs text-slate-500">
+                  {contact.job_title ?? "No job title"}
+                </p>
+              </div>
             </div>
-          </Section>
 
+            {/*
+              Two columns rather than four, for the narrower card. The email
+              keeps a row of its own because addresses are the long value here;
+              the two phone numbers are short enough to sit side by side.
+            */}
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <Field label="Company">
+                {contact.companies ? (
+                  <CardLink href={`/companies/${contact.companies.id}`}>
+                    {contact.companies.name}
+                  </CardLink>
+                ) : (
+                  <Empty />
+                )}
+              </Field>
+              <Field label="Job title">{contact.job_title || <Empty />}</Field>
+              <Field label="Primary email" wide>
+                <ContactMethod
+                  value={contact.email}
+                  kind="email"
+                  label={name}
+                />
+              </Field>
+              <Field label="Mobile phone">
+                <ContactMethod value={contact.phone} kind="phone" label={name} />
+              </Field>
+              <Field label="Office phone">
+                <ContactMethod
+                  value={contact.office_phone}
+                  kind="phone"
+                  label={name}
+                />
+              </Field>
+              <CustomFieldValues
+                fields={customByCard("details")}
+                values={customValues}
+                fieldOptions={options}
+              />
+            </dl>
+          </Section>
+        </div>
+
+        {/*
+          Deals sit directly under the record, ahead of the activity feed. What
+          this person is involved in selling is usually the reason their page
+          was opened, and it was below the whole feed.
+        */}
+        <div className="order-3 space-y-5 lg:col-span-2 lg:col-start-1 lg:row-start-2">
           <Section
             title="Deals"
             actions={
@@ -363,7 +357,13 @@ export default async function ContactDetailPage({
                           </Link>
                         </td>
                         <td>{deal.stages?.name ?? "—"}</td>
-                        <td>{formatCurrency(deal.value, deal.currency)}</td>
+                        <td>
+                          <Money
+                            value={Number(deal.value ?? 0)}
+                            currency={deal.currency}
+                            amountClassName="font-medium"
+                          />
+                        </td>
                         <td>
                           <DealStatusBadge status={deal.status} />
                         </td>
@@ -375,10 +375,33 @@ export default async function ContactDetailPage({
               </div>
             )}
           </Section>
+
+          <Section title="Activity">
+            <ActivityComposer
+              relatedToType="contact"
+              relatedToId={id}
+              users={userList}
+              currentUserId={context.user.id}
+            />
+            <div className="mt-4 border-t border-slate-100 pt-2">
+              <ActivityTimeline
+                activities={(activities ?? []) as ActivityRow[]}
+                users={userList}
+                returnTo={`/contacts/${id}`}
+                emptyMessage="No calls, emails, meetings, notes or tasks logged for this contact yet."
+              />
+            </div>
+          </Section>
         </div>
 
-        <div className="order-1 space-y-5 lg:order-2">
-          {/* ---------------------------------------------------------------- */}
+        {/*
+          The sidebar starts level with the record on a wide screen, and comes
+          straight after it on a narrow one — ahead of the activity feed, which
+          is long and is not what most visits are for. Influence leads it: how
+          much weight this person carries is the first thing worth knowing
+          about them after who they are.
+        */}
+        <div className="order-2 space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
           <Section title={CONTACT_CARDS[1].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
               <Field label="Role type" wide>
