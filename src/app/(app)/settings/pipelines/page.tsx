@@ -7,6 +7,7 @@ import {
   createStage,
   deletePipeline,
   deleteStage,
+  movePipeline,
   moveStage,
   renamePipeline,
   setDefaultPipeline,
@@ -19,22 +20,26 @@ export const metadata = { title: 'Pipelines · FLO CRM' }
  * One nudge up or down the list.
  *
  * Disabled at the ends rather than hidden, so the row does not change width as
- * a stage travels and the buttons stay where the eye left them.
+ * a stage travels and the buttons stay where the eye left them. The action is
+ * a prop because stages and pipelines are reordered the same way, by different
+ * functions.
  */
 function MoveButton({
-  stageId,
+  action,
+  id,
   direction,
   disabled,
   label,
 }: {
-  stageId: string
+  action: (formData: FormData) => Promise<void>
+  id: string
   direction: 'up' | 'down'
   disabled: boolean
   label: string
 }) {
   return (
-    <form action={moveStage}>
-      <input type="hidden" name="id" value={stageId} />
+    <form action={action}>
+      <input type="hidden" name="id" value={id} />
       <input type="hidden" name="direction" value={direction} />
       <button
         type="submit"
@@ -53,7 +58,7 @@ export default async function PipelineSettingsPage() {
   const context = await requireAdmin()
 
   const [{ data: pipelines }, { data: stages }] = await Promise.all([
-    scoped(context, 'pipelines').select('*').order('name'),
+    scoped(context, 'pipelines').select('*').order('order'),
     scoped(context, 'stages').select('*').order('order'),
   ])
 
@@ -80,7 +85,7 @@ export default async function PipelineSettingsPage() {
       </form>
 
       <div className="space-y-5">
-        {pipelineList.map((pipeline) => {
+        {pipelineList.map((pipeline, pipelineIndex) => {
           const pipelineStages = stageList.filter((stage) => stage.pipeline_id === pipeline.id)
 
           return (
@@ -89,6 +94,30 @@ export default async function PipelineSettingsPage() {
               title={pipeline.name}
               actions={
                 <div className="flex flex-wrap items-center gap-2">
+                  {/*
+                    Where this pipeline sits in the bar above the deals board.
+                    Up and down rather than left and right, because the list
+                    here runs vertically even though the bar does not.
+                  */}
+                  {pipelineList.length > 1 && (
+                    <div className="flex flex-col">
+                      <MoveButton
+                        action={movePipeline}
+                        id={pipeline.id}
+                        direction="up"
+                        disabled={pipelineIndex === 0}
+                        label={`Move ${pipeline.name} earlier`}
+                      />
+                      <MoveButton
+                        action={movePipeline}
+                        id={pipeline.id}
+                        direction="down"
+                        disabled={pipelineIndex === pipelineList.length - 1}
+                        label={`Move ${pipeline.name} later`}
+                      />
+                    </div>
+                  )}
+
                   {/*
                     The heading keeps showing the current name; this renames it.
                     Same shape as the stage rows below — a field with its value
@@ -153,13 +182,15 @@ export default async function PipelineSettingsPage() {
                           <div className="flex items-center gap-2 px-3 py-2">
                             <div className="flex shrink-0 flex-col">
                               <MoveButton
-                                stageId={stage.id}
+                                action={moveStage}
+                                id={stage.id}
                                 direction="up"
                                 disabled={first}
                                 label={`Move ${stage.name} up`}
                               />
                               <MoveButton
-                                stageId={stage.id}
+                                action={moveStage}
+                                id={stage.id}
                                 direction="down"
                                 disabled={last}
                                 label={`Move ${stage.name} down`}

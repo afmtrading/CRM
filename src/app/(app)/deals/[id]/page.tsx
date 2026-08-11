@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
 import { contactName, formatCurrency, formatDay, formatNumber, formatPercent } from '@/lib/format'
+import { renderMarkdown } from '@/lib/field-options'
 import type {
   ActivityRow,
   DealProductRow,
@@ -81,6 +82,8 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   const followsProducts = deal.value_source === 'products'
   const valueDiffers =
     !followsProducts && lineItems.length > 0 && Math.abs(lineTotal - Number(deal.value)) > 0.005
+
+  const notesHtml = renderMarkdown(deal.notes)
 
   return (
     <>
@@ -268,6 +271,26 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
                   action={addDealProduct}
                 />
               </div>
+            )}
+          </Section>
+
+          <Section title="Notes">
+            {notesHtml ? (
+              <div
+                className="space-y-2 text-sm leading-relaxed text-slate-700"
+                // Safe by construction: renderMarkdown escapes the stored text
+                // before applying formatting, so the only markup here is what it
+                // generated. Covered by tests/field-options.test.ts.
+                dangerouslySetInnerHTML={{ __html: notesHtml }}
+              />
+            ) : (
+              <p className="text-sm text-slate-400">
+                Nothing written down yet.{' '}
+                <Link href={`/deals/${id}/edit`} className="text-brand-700 hover:underline">
+                  Add a note
+                </Link>
+                .
+              </p>
             )}
           </Section>
 

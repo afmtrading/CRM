@@ -235,6 +235,29 @@ export function DealForm({
             ))}
           </select>
         </div>
+
+        {/*
+          What the deal is actually about, in the same markdown the contact and
+          company cards use — so the note reads the same wherever it is written
+          and there is one renderer rather than two.
+        */}
+        <div className="sm:col-span-2">
+          <label className="label" htmlFor="notes">
+            Notes
+          </label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows={8}
+            maxLength={20000}
+            className="input font-normal"
+            defaultValue={deal?.notes ?? ''}
+            placeholder={'What is this deal about?\n\n- **bold**, *italic*, [links](https://…)\n- bullets and 1. numbered lists\n- # headings'}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Markdown: **bold**, *italic*, `#` headings, `-` bullets, `1.` numbers, [links](url).
+          </p>
+        </div>
       </div>
 
       <div className="flex gap-2">

@@ -38,7 +38,9 @@ export default async function DealsPage({
 
   const [{ data: pipelines }, { data: users }, { data: products }, { data: savedViews }] =
     await Promise.all([
-      scoped(context, 'pipelines').select('*').order('name'),
+      // The bar above the board runs in the order an admin arranged, not
+      // alphabetically — see settings/pipelines.
+      scoped(context, 'pipelines').select('*').order('order'),
       scoped(context, 'users').select('*').order('name'),
       scoped(context, 'products').select('id, name').is('deleted_at', null).order('name'),
       /*
@@ -140,9 +142,21 @@ export default async function DealsPage({
   }
   const userList = (users ?? []) as UserRow[]
   const ownerNames = Object.fromEntries(userList.map((user) => [user.id, user.name || user.email]))
-  const stageNames = new Map(stageList.map((stage) => [stage.id, stage.name]))
 
   const totalValue = dealRows.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
+
+  /*
+   * The list view is the same board read downwards, so it is grouped the same
+   * way. Stages with nothing in them are left out here — the kanban is where
+   * you go to see an empty column; a run of headings saying "none" only makes
+   * the deals that do exist harder to find.
+   */
+  const listGroups = stageList
+    .map((stage) => ({
+      stage,
+      deals: dealRows.filter((deal) => deal.stage_id === stage.id),
+    }))
+    .filter((group) => group.deals.length > 0)
 
   const linkParams = (overrides: Record<string, string | undefined>) => {
     const next = new URLSearchParams()
@@ -226,65 +240,83 @@ export default async function DealsPage({
           ownerNames={ownerNames}
           productNames={productNames}
         />
+      ) : listGroups.length === 0 ? (
+        <div className="card py-10 text-center text-sm text-slate-500">
+          No deals match this view.
+        </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Deal</th>
-                <th>Stage</th>
-                <th>Value</th>
-                <th>Probability</th>
-                <th>Status</th>
-                <th>Owner</th>
-                <th>Expected close</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dealRows.map((deal: DealRow & { companies: { name: string } | null }) => (
-                <tr key={deal.id} className="hover:bg-slate-50">
-                  <td>
-                    <Link href={`/deals/${deal.id}`} className="font-medium text-brand-700 hover:underline">
-                      {deal.name}
-                    </Link>
-                    {deal.companies && (
-                      <span className="ml-2 text-xs text-slate-400">{deal.companies.name}</span>
-                    )}
-                  </td>
-                  <td>{stageNames.get(deal.stage_id) ?? '—'}</td>
-                  <td>
-                    <Money
-                      value={Number(deal.value ?? 0)}
-                      currency={deal.currency}
-                      amountClassName="font-medium"
-                    />
-                  </td>
-                  <td>
-                    {formatPercent(deal.probability)}
-                    {deal.probability_overridden && (
-                      <span className="ml-1 text-xs text-slate-400" title="Manually overridden">
-                        ✎
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <DealStatusBadge status={deal.status} />
-                  </td>
-                  <td className="text-slate-600">
-                    {deal.owner_id ? (ownerNames[deal.owner_id] ?? '—') : '—'}
-                  </td>
-                  <td className="text-slate-500">{formatDay(deal.expected_close_date)}</td>
-                </tr>
-              ))}
-              {dealRows.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center text-sm text-slate-500">
-                    No deals in this pipeline yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {listGroups.map(({ stage, deals: stageDeals }) => {
+            const stageValue = stageDeals.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
+
+            return (
+              <section key={stage.id}>
+                <h2 className="mb-2 flex flex-wrap items-baseline gap-2 px-1">
+                  <span className="text-sm font-semibold text-slate-900">{stage.name}</span>
+                  <span className="text-xs text-slate-400">
+                    {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'} ·{' '}
+                    {formatCurrency(stageValue, context.organization.default_currency)}
+                  </span>
+                </h2>
+
+                <div className="card overflow-hidden">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Deal</th>
+                        <th>Value</th>
+                        <th>Probability</th>
+                        <th>Status</th>
+                        <th>Owner</th>
+                        <th>Expected close</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stageDeals.map((deal: DealRow & { companies: { name: string } | null }) => (
+                        <tr key={deal.id} className="hover:bg-slate-50">
+                          <td>
+                            <Link
+                              href={`/deals/${deal.id}`}
+                              className="font-medium text-brand-700 hover:underline"
+                            >
+                              {deal.name}
+                            </Link>
+                            {deal.companies && (
+                              <span className="ml-2 text-xs text-slate-400">
+                                {deal.companies.name}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <Money
+                              value={Number(deal.value ?? 0)}
+                              currency={deal.currency}
+                              amountClassName="font-medium"
+                            />
+                          </td>
+                          <td>
+                            {formatPercent(deal.probability)}
+                            {deal.probability_overridden && (
+                              <span className="ml-1 text-xs text-slate-400" title="Manually overridden">
+                                ✎
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <DealStatusBadge status={deal.status} />
+                          </td>
+                          <td className="text-slate-600">
+                            {deal.owner_id ? (ownerNames[deal.owner_id] ?? '—') : '—'}
+                          </td>
+                          <td className="text-slate-500">{formatDay(deal.expected_close_date)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )
+          })}
         </div>
       )}
     </>

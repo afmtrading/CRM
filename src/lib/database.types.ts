@@ -233,6 +233,8 @@ export type PipelineRow = {
   organization_id: string
   name: string
   is_default: boolean
+  /** Position in the pipeline bar. Contiguous from 0; see reorder_pipeline(). */
+  order: number
   created_at: string
 }
 
@@ -264,6 +266,8 @@ export type DealRow = {
   value_source: DealValueSource
   expected_close_date: string | null
   actual_close_date: string | null
+  /** Free-form markdown about the deal. */
+  notes: string | null
   status: DealStatus
   owner_id: string | null
   position: number
@@ -554,7 +558,7 @@ export interface Database {
         | 'updated_at'
       >
       company_tags: TableDef<CompanyTagRow, 'organization_id' | 'created_at'>
-      pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'created_at'>
+      pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'order' | 'created_at'>
       stages: TableDef<
         StageRow,
         'id' | 'organization_id' | 'order' | 'default_probability' | 'created_at'
@@ -571,6 +575,7 @@ export interface Database {
         | 'value_source'
         | 'expected_close_date'
         | 'actual_close_date'
+        | 'notes'
         | 'status'
         | 'owner_id'
         | 'position'
@@ -691,6 +696,8 @@ export interface Database {
       set_deal_value_from_products: { Args: { p_deal_id: string }; Returns: void }
       reorder_stage: { Args: { p_stage_id: string; p_position: number }; Returns: void }
       move_stage: { Args: { p_stage_id: string; p_delta: number }; Returns: void }
+      reorder_pipeline: { Args: { p_pipeline_id: string; p_position: number }; Returns: void }
+      move_pipeline: { Args: { p_pipeline_id: string; p_delta: number }; Returns: void }
       soft_delete_product: { Args: { p_product_id: string }; Returns: void }
       restore_product: { Args: { p_product_id: string }; Returns: void }
       soft_delete_contact: { Args: { p_contact_id: string }; Returns: void }

@@ -17,6 +17,9 @@ const dealSchema = z.object({
   expected_close_date: z.string().trim().default(''),
   status: z.enum(['open', 'won', 'lost']).default('open'),
   owner_id: z.string().uuid().or(z.literal('')).default(''),
+  // Markdown, like contact and company notes. Bounded so a paste of an entire
+  // email thread cannot become the row.
+  notes: z.string().trim().max(20000).default(''),
 })
 
 export type DealActionState = { ok?: boolean; error?: string }
@@ -45,6 +48,7 @@ export async function createDeal(_prev: DealActionState, formData: FormData): Pr
       expected_close_date: input.expected_close_date || null,
       status: input.status,
       owner_id: input.owner_id || context.user.id,
+      notes: input.notes || null,
     })
     .select('id')
     .single()
@@ -105,6 +109,7 @@ export async function updateDeal(_prev: DealActionState, formData: FormData): Pr
       expected_close_date: input.expected_close_date || null,
       status: input.status,
       owner_id: input.owner_id || null,
+      notes: input.notes || null,
     })
     .eq('id', id)
 
