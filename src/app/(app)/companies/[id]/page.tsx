@@ -246,18 +246,8 @@ export default async function CompanyDetailPage({
                 />
               </Field>
               <Field label="Contacts">{contactRows.length}</Field>
-              <Field label="Specialty market" wide>
-                <OptionBadges
-                  values={company.specialty_market}
-                  options={optionsFor("specialty_market")}
-                />
-              </Field>
-              <Field label="Company type" wide>
-                <OptionBadges
-                  values={company.customer_type}
-                  options={optionsFor("customer_type")}
-                />
-              </Field>
+              {/* Specialty market and company type moved to Company Rating —
+                  what a business is, rather than how to reach it. */}
               <CustomFieldValues
                 fields={customByCard("details")}
                 values={customValues}
@@ -468,6 +458,33 @@ export default async function CompanyDetailPage({
           long and is not what most visits are for.
         */}
         <div className="order-2 space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
+          {/*
+            Company Rating leads the sidebar, in the place Influence holds on a
+            contact and for the same reason: what kind of business this is, is
+            the first thing worth knowing after which business it is.
+          */}
+          <Section title={COMPANY_CARDS[3].label}>
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <Field label="Specialty market" wide>
+                <OptionBadges
+                  values={company.specialty_market}
+                  options={optionsFor("specialty_market")}
+                />
+              </Field>
+              <Field label="Company type" wide>
+                <OptionBadges
+                  values={company.customer_type}
+                  options={optionsFor("customer_type")}
+                />
+              </Field>
+              <CustomFieldValues
+                fields={customByCard("rating")}
+                values={customValues}
+                fieldOptions={options}
+              />
+            </dl>
+          </Section>
+
           <Section title={COMPANY_CARDS[2].label}>
             {/*
               No website field here: it is the first thing in Company info, and

@@ -15,10 +15,19 @@ export const CONTACT_CARDS: { key: ContactCard; label: string; description: stri
  * The company equivalent. Reuses the same card keys so one custom-field
  * definition can be placed on either record without a second vocabulary.
  */
+/*
+ * Appended rather than inserted: the detail and form pages reach for these by
+ * index, so an entry added in the middle would silently retitle three cards.
+ */
 export const COMPANY_CARDS: { key: ContactCard; label: string; description: string }[] = [
-  { key: 'details', label: 'Company info', description: 'What the business is and where to find it' },
+  { key: 'details', label: 'Company info', description: 'Where to find the business and who owns it here' },
   { key: 'additional', label: 'Additional info', description: 'Ownership and notes' },
   { key: 'digital', label: 'Digital', description: 'Website and social profiles' },
+  {
+    key: 'rating',
+    label: 'Company Rating',
+    description: 'What kind of business it is — market, type, stock, reach and size',
+  },
 ]
 
 /**
@@ -44,6 +53,7 @@ export const PRODUCT_CARD_LABELS = Object.fromEntries(
 export const ALL_CARDS: { key: ContactCard; label: string }[] = [
   { key: 'details', label: 'Details' },
   { key: 'influence', label: 'Influence — contacts' },
+  { key: 'rating', label: 'Company Rating — companies' },
   { key: 'pricing', label: 'Pricing — products' },
   { key: 'digital', label: 'Digital — contacts and companies' },
   { key: 'additional', label: 'Additional info' },

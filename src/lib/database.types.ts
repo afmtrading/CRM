@@ -44,7 +44,14 @@ export type CustomFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' 
  * Which card on a record a field is rendered under. Contacts and companies
  * share the first four; 'pricing' belongs to products alone.
  */
-export type ContactCard = 'details' | 'influence' | 'additional' | 'digital' | 'pricing'
+export type ContactCard =
+  | 'details'
+  | 'influence'
+  | 'additional'
+  | 'digital'
+  | 'pricing'
+  /** Companies only: what kind of business this is, rather than how to reach it. */
+  | 'rating'
 
 /** Palette a select option's colour is drawn from (mapped to classes in lib/field-options.ts). */
 export type OptionColor =
