@@ -15,13 +15,61 @@ export function formatCurrency(value: number, currency = 'CAD'): string {
 /**
  * The amount without its currency, for places that show the code separately.
  *
- * A symbol in front is ambiguous the moment a second currency appears — `$`
- * reads as both CAD and USD, and a board holding both wants them told apart at
- * a glance. `<Money>` in `src/components/money.tsx` pairs this with a coloured
- * code standing to the right of the number.
+ * `<Money>` in `src/components/money.tsx` pairs this with a symbol in front and
+ * a coloured code standing to the right of the number.
  */
 export function formatAmount(value: number): string {
   return new Intl.NumberFormat('en-CA', { maximumFractionDigits: 0 }).format(value ?? 0)
+}
+
+/**
+ * The symbol that goes in front of the number.
+ *
+ * Written out rather than taken from `Intl`, which renders CAD as `$` and USD
+ * as `US$` in one locale and the reverse in another — a difference that reads
+ * as a difference in kind when both sit on the same board. Here the symbol is
+ * only ever decoration; the code to the right of the number is what actually
+ * says which currency it is, so `$` for both dollars is honest.
+ */
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  CAD: '$',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+}
+
+export function currencySymbol(currency: string | null | undefined): string {
+  return CURRENCY_SYMBOLS[(currency ?? '').toUpperCase()] ?? ''
+}
+
+/**
+ * A total per currency, for the places that used to add them all together.
+ *
+ * A column holding 10 CAD and 100 USD has no total: 110 of nothing is not a
+ * number anybody can act on, and converting would need a rate the app does not
+ * have and a date to apply it on. So each currency keeps its own subtotal and
+ * the reader is told the truth — `$10 CAD · $100 USD`.
+ */
+export function totalsByCurrency(
+  rows: { value?: number | string | null; currency?: string | null }[],
+): { currency: string; total: number }[] {
+  const totals = new Map<string, number>()
+
+  for (const row of rows) {
+    const currency = (row.currency ?? '').toUpperCase()
+    totals.set(currency, (totals.get(currency) ?? 0) + Number(row.value ?? 0))
+  }
+
+  // The app's own order first, so a board's currencies always appear in the
+  // same sequence and the eye can go straight to the one it wants.
+  const rank = (currency: string) => {
+    const index = (CURRENCIES as readonly string[]).indexOf(currency)
+    return index === -1 ? CURRENCIES.length : index
+  }
+
+  return [...totals.entries()]
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    .map(([currency, total]) => ({ currency, total }))
 }
 
 /**

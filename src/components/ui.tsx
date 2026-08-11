@@ -10,7 +10,8 @@ export function PageHeader({
   actions,
 }: {
   title: string
-  description?: string
+  /** Usually a line of text, but totals need their own markup to be coloured. */
+  description?: React.ReactNode
   actions?: React.ReactNode
 }) {
   return (

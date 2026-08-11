@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
+import { formatDay, formatPercent } from '@/lib/format'
 import type {
   DealRow,
   PipelineRow,
@@ -10,7 +10,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { DealStatusBadge, EmptyState, PageHeader } from '@/components/ui'
-import { Money } from '@/components/money'
+import { Money, MoneyTotals } from '@/components/money'
 
 import { DealFilters } from './deal-filters'
 import { Kanban, type KanbanDeal } from './kanban'
@@ -143,8 +143,6 @@ export default async function DealsPage({
   const userList = (users ?? []) as UserRow[]
   const ownerNames = Object.fromEntries(userList.map((user) => [user.id, user.name || user.email]))
 
-  const totalValue = dealRows.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
-
   /*
    * The list view is the same board read downwards, so it is grouped the same
    * way. Stages with nothing in them are left out here — the kanban is where
@@ -171,10 +169,15 @@ export default async function DealsPage({
     <>
       <PageHeader
         title="Deals"
-        description={`${dealRows.length} deal${dealRows.length === 1 ? '' : 's'} · ${formatCurrency(
-          totalValue,
-          context.organization.default_currency,
-        )}`}
+        description={
+          <span className="flex flex-wrap items-baseline gap-x-1.5">
+            <span>
+              {dealRows.length} deal{dealRows.length === 1 ? '' : 's'}
+            </span>
+            <span className="text-slate-300">·</span>
+            <MoneyTotals rows={dealRows} />
+          </span>
+        }
         actions={
           <>
             <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
@@ -247,15 +250,16 @@ export default async function DealsPage({
       ) : (
         <div className="space-y-6">
           {listGroups.map(({ stage, deals: stageDeals }) => {
-            const stageValue = stageDeals.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
-
             return (
               <section key={stage.id}>
                 <h2 className="mb-2 flex flex-wrap items-baseline gap-2 px-1">
                   <span className="text-sm font-semibold text-slate-900">{stage.name}</span>
-                  <span className="text-xs text-slate-400">
-                    {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'} ·{' '}
-                    {formatCurrency(stageValue, context.organization.default_currency)}
+                  <span className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-slate-400">
+                    <span>
+                      {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'}
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <MoneyTotals rows={stageDeals} />
                   </span>
                 </h2>
 
