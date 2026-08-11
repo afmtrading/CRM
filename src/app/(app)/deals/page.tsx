@@ -4,6 +4,7 @@ import { requireSession, scoped } from '@/lib/tenancy'
 import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
 import type { DealRow, PipelineRow, StageRow, UserRow } from '@/lib/database.types'
 import { DealStatusBadge, EmptyState, PageHeader } from '@/components/ui'
+import { Money } from '@/components/money'
 
 import { Kanban, type KanbanDeal } from './kanban'
 
@@ -70,6 +71,29 @@ export default async function DealsPage({
   const { data: deals } = await dealQuery.limit(500)
 
   const dealRows = (deals ?? []) as KanbanDeal[]
+
+  /*
+   * What each deal is actually for. Fetched as one query keyed on the deals
+   * already on screen rather than joined into the deal query, because a deal
+   * with four line items would otherwise arrive four times and the board would
+   * have to undo that.
+   */
+  const dealIds = dealRows.map((deal) => deal.id)
+  const { data: lineItems } = dealIds.length
+    ? await scoped(context, 'deal_products').select('deal_id, products(name)').in('deal_id', dealIds)
+    : { data: [] }
+
+  const productNames: Record<string, string[]> = {}
+  for (const item of (lineItems ?? []) as {
+    deal_id: string
+    products: { name: string } | null
+  }[]) {
+    if (!item.products?.name) continue
+    const names = (productNames[item.deal_id] ??= [])
+    // The same product can appear on two lines at different prices; the board
+    // wants to know what is being sold, not how it was itemised.
+    if (!names.includes(item.products.name)) names.push(item.products.name)
+  }
   const userList = (users ?? []) as UserRow[]
   const ownerNames = Object.fromEntries(userList.map((user) => [user.id, user.name || user.email]))
   const stageNames = new Map(stageList.map((stage) => [stage.id, stage.name]))
@@ -160,7 +184,12 @@ export default async function DealsPage({
           }
         />
       ) : view === 'kanban' ? (
-        <Kanban stages={stageList} deals={dealRows} ownerNames={ownerNames} />
+        <Kanban
+          stages={stageList}
+          deals={dealRows}
+          ownerNames={ownerNames}
+          productNames={productNames}
+        />
       ) : (
         <div className="card overflow-hidden">
           <table className="table">
@@ -187,7 +216,13 @@ export default async function DealsPage({
                     )}
                   </td>
                   <td>{stageNames.get(deal.stage_id) ?? '—'}</td>
-                  <td className="font-medium">{formatCurrency(deal.value, deal.currency)}</td>
+                  <td>
+                    <Money
+                      value={Number(deal.value ?? 0)}
+                      currency={deal.currency}
+                      amountClassName="font-medium"
+                    />
+                  </td>
                   <td>
                     {formatPercent(deal.probability)}
                     {deal.probability_overridden && (

@@ -8,6 +8,14 @@ import { DealForm } from '../deal-form'
 
 export const metadata = { title: 'New deal · FLO CRM' }
 
+/**
+ * What the currency field is pre-filled with.
+ *
+ * Not the organization's default currency, which still governs report totals —
+ * this is only the starting value of a dropdown, and the desk trades in USD.
+ */
+const NEW_DEAL_CURRENCY = 'USD'
+
 export default async function NewDealPage({
   searchParams,
 }: {
@@ -42,7 +50,7 @@ export default async function NewDealPage({
         }))}
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
-        defaultCurrency={context.organization.default_currency}
+        defaultCurrency={NEW_DEAL_CURRENCY}
         defaultContactId={contactId}
         submitLabel="Create deal"
       />

@@ -12,6 +12,36 @@ export function formatCurrency(value: number, currency = 'CAD'): string {
   }).format(value ?? 0)
 }
 
+/**
+ * The amount without its currency, for places that show the code separately.
+ *
+ * A symbol in front is ambiguous the moment a second currency appears — `$`
+ * reads as both CAD and USD, and a board holding both wants them told apart at
+ * a glance. `<Money>` in `src/components/money.tsx` pairs this with a coloured
+ * code standing to the right of the number.
+ */
+export function formatAmount(value: number): string {
+  return new Intl.NumberFormat('en-CA', { maximumFractionDigits: 0 }).format(value ?? 0)
+}
+
+/**
+ * A colour per currency, so a mixed board is readable without reading.
+ *
+ * Chosen by the people who use it rather than derived from anything: CAD red,
+ * USD blue, EUR amber, GBP green. Anything else falls back to slate rather
+ * than inventing a colour that would collide with one of these four.
+ */
+export const CURRENCY_STYLES: Record<string, string> = {
+  CAD: 'text-red-600',
+  USD: 'text-blue-600',
+  EUR: 'text-amber-600',
+  GBP: 'text-emerald-600',
+}
+
+export function currencyStyle(currency: string | null | undefined): string {
+  return CURRENCY_STYLES[(currency ?? '').toUpperCase()] ?? 'text-slate-500'
+}
+
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-CA').format(value ?? 0)
 }
