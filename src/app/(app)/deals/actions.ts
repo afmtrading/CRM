@@ -17,6 +17,9 @@ const dealSchema = z.object({
   expected_close_date: z.string().trim().default(''),
   status: z.enum(['open', 'won', 'lost']).default('open'),
   owner_id: z.string().uuid().or(z.literal('')).default(''),
+  // Markdown, like contact and company notes. Bounded so a paste of an entire
+  // email thread cannot become the row.
+  notes: z.string().trim().max(20000).default(''),
 })
 
 export type DealActionState = { ok?: boolean; error?: string }
@@ -45,6 +48,7 @@ export async function createDeal(_prev: DealActionState, formData: FormData): Pr
       expected_close_date: input.expected_close_date || null,
       status: input.status,
       owner_id: input.owner_id || context.user.id,
+      notes: input.notes || null,
     })
     .select('id')
     .single()
@@ -105,6 +109,7 @@ export async function updateDeal(_prev: DealActionState, formData: FormData): Pr
       expected_close_date: input.expected_close_date || null,
       status: input.status,
       owner_id: input.owner_id || null,
+      notes: input.notes || null,
     })
     .eq('id', id)
 
@@ -262,4 +267,59 @@ export async function deleteDeal(formData: FormData) {
 
   revalidatePath('/deals')
   redirect('/deals')
+}
+
+// -----------------------------------------------------------------------------
+// Saved board views (PRD 6.6)
+// -----------------------------------------------------------------------------
+
+/** The parts of the URL a view remembers. Not `view` — see deal-filters.tsx. */
+const VIEW_KEYS = ['pipeline', 'owner', 'product', 'status'] as const
+
+/**
+ * Remembers the current filters under a name.
+ *
+ * Stored as an object rather than the query string it came from, so the shape
+ * survives the day somebody adds a fourth filter or renames a parameter — a
+ * saved string would then replay a URL that no longer means what it did.
+ */
+export async function saveDealView(formData: FormData) {
+  const context = await requireSession()
+
+  const name = String(formData.get('name') ?? '').trim()
+  if (!name) throw new Error('A view needs a name')
+
+  const params = new URLSearchParams(String(formData.get('params') ?? ''))
+  const filter: Record<string, string> = {}
+  for (const key of VIEW_KEYS) {
+    const value = params.get(key)
+    if (value) filter[key] = value
+  }
+
+  const { error } = await scoped(context, 'saved_filters').insert({
+    name: name.slice(0, 80),
+    entity_type: 'deal',
+    filter_json: filter,
+    // Shared views belong to the organization but keep their author, which is
+    // how the interface knows who may delete one.
+    is_shared: formData.get('is_shared') === 'on',
+    user_id: context.user.id,
+  })
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/deals')
+}
+
+/** Your own views only, shared or not — deleting a colleague's is not offered. */
+export async function deleteDealView(formData: FormData) {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await scoped(context, 'saved_filters')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', context.user.id)
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/deals')
 }

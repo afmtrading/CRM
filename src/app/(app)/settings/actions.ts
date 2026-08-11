@@ -59,6 +59,30 @@ export async function renamePipeline(formData: FormData) {
   revalidatePath('/deals')
 }
 
+/**
+ * One place left or right in the pipeline bar.
+ *
+ * The same shape as moveStage, and for the same reason: the neighbour is
+ * resolved in the database so a read and a write cannot interleave with another
+ * administrator's reorder.
+ */
+export async function movePipeline(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+  const delta = formData.get('direction') === 'up' ? -1 : 1
+
+  const { error } = await context.supabase.rpc('move_pipeline', {
+    p_pipeline_id: id,
+    p_delta: delta,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/pipelines')
+  // The bar above the board is drawn from this order.
+  revalidatePath('/deals')
+}
+
 export async function setDefaultPipeline(formData: FormData) {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')

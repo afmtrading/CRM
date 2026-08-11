@@ -2,28 +2,54 @@ import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatCurrency, formatDay, formatPercent } from '@/lib/format'
-import type { DealRow, PipelineRow, StageRow, UserRow } from '@/lib/database.types'
+import type {
+  DealRow,
+  PipelineRow,
+  SavedFilterRow,
+  StageRow,
+  UserRow,
+} from '@/lib/database.types'
 import { DealStatusBadge, EmptyState, PageHeader } from '@/components/ui'
 import { Money } from '@/components/money'
 
+import { DealFilters } from './deal-filters'
 import { Kanban, type KanbanDeal } from './kanban'
 
 export const metadata = { title: 'Deals · FLO CRM' }
 
+/** Matches nothing, for the difference between "no filter" and "filtered to nothing". */
+const NO_SUCH_ID = '00000000-0000-0000-0000-000000000000'
+
 export default async function DealsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; pipeline?: string; owner?: string; status?: string }>
+  searchParams: Promise<{
+    view?: string
+    pipeline?: string
+    owner?: string
+    product?: string
+    status?: string
+  }>
 }) {
   const params = await searchParams
   const context = await requireSession()
 
   const view = params.view === 'list' ? 'list' : 'kanban'
 
-  const [{ data: pipelines }, { data: users }] = await Promise.all([
-    scoped(context, 'pipelines').select('*').order('name'),
-    scoped(context, 'users').select('*').order('name'),
-  ])
+  const [{ data: pipelines }, { data: users }, { data: products }, { data: savedViews }] =
+    await Promise.all([
+      // The bar above the board runs in the order an admin arranged, not
+      // alphabetically — see settings/pipelines.
+      scoped(context, 'pipelines').select('*').order('order'),
+      scoped(context, 'users').select('*').order('name'),
+      scoped(context, 'products').select('id, name').is('deleted_at', null).order('name'),
+      /*
+       * Yours plus anything a colleague chose to share — which is the row-level
+       * policy on saved_filters verbatim, so it is not restated here. Repeating
+       * it would be a second copy of the rule to keep in step with the first.
+       */
+      scoped(context, 'saved_filters').select('*').eq('entity_type', 'deal').order('name'),
+    ])
 
   const pipelineList = (pipelines ?? []) as PipelineRow[]
   const activePipeline =
@@ -60,13 +86,33 @@ export default async function DealsPage({
 
   let dealQuery = scoped(context, 'deals')
     .select('*, contacts(id, first_name, last_name), companies(id, name)')
-    .in('stage_id', stageIds.length > 0 ? stageIds : ['00000000-0000-0000-0000-000000000000'])
+    .in('stage_id', stageIds.length > 0 ? stageIds : [NO_SUCH_ID])
     .order('position')
     .order('created_at', { ascending: false })
 
   if (params.owner) dealQuery = dealQuery.eq('owner_id', params.owner)
-  if (params.status) dealQuery = dealQuery.eq('status', params.status)
-  else if (view === 'kanban') dealQuery = dealQuery.eq('status', 'open')
+
+  /*
+   * Status defaults to open on both views. A board of won and lost deals is a
+   * report rather than a pipeline, and "all" is one choice away in the picker.
+   */
+  const status = params.status ?? 'open'
+  if (status !== 'all') dealQuery = dealQuery.eq('status', status)
+
+  /*
+   * Product is a filter across a join, which no column predicate can express:
+   * resolve it to deal ids first. An unmatched product yields an id that cannot
+   * exist rather than no filter at all — silently showing everything would be
+   * the wrong answer to "which deals include this".
+   */
+  if (params.product) {
+    const { data: matches } = await scoped(context, 'deal_products')
+      .select('deal_id')
+      .eq('product_id', params.product)
+
+    const matchedIds = [...new Set(((matches ?? []) as { deal_id: string }[]).map((m) => m.deal_id))]
+    dealQuery = dealQuery.in('id', matchedIds.length ? matchedIds : [NO_SUCH_ID])
+  }
 
   const { data: deals } = await dealQuery.limit(500)
 
@@ -96,9 +142,21 @@ export default async function DealsPage({
   }
   const userList = (users ?? []) as UserRow[]
   const ownerNames = Object.fromEntries(userList.map((user) => [user.id, user.name || user.email]))
-  const stageNames = new Map(stageList.map((stage) => [stage.id, stage.name]))
 
   const totalValue = dealRows.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
+
+  /*
+   * The list view is the same board read downwards, so it is grouped the same
+   * way. Stages with nothing in them are left out here — the kanban is where
+   * you go to see an empty column; a run of headings saying "none" only makes
+   * the deals that do exist harder to find.
+   */
+  const listGroups = stageList
+    .map((stage) => ({
+      stage,
+      deals: dealRows.filter((deal) => deal.stage_id === stage.id),
+    }))
+    .filter((group) => group.deals.length > 0)
 
   const linkParams = (overrides: Record<string, string | undefined>) => {
     const next = new URLSearchParams()
@@ -155,22 +213,14 @@ export default async function DealsPage({
               {pipeline.name}
             </Link>
           ))}
-
-        <div className="ml-auto flex gap-2">
-          <Link
-            href={linkParams({ owner: undefined })}
-            className={`rounded-md px-2 py-1 text-sm ${!params.owner ? 'font-medium text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            All owners
-          </Link>
-          <Link
-            href={linkParams({ owner: context.user.id })}
-            className={`rounded-md px-2 py-1 text-sm ${params.owner === context.user.id ? 'font-medium text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            Mine
-          </Link>
-        </div>
       </div>
+
+      <DealFilters
+        owners={userList.map((user) => ({ id: user.id, name: user.name || user.email }))}
+        products={(products ?? []) as { id: string; name: string }[]}
+        savedViews={(savedViews ?? []) as SavedFilterRow[]}
+        currentUserId={context.user.id}
+      />
 
       {stageList.length === 0 ? (
         <EmptyState
@@ -190,65 +240,83 @@ export default async function DealsPage({
           ownerNames={ownerNames}
           productNames={productNames}
         />
+      ) : listGroups.length === 0 ? (
+        <div className="card py-10 text-center text-sm text-slate-500">
+          No deals match this view.
+        </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Deal</th>
-                <th>Stage</th>
-                <th>Value</th>
-                <th>Probability</th>
-                <th>Status</th>
-                <th>Owner</th>
-                <th>Expected close</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dealRows.map((deal: DealRow & { companies: { name: string } | null }) => (
-                <tr key={deal.id} className="hover:bg-slate-50">
-                  <td>
-                    <Link href={`/deals/${deal.id}`} className="font-medium text-brand-700 hover:underline">
-                      {deal.name}
-                    </Link>
-                    {deal.companies && (
-                      <span className="ml-2 text-xs text-slate-400">{deal.companies.name}</span>
-                    )}
-                  </td>
-                  <td>{stageNames.get(deal.stage_id) ?? '—'}</td>
-                  <td>
-                    <Money
-                      value={Number(deal.value ?? 0)}
-                      currency={deal.currency}
-                      amountClassName="font-medium"
-                    />
-                  </td>
-                  <td>
-                    {formatPercent(deal.probability)}
-                    {deal.probability_overridden && (
-                      <span className="ml-1 text-xs text-slate-400" title="Manually overridden">
-                        ✎
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <DealStatusBadge status={deal.status} />
-                  </td>
-                  <td className="text-slate-600">
-                    {deal.owner_id ? (ownerNames[deal.owner_id] ?? '—') : '—'}
-                  </td>
-                  <td className="text-slate-500">{formatDay(deal.expected_close_date)}</td>
-                </tr>
-              ))}
-              {dealRows.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center text-sm text-slate-500">
-                    No deals in this pipeline yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {listGroups.map(({ stage, deals: stageDeals }) => {
+            const stageValue = stageDeals.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
+
+            return (
+              <section key={stage.id}>
+                <h2 className="mb-2 flex flex-wrap items-baseline gap-2 px-1">
+                  <span className="text-sm font-semibold text-slate-900">{stage.name}</span>
+                  <span className="text-xs text-slate-400">
+                    {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'} ·{' '}
+                    {formatCurrency(stageValue, context.organization.default_currency)}
+                  </span>
+                </h2>
+
+                <div className="card overflow-hidden">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Deal</th>
+                        <th>Value</th>
+                        <th>Probability</th>
+                        <th>Status</th>
+                        <th>Owner</th>
+                        <th>Expected close</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stageDeals.map((deal: DealRow & { companies: { name: string } | null }) => (
+                        <tr key={deal.id} className="hover:bg-slate-50">
+                          <td>
+                            <Link
+                              href={`/deals/${deal.id}`}
+                              className="font-medium text-brand-700 hover:underline"
+                            >
+                              {deal.name}
+                            </Link>
+                            {deal.companies && (
+                              <span className="ml-2 text-xs text-slate-400">
+                                {deal.companies.name}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <Money
+                              value={Number(deal.value ?? 0)}
+                              currency={deal.currency}
+                              amountClassName="font-medium"
+                            />
+                          </td>
+                          <td>
+                            {formatPercent(deal.probability)}
+                            {deal.probability_overridden && (
+                              <span className="ml-1 text-xs text-slate-400" title="Manually overridden">
+                                ✎
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <DealStatusBadge status={deal.status} />
+                          </td>
+                          <td className="text-slate-600">
+                            {deal.owner_id ? (ownerNames[deal.owner_id] ?? '—') : '—'}
+                          </td>
+                          <td className="text-slate-500">{formatDay(deal.expected_close_date)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )
+          })}
         </div>
       )}
     </>
