@@ -239,6 +239,11 @@ export default async function CampaignPage({
                     ))}
                     — an unknown one is left visible rather than blanked, so a typo shows.
                   </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    With click tracking on for the sending domain, links are rewritten to a
+                    tracking address before they reach the recipient. They still go where you
+                    pointed them; they no longer look like it on hover.
+                  </p>
                 </div>
 
                 <div>
@@ -437,10 +442,19 @@ export default async function CampaignPage({
                     </div>
                   ))}
               </dl>
-              {tally.opened === 0 && tally.delivered > 0 && (
+              {/*
+                Stated as the caveat it is rather than as a claim about the
+                provider's settings, which this page cannot see. Both halves are
+                true whether tracking is on or off, and the number is an
+                undercount either way — treating opens as a readership figure is
+                the mistake this line exists to prevent.
+              */}
+              {tally.delivered > 0 && tally.opened < tally.delivered && (
                 <p className="mt-3 text-xs text-slate-500">
-                  Opens and clicks are not being tracked on the sending domain, so those stay at
-                  zero however many people read it.
+                  Opens are counted by a hidden image, so they only register when the recipient&rsquo;s
+                  client loads images and only if open tracking is switched on for the sending
+                  domain. Real readers routinely show as unopened; treat this as a floor, not a
+                  count.
                 </p>
               )}
             </Section>
