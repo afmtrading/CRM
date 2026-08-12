@@ -9,6 +9,22 @@ import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from '@/lib/env'
  * requiring a sign-in to honour a request to stop would be both hostile and,
  * where anti-spam law applies, non-compliant.
  */
+/*
+ * The scheduled and provider-callback endpoints below are public to *this*
+ * gate and not to the world: each one authenticates its caller itself, with a
+ * shared secret or a signed payload, and refuses to run without it. They have
+ * to be listed here because they are called by machines that have no session —
+ * Vercel Cron, and Resend's webhook — and a redirect to /login is not something
+ * either of them can follow. Left unlisted, they do not fail loudly; they
+ * quietly return a 307 to a sign-in page and never run at all.
+ */
+const SCHEDULED_PATHS = [
+  '/api/gmail/sync',
+  '/api/reminders',
+  '/api/campaigns/send',
+  '/api/email/webhook',
+]
+
 const PUBLIC_PATHS = [
   '/login',
   '/auth',
@@ -16,6 +32,7 @@ const PUBLIC_PATHS = [
   '/unsubscribe',
   // The one-click endpoint a mail client POSTs to on the recipient's behalf.
   '/api/unsubscribe',
+  ...SCHEDULED_PATHS,
 ]
 
 function isPublic(pathname: string) {
