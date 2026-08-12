@@ -41,6 +41,7 @@ const NAV = [
   { href: '/deals', label: 'Deals', icon: <DealsIcon className={ICON} /> },
   { href: '/products', label: 'Products', icon: <ProductsIcon className={ICON} /> },
   { href: '/activities', label: 'Activities', icon: <ActivityIcon className={ICON} /> },
+  { href: '/lists', label: 'Lists', icon: <MailIcon className={ICON} /> },
   { href: '/reports/pipeline-value', label: 'Reports', icon: <ReportsIcon className={ICON} /> },
 ]
 

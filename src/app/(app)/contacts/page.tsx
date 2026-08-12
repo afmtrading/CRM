@@ -27,6 +27,7 @@ import {
   SelectRow,
 } from "@/components/bulk-bar";
 import { bulkFieldsFor } from "@/lib/bulk-edit";
+import { ConsentBar } from "@/components/consent-bar";
 import { FilterBar } from "@/components/filter-bar";
 import {
   OptionBadge,
@@ -35,6 +36,7 @@ import {
 } from "@/components/contact-cards";
 import {
   EmptyState,
+  ErrorNote,
   PageHeader,
   StatCard,
   StatGrid,
@@ -75,6 +77,7 @@ export default async function ContactsPage({
     { data: owners },
     { data: companies },
     { data: fieldOptionRows },
+    { data: emailLists },
   ] = await Promise.all([
     scoped(context, "saved_filters").select("*").eq("entity_type", "contact"),
     // Company definitions come back too: the list shows a region, which is a
@@ -88,6 +91,11 @@ export default async function ContactsPage({
       .select("*")
       .in("entity_type", ["contact", "company"])
       .order("order"),
+    // Only the fixed lists: a list that follows a filter has nothing to add to.
+    scoped(context, "email_lists")
+      .select("id, name")
+      .is("saved_filter_id", null)
+      .order("name"),
   ]);
 
   // Headline counts describe the whole book of contacts, not the filtered view,
@@ -254,6 +262,13 @@ export default async function ContactsPage({
         }
       />
 
+      {typeof params.error === "string" && <ErrorNote>{params.error}</ErrorNote>}
+      {typeof params.ok === "string" && (
+        <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">
+          {params.ok}
+        </p>
+      )}
+
       <StatGrid>
         <StatCard
           label="Total contacts"
@@ -325,6 +340,7 @@ export default async function ContactsPage({
         />
       ) : (
         <BulkEdit entity="contact" fields={bulkFields}>
+          <ConsentBar lists={(emailLists ?? []) as { id: string; name: string }[]} />
           <div className="space-y-6">
             {groups.map((group) => (
             <div key={group.key ?? "all"} className="card overflow-hidden">

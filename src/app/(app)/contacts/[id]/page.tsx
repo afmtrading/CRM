@@ -5,6 +5,7 @@ import { requireSession, scoped, firstRow } from "@/lib/tenancy";
 import { contactName, formatDay } from "@/lib/format";
 import { DateTime } from "@/components/date-time";
 import { Money } from "@/components/money";
+import { CONSENT_LABELS, blockedLabel, impliedConsentExpiry } from "@/lib/consent";
 import {
   COMPANY_CARDS,
   CONTACT_CARDS,
@@ -99,6 +100,7 @@ export default async function ContactDetailPage({
     { data: fieldOptions },
     { data: customFieldDefs },
     { data: productInterest },
+    { data: mailability },
     { data: duplicates },
   ] = await Promise.all([
     scoped(context, "activities")
@@ -124,6 +126,10 @@ export default async function ContactDetailPage({
     scoped(context, "contact_products")
       .select("product_id, products(id, name)")
       .eq("contact_id", id),
+    scoped(context, "contact_mailability")
+      .select("blocked_reason")
+      .eq("contact_id", id)
+      .maybeSingle(),
     context.supabase.rpc("find_duplicate_contacts", {
       p_email: contact.email,
       p_first_name: contact.first_name,
@@ -185,6 +191,10 @@ export default async function ContactDetailPage({
   >;
 
   const name = contactName(contact);
+  const emailBlock = blockedLabel(
+    (mailability as { blocked_reason: string | null } | null)?.blocked_reason as never,
+  );
+  const consentExpiry = impliedConsentExpiry(contact.marketing_consent, contact.consent_at);
   const notesHtml = renderMarkdown(contact.notes);
   const untilBirthday = daysUntilBirthday(contact.birthday);
   const extraLinks = Array.isArray(contact.links)
@@ -540,6 +550,35 @@ export default async function ContactDetailPage({
               </dl>
             </Section>
           )}
+
+          {/*
+            Consent is its own card rather than a line in Additional info: it is
+            the answer to "may we email this person", which is a different kind
+            of question from who owns the record.
+          */}
+          <Section title="Email consent">
+            <dl className="grid gap-3">
+              <Field label="Basis">
+                {CONSENT_LABELS[contact.marketing_consent]}
+              </Field>
+              <Field label="Source">{contact.consent_source || <Empty />}</Field>
+              <Field label="Recorded">
+                {contact.consent_at ? <DateTime value={contact.consent_at} /> : <Empty />}
+              </Field>
+              {consentExpiry && (
+                <Field label="Implied consent runs out">
+                  <DateTime value={consentExpiry.toISOString()} />
+                </Field>
+              )}
+              <Field label="Can be emailed">
+                {emailBlock ? (
+                  <span className="text-amber-700">No — {emailBlock.toLowerCase()}</span>
+                ) : (
+                  <span className="text-emerald-700">Yes</span>
+                )}
+              </Field>
+            </dl>
+          </Section>
 
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label}>
