@@ -84,6 +84,17 @@ export function isEmailConfigured(): boolean {
   return Boolean(read('RESEND_API_KEY'))
 }
 
+/**
+ * The signing secret for Resend's webhooks ("whsec_…").
+ *
+ * Absent means the webhook endpoint refuses everything, which is the right
+ * default: an unverified webhook is a stranger with the power to mark any
+ * address as bounced.
+ */
+export function resendWebhookSecret(): string | undefined {
+  return read('RESEND_WEBHOOK_SECRET')
+}
+
 export function siteUrl(): string {
   return (
     read('NEXT_PUBLIC_SITE_URL') ??

@@ -64,5 +64,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/12_bulk_update.
 echo "→ marketing consent tests"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/13_marketing_consent.sql"
 
+echo "→ campaign and outbox tests"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/14_campaigns.sql"
+
 echo
 echo "All database tests passed."

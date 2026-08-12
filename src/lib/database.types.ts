@@ -240,6 +240,89 @@ export type ContactMailabilityRow = {
     | null
 }
 
+/** The same vocabulary the database uses, so a reason survives the round trip. */
+export type BlockedReason = NonNullable<ContactMailabilityRow['blocked_reason']> | 'unknown'
+
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'paused' | 'failed'
+
+export type CampaignRow = {
+  id: string
+  organization_id: string
+  name: string
+  subject: string
+  /** Markdown, rendered by the same renderer the test send uses. */
+  body: string
+  list_id: string | null
+  status: CampaignStatus
+  scheduled_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CampaignRecipientStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'delivered'
+  | 'opened'
+  | 'clicked'
+  | 'bounced'
+  | 'complained'
+  | 'failed'
+  | 'skipped'
+
+/** The outbox: one row per contact per campaign, written when it is scheduled. */
+export type CampaignRecipientRow = {
+  id: string
+  organization_id: string
+  campaign_id: string
+  contact_id: string
+  /** The address as it was when the audience was built, not as it is now. */
+  email: string
+  status: CampaignRecipientStatus
+  skip_reason: string | null
+  provider_id: string | null
+  error: string | null
+  claimed_at: string | null
+  sent_at: string | null
+  delivered_at: string | null
+  opened_at: string | null
+  clicked_at: string | null
+  created_at: string
+}
+
+/**
+ * One claimed row, with everything the sender needs to build the message.
+ *
+ * Flat and denormalised on purpose: the drain runs without a session, so it
+ * cannot read these tables through RLS, and one query that returns the whole
+ * message beats five that each need their own permission story.
+ */
+export type ClaimedRecipientRow = {
+  recipient_id: string
+  campaign_id: string
+  contact_id: string
+  email: string
+  first_name: string | null
+  last_name: string | null
+  company_name: string | null
+  unsubscribe_token: string | null
+  subject: string
+  body: string
+  organization_id: string
+  organization_name: string
+  logo_url: string | null
+  from_name: string | null
+  from_address: string | null
+  reply_to: string | null
+  postal_address: string | null
+  /** Re-checked at claim time; non-null means do not send after all. */
+  blocked_reason: BlockedReason | null
+}
+
 export type CompanyRow = {
   id: string
   organization_id: string
@@ -817,6 +900,30 @@ export interface Database {
       set_mailbox_backfill: { Args: { p_connection_id: string; p_days: number }; Returns: void }
       restore_company: { Args: { p_company_id: string }; Returns: void }
       reassign_deal: { Args: { p_deal_id: string; p_new_owner_id: string | null }; Returns: void }
+      contact_blocked_reason: { Args: { p_contact_id: string }; Returns: BlockedReason | null }
+      build_campaign_audience: { Args: { p_campaign_id: string }; Returns: number }
+      claim_campaign_batch: { Args: { p_limit?: number }; Returns: ClaimedRecipientRow[] }
+      finish_campaign_recipient: {
+        Args: {
+          p_recipient_id: string
+          p_status: CampaignRecipientStatus
+          p_provider_id?: string | null
+          p_error?: string | null
+          p_skip_reason?: string | null
+        }
+        Returns: void
+      }
+      settle_campaigns: { Args: Record<string, never>; Returns: number }
+      start_due_campaigns: { Args: Record<string, never>; Returns: number }
+      record_email_event: {
+        Args: {
+          p_provider_id: string | null
+          p_event_type: string
+          p_recipient: string | null
+          p_payload: Json
+        }
+        Returns: void
+      }
       can_manage_records: { Args: Record<string, never>; Returns: boolean }
       can_write_records: { Args: Record<string, never>; Returns: boolean }
       current_org_id: { Args: Record<string, never>; Returns: string }
