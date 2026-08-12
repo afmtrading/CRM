@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { applyMergeFields, renderEmail, renderEmailBody } from '../src/lib/email/render'
+import {
+  applyMergeFields,
+  markdownToText,
+  renderEmail,
+  renderEmailBody,
+} from '../src/lib/email/render'
 
 const base = {
   subject: 'Hello',
@@ -130,5 +135,47 @@ describe('applyMergeFields', () => {
 
   it('replaces every occurrence, not just the first', () => {
     expect(applyMergeFields('{{first_name}} and {{first_name}}', values)).toBe('Aline and Aline')
+  })
+})
+
+describe('markdownToText', () => {
+  it('takes the syntax out and leaves the words', () => {
+    // A delivered test showed `- **Bold** and *italic*` sitting in the text
+    // part: unreadable to a text-only client, and a filter compares the two
+    // halves of a multipart message against each other.
+    expect(markdownToText('**Bold** and *italic*')).toBe('Bold and italic')
+  })
+
+  it('keeps a link readable by putting the address beside the words', () => {
+    expect(markdownToText('[Links](https://example.com)')).toBe('Links (https://example.com)')
+  })
+
+  it('drops a heading marker but keeps the heading', () => {
+    expect(markdownToText('## A title')).toBe('A title')
+  })
+
+  it('leaves an image as its alt text, which is all text can carry', () => {
+    expect(markdownToText('![A logo](https://example.com/l.png)')).toBe('A logo')
+  })
+
+  it('leaves bullets and numbers alone — they read correctly as they are', () => {
+    expect(markdownToText('- one\n1. two')).toBe('- one\n1. two')
+  })
+
+  it('leaves ordinary prose untouched', () => {
+    expect(markdownToText('Just a sentence.')).toBe('Just a sentence.')
+  })
+})
+
+describe('the rendered text part', () => {
+  it('carries no markdown syntax at all', () => {
+    const email = renderEmail({
+      ...base,
+      body: '# Title\n\n**Bold** and [a link](https://example.com)',
+    })
+    expect(email.text).not.toContain('**')
+    expect(email.text).not.toContain('](')
+    expect(email.text).toContain('Bold')
+    expect(email.text).toContain('https://example.com')
   })
 })
