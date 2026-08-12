@@ -17,6 +17,10 @@ import type {
   SavedFilterRow,
   UserRow,
 } from "@/lib/database.types";
+import {
+  companyFieldValues,
+  findCompanyField,
+} from "@/lib/company-fields";
 import { FilterBar } from "@/components/filter-bar";
 import {
   OptionBadge,
@@ -129,17 +133,10 @@ export default async function ContactsPage({
     contactOptions.filter((option) => option.field_key === key);
 
   /*
-   * Region is a custom field on the company, so the column has to find it by
-   * name rather than by column. Matched the way the migration that created the
-   * card matched it — if a business calls the field something else entirely,
-   * the column stays empty rather than guessing at a different field.
+   * Region is a field of the company rather than the contact, so the column
+   * finds it by name — the same lookup the companies list uses.
    */
-  const regionField = allDefinitions.find(
-    (field) =>
-      field.entity_type === "company" &&
-      (["regions", "region"].includes(field.label.toLowerCase()) ||
-        ["regions", "region"].includes(field.key.toLowerCase())),
-  );
+  const regionField = findCompanyField(allDefinitions, "regions", "region");
   const regionOptions = regionField
     ? allOptions.filter(
         (option) =>
@@ -193,14 +190,6 @@ export default async function ContactsPage({
       custom_fields: Record<string, unknown>;
     } | null;
   })[];
-
-  /** The regions on a contact's employer, as a list whichever way it is stored. */
-  const regionsOf = (company: { custom_fields: Record<string, unknown> } | null) => {
-    if (!company || !regionField) return [];
-    const raw = company.custom_fields?.[regionField.key];
-    if (raw === undefined || raw === null || raw === "") return [];
-    return Array.isArray(raw) ? raw.map(String) : [String(raw)];
-  };
 
   const ownerNames = new Map(
     ownerList.map((user) => [user.id, user.name || user.email]),
@@ -417,7 +406,7 @@ export default async function ContactsPage({
                           </td>
                           <td>
                             <OptionBadges
-                              values={regionsOf(contact.companies)}
+                              values={companyFieldValues(contact.companies, regionField)}
                               options={regionOptions}
                             />
                           </td>
