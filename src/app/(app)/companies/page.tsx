@@ -9,6 +9,7 @@ import type {
   SavedFilterRow,
   UserRow,
 } from '@/lib/database.types'
+import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
 import { FilterBar } from '@/components/filter-bar'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
@@ -35,30 +36,26 @@ export default async function CompaniesPage({
 
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
 
-  /*
-   * Size is a custom field on the Company Rating card, so the column finds it
-   * by name the way the contacts list finds a region. A business that calls it
-   * something else leaves the column empty rather than having another field
-   * guessed into it.
-   */
   const marketOptions = allOptions.filter((option) => option.field_key === 'specialty_market')
   const typeOptions = allOptions.filter((option) => option.field_key === 'customer_type')
 
+  /*
+   * Region and size are the organization's own fields, so the columns look them
+   * up by name. See findCompanyField for how forgiving that match is and why.
+   */
   const definitions = (customFields ?? []) as CustomFieldDefinitionRow[]
-  const sizeField = definitions.find(
-    (field) => field.label.toLowerCase() === 'size' || field.key.toLowerCase() === 'size',
-  )
-  const sizeOptions = sizeField
-    ? allOptions.filter(
-        (option) => option.entity_type === 'company' && option.field_key === sizeField.key,
-      )
-    : []
-  const sizeOf = (company: CompanyRow) => {
-    if (!sizeField) return []
-    const raw = (company.custom_fields ?? {})[sizeField.key]
-    if (raw === undefined || raw === null || raw === '') return []
-    return Array.isArray(raw) ? raw.map(String) : [String(raw)]
-  }
+  const regionField = findCompanyField(definitions, 'regions', 'region')
+  const sizeField = findCompanyField(definitions, 'size')
+
+  const optionsForField = (field: CustomFieldDefinitionRow | undefined) =>
+    field
+      ? allOptions.filter(
+          (option) => option.entity_type === 'company' && option.field_key === field.key,
+        )
+      : []
+
+  const regionOptions = optionsForField(regionField)
+  const sizeOptions = optionsForField(sizeField)
 
   const viewId = typeof params.view === 'string' ? params.view : null
   const savedView = viewId
@@ -147,6 +144,7 @@ export default async function CompaniesPage({
                     <th>Owner</th>
                     <th>Contacts</th>
                     <th>Size</th>
+                    <th>Region</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -180,7 +178,16 @@ export default async function CompaniesPage({
                       </td>
                       <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
                       <td>
-                        <OptionBadges values={sizeOf(company)} options={sizeOptions} />
+                        <OptionBadges
+                          values={companyFieldValues(company, sizeField)}
+                          options={sizeOptions}
+                        />
+                      </td>
+                      <td>
+                        <OptionBadges
+                          values={companyFieldValues(company, regionField)}
+                          options={regionOptions}
+                        />
                       </td>
                     </tr>
                   ))}
