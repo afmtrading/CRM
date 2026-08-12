@@ -902,6 +902,11 @@ export interface Database {
       reassign_deal: { Args: { p_deal_id: string; p_new_owner_id: string | null }; Returns: void }
       contact_blocked_reason: { Args: { p_contact_id: string }; Returns: BlockedReason | null }
       build_campaign_audience: { Args: { p_campaign_id: string }; Returns: number }
+      build_campaign_audience_for: {
+        Args: { p_campaign_id: string; p_contact_ids: string[] }
+        Returns: number
+      }
+      clear_campaign_audience: { Args: { p_campaign_id: string }; Returns: number }
       claim_campaign_batch: { Args: { p_limit?: number }; Returns: ClaimedRecipientRow[] }
       finish_campaign_recipient: {
         Args: {
