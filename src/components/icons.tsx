@@ -266,3 +266,11 @@ export const CurrencyIcon: IconComponent = (p) => (
     <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
   </Svg>
 )
+
+/** A paper plane — campaigns, the one thing here that leaves the building. */
+export const SendIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M22 2 11 13" />
+    <path d="M22 2 15 22l-4-9-9-4z" />
+  </Svg>
+)

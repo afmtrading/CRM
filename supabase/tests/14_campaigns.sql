@@ -587,6 +587,145 @@ end;
 $$;
 
 -- =============================================================================
+-- Building an audience from ids the app resolved.
+--
+-- A dynamic list is a saved filter, not a set of rows, so there are no members
+-- to read — the app resolves it and hands over contact ids. Which means this
+-- function is handed uuids by a caller, and must not assume they are the
+-- caller's to send to.
+-- =============================================================================
+do $$
+declare
+  v_org    uuid := (select id from fixture where key = 'org');
+  v_theirs uuid := (select id from fixture where key = 'theirs_contact');
+  v_id     uuid;
+  v_a      uuid;
+  v_b      uuid;
+  v_n      integer;
+begin
+  raise notice 'Audience from ids:';
+
+  insert into contacts (organization_id, first_name, email, marketing_consent, consent_at)
+  values (v_org, 'Ida', 'ida@example.com', 'express', now()) returning id into v_a;
+  insert into contacts (organization_id, first_name, email, marketing_consent, consent_at)
+  values (v_org, 'Ivo', 'ivo@example.com', 'express', now()) returning id into v_b;
+
+  insert into campaigns (organization_id, name, subject, body, status)
+  values (v_org, 'From a filter', 'Hi', 'Body', 'draft') returning id into v_id;
+
+  -- A campaign with no list at all: a dynamic audience does not need one.
+  v_n := build_campaign_audience_for(v_id, array[v_a, v_b]);
+  perform test_assert(v_n = 2, 'the ids it was given are queued');
+  perform test_assert(recipient_status(v_id, v_a) = 'pending', 'and are ready to send');
+
+  v_n := build_campaign_audience_for(v_id, array[v_a, v_b]);
+  perform test_assert(v_n = 0, 'handing over the same ids twice queues nobody again');
+
+  -- The organization is re-checked against the campaign rather than trusted
+  -- from the ids: a definer function handed uuids must assume they could be
+  -- anybody's.
+  v_n := build_campaign_audience_for(v_id, array[v_theirs]);
+  perform test_assert(v_n = 0, 'a contact from another organization is refused');
+  perform test_assert(
+    recipient_status(v_id, v_theirs) is null,
+    'and no row is written for them at all'
+  );
+
+  perform test_assert(
+    build_campaign_audience_for(v_id, null) = 0,
+    'no ids at all is nothing to do, not an error'
+  );
+
+  insert into fixture values ('from_ids', v_id), ('ida', v_a), ('ivo', v_b);
+end;
+$$;
+
+-- =============================================================================
+-- Clearing an audience, and what cannot be cleared.
+-- =============================================================================
+do $$
+declare
+  v_id uuid := (select id from fixture where key = 'from_ids');
+  v_a  uuid := (select id from fixture where key = 'ida');
+  v_n  integer;
+begin
+  raise notice 'Clearing an audience:';
+
+  -- One of them has already gone out. Clearing must not erase the record of a
+  -- message that was actually delivered.
+  update campaign_recipients set status = 'sent', sent_at = now()
+  where campaign_id = v_id and contact_id = v_a;
+
+  v_n := clear_campaign_audience(v_id);
+  perform test_assert(v_n = 1, 'only the rows that have not been sent are removed');
+  perform test_assert(
+    recipient_status(v_id, v_a) = 'sent',
+    'the one already sent survives, because it is the record that it happened'
+  );
+
+  -- And once a campaign is under way, neither adding nor removing is allowed:
+  -- somebody would receive a message the person who approved it never saw
+  -- being sent.
+  update campaigns set status = 'sending' where id = v_id;
+
+  begin
+    perform clear_campaign_audience(v_id);
+    raise exception 'TEST FAILED: cleared an audience mid-send';
+  exception
+    when others then
+      if position('TEST FAILED' in sqlerrm) > 0 then raise; end if;
+      raise notice '  ok: an audience cannot be cleared once sending has started';
+  end;
+
+  begin
+    perform build_campaign_audience_for(v_id, array[(select id from fixture where key = 'ivo')]);
+    raise exception 'TEST FAILED: added a recipient mid-send';
+  exception
+    when others then
+      if position('TEST FAILED' in sqlerrm) > 0 then raise; end if;
+      raise notice '  ok: nobody can be added once sending has started';
+  end;
+end;
+$$;
+
+-- =============================================================================
+-- Who may build one.
+-- =============================================================================
+do $$
+declare
+  v_theirs uuid := (select id from fixture where key = 'theirs_campaign');
+  v_mine   uuid := (select id from fixture where key = 'from_ids');
+begin
+  raise notice 'Who may build an audience:';
+
+  set local role authenticated;
+  perform sign_in_as('rep_auth');
+
+  begin
+    perform build_campaign_audience_for(v_mine, array[(select id from fixture where key = 'ida')]);
+    raise exception 'TEST FAILED: a rep built an audience';
+  exception
+    when others then
+      if position('TEST FAILED' in sqlerrm) > 0 then raise; end if;
+      raise notice '  ok: a rep cannot build an audience';
+  end;
+
+  perform sign_in_as('mgr_auth');
+
+  begin
+    perform build_campaign_audience_for(v_theirs, array[(select id from fixture where key = 'ida')]);
+    raise exception 'TEST FAILED: built another organization’s audience from ids';
+  exception
+    when others then
+      if position('TEST FAILED' in sqlerrm) > 0 then raise; end if;
+      raise notice '  ok: another organization’s campaign is out of reach here too';
+  end;
+
+  reset role;
+end;
+$$;
+
+-- =============================================================================
 -- What the anonymous role may execute.
 --
 -- Added after a production advisory caught what these tests did not: `anon` had
@@ -619,6 +758,8 @@ begin
     'public.start_due_campaigns()',
     'public.record_email_event(text, text, text, jsonb)',
     'public.build_campaign_audience(uuid)',
+    'public.build_campaign_audience_for(uuid, uuid[])',
+    'public.clear_campaign_audience(uuid)',
     'public.contact_blocked_reason(uuid)'
   ]
   loop
