@@ -55,6 +55,38 @@ export const BLOCKED_REASONS: Record<BlockedReason, string> = {
   consent_expired: `Implied consent older than ${IMPLIED_CONSENT_MONTHS / 12} years`,
   unsubscribed: 'Unsubscribed',
   suppressed: 'Bounced or complained before',
+  excluded: 'Excluded by hand',
+}
+
+/**
+ * The manual override, as three choices rather than a checkbox.
+ *
+ * "Follow the rules" is a real answer and the one every contact starts on, so
+ * it is an option rather than the absence of one.
+ */
+export const OVERRIDE_OPTIONS: { value: string; label: string; hint: string }[] = [
+  {
+    value: '',
+    label: 'Follow the consent rules',
+    hint: 'Decided by the consent basis recorded above.',
+  },
+  {
+    value: 'true',
+    label: 'Yes — send to them',
+    hint: 'Overrides a missing or expired consent basis. Cannot override an unsubscribe or a bounce.',
+  },
+  {
+    value: 'false',
+    label: 'No — never send',
+    hint: 'Excludes them from every campaign, whatever their consent says.',
+  },
+]
+
+/** What the override says, for a record that has one. */
+export function overrideLabel(value: boolean | null | undefined): string | null {
+  if (value === true) return 'Yes — set by hand'
+  if (value === false) return 'No — set by hand'
+  return null
 }
 
 export function blockedLabel(reason: BlockedReason | null | undefined): string | null {

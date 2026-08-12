@@ -275,6 +275,79 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- The manual override.
+--
+-- Its whole value is that it beats the consent rules; its whole safety is the
+-- two things it does not beat. Both halves are asserted here, because a change
+-- to the branch order in the view would silently break the second.
+-- =============================================================================
+do $$
+declare
+  v_org uuid := (select id from fixture where key = 'org');
+  v_own uuid := (select id from fixture where key = 'admin');
+  v_id  uuid;
+  v_gone uuid;
+  v_bounced uuid;
+begin
+  raise notice 'Manual override:';
+
+  insert into contacts (organization_id, first_name, email, owner_id)
+  values (v_org, 'Vouched', 'vouched@example.com', v_own)
+  returning id into v_id;
+  perform test_assert(blocked(v_id) = 'no_consent', 'starts blocked, with no consent recorded');
+
+  update contacts set mailable_override = true where id = v_id;
+  perform test_assert(blocked(v_id) is null, 'a manual yes stands in for a consent basis');
+
+  perform test_assert(
+    (select mailable_override_at from contacts where id = v_id) is not null,
+    'and is stamped with when it was set'
+  );
+
+  update contacts set mailable_override = false where id = v_id;
+  perform test_assert(blocked(v_id) = 'excluded', 'a manual no excludes them');
+
+  update contacts
+  set marketing_consent = 'express', consent_at = now()
+  where id = v_id;
+  perform test_assert(
+    blocked(v_id) = 'excluded',
+    'and beats express consent, which is the point of an exclusion'
+  );
+
+  update contacts set mailable_override = null where id = v_id;
+  perform test_assert(blocked(v_id) is null, 'clearing it returns them to the consent rules');
+  perform test_assert(
+    (select mailable_override_at from contacts where id = v_id) is null,
+    'and clears the stamp with it'
+  );
+
+  -- The two it must not beat.
+  select id into v_gone from contacts where email = 'leaving@example.com' and first_name = 'Leaving';
+  update contacts set mailable_override = true where id = v_gone;
+  perform test_assert(
+    blocked(v_gone) = 'unsubscribed',
+    'a manual yes cannot un-unsubscribe somebody'
+  );
+
+  select id into v_bounced from contacts where email = 'bounced@example.com';
+  update contacts set mailable_override = true where id = v_bounced;
+  perform test_assert(
+    blocked(v_bounced) = 'suppressed',
+    'nor resurrect an address that bounced or drew a complaint'
+  );
+
+  insert into contacts (organization_id, first_name, owner_id, mailable_override)
+  values (v_org, 'Still Addressless', v_own, true)
+  returning id into v_id;
+  perform test_assert(
+    blocked(v_id) = 'no_email',
+    'and cannot conjure an address that was never there'
+  );
+end;
+$$;
+
 set local role authenticated;
 
 -- =============================================================================

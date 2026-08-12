@@ -389,3 +389,33 @@ export async function reassignContact(formData: FormData) {
   revalidatePath('/contacts')
   revalidatePath(`/contacts/${contactId}`)
 }
+
+/**
+ * The manual yes-or-no on whether a contact may be emailed.
+ *
+ * Three states, so an empty value is meaningful rather than missing: it puts
+ * the contact back under the consent rules. What this cannot do is reach past
+ * an unsubscribe or a bounced address — that is enforced in the mailability
+ * view rather than here, so it holds however the column is written.
+ */
+export async function setMailableOverride(formData: FormData) {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+
+  if (!context.canWrite) {
+    redirect(`/contacts/${id}?error=Your+role+does+not+allow+editing+contacts`)
+  }
+
+  const raw = String(formData.get('mailable_override') ?? '')
+  const override = raw === 'true' ? true : raw === 'false' ? false : null
+
+  const { error } = await scoped(context, 'contacts')
+    .update({ mailable_override: override })
+    .eq('id', id)
+
+  if (error) redirect(`/contacts/${id}?error=${encodeURIComponent(error.message)}`)
+
+  revalidatePath(`/contacts/${id}`)
+  revalidatePath('/contacts')
+  redirect(`/contacts/${id}`)
+}
