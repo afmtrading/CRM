@@ -197,6 +197,22 @@ export type EmailListRow = {
   updated_at: string
 }
 
+/** The From address an organization's campaigns go out as. One per account. */
+export type SendingDomainRow = {
+  id: string
+  organization_id: string
+  domain: string
+  from_name: string
+  from_local: string
+  reply_to: string | null
+  postal_address: string | null
+  provider_id: string | null
+  verified: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type EmailListMemberRow = {
   id: string
   organization_id: string

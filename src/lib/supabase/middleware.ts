@@ -9,7 +9,14 @@ import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from '@/lib/env'
  * requiring a sign-in to honour a request to stop would be both hostile and,
  * where anti-spam law applies, non-compliant.
  */
-const PUBLIC_PATHS = ['/login', '/auth', '/api/health', '/unsubscribe']
+const PUBLIC_PATHS = [
+  '/login',
+  '/auth',
+  '/api/health',
+  '/unsubscribe',
+  // The one-click endpoint a mail client POSTs to on the recipient's behalf.
+  '/api/unsubscribe',
+]
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))

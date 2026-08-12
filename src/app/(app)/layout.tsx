@@ -55,6 +55,7 @@ const ADMIN_NAV = [
   { href: '/settings/duplicates', label: 'Duplicates', icon: <DuplicatesIcon className={ICON} /> },
   { href: '/settings/deleted', label: 'Deleted records', icon: <TrashIcon className={ICON} /> },
   { href: '/settings/mailboxes', label: 'Mailboxes', icon: <MailIcon className={ICON} /> },
+  { href: '/settings/email', label: 'Email sending', icon: <MailIcon className={ICON} /> },
 ]
 
 /** Bulk tools sit with managers rather than with configuration. */
