@@ -54,7 +54,11 @@ export async function sendEmail(email: SendableEmail): Promise<SendResult> {
    */
   const headers: Record<string, string> = {
     'List-Unsubscribe': `<${email.unsubscribeUrl}>, <${siteUrl().replace(/\/$/, '')}/api/unsubscribe>`,
-    'List-Unsubscribe-Post': 'List=Unsubscribe=One-Click',
+    // Exactly this string. RFC 8058 defines it verbatim, and a receiver that
+    // does not match it character for character simply does not offer the
+    // one-click button — silently, with the header still present and looking
+    // right. Only the raw source of a delivered message shows the difference.
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
   }
 
   try {

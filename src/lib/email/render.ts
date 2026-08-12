@@ -23,7 +23,12 @@ export interface EmailContent {
   unsubscribeUrl: string
   /** Required in marketing email by US law, and good manners everywhere. */
   postalAddress?: string | null
-  /** Name of the organization, for the footer. */
+  /**
+   * The name the recipient knows the sender by — the From name, not the
+   * organization's internal label. A footer reading "you are a contact of AFM
+   * CRM" when the message came from Flo Ventures is confusing at best and
+   * reads as a mismatched sender at worst, which is what filters look for.
+   */
   organizationName: string
 }
 
@@ -77,6 +82,33 @@ function inline(source: string): string {
 }
 
 const P = 'margin:0 0 16px;font-size:15px;line-height:1.6;color:#1f2937'
+/** The same rules without the bottom margin, for list items that set their own. */
+const LI = 'font-size:15px;line-height:1.6;color:#1f2937;margin:0 0 6px'
+
+/**
+ * The message as plain text, with the markdown taken out rather than left in.
+ *
+ * The text part is what somebody reading in a text-only client sees, and what
+ * a spam filter reads when it compares the two halves of a multipart message.
+ * Leaving `**Bold**` and `[Links](https://…)` in it looks unfinished to the
+ * first and scores badly with the second — the words are the content, the
+ * syntax was only ever instructions for the renderer.
+ */
+export function markdownToText(source: string): string {
+  return source
+    .split(/\r?\n/)
+    .map((line) => {
+      let text = line.replace(/^(#{1,3})\s+/, '')
+      // An image has nothing to show in text; its alt text is the whole point.
+      text = text.replace(/!\[([^\]]*)\]\([^)\s]+\)/g, '$1')
+      // A link keeps its address, in brackets, because a text reader cannot click.
+      text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)')
+      text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
+      text = text.replace(/(^|[^*])\*([^*]+)\*/g, '$1$2')
+      return text
+    })
+    .join('\n')
+}
 
 /**
  * The message body, as inline-styled HTML.
@@ -124,7 +156,7 @@ export function renderEmailBody(source: string): string {
         html.push('<ul style="margin:0 0 16px;padding-left:22px">')
         list = 'ul'
       }
-      html.push(`<li style="${P};margin:0 0 6px">${inline(bullet[1])}</li>`)
+      html.push(`<li style="${LI}">${inline(bullet[1])}</li>`)
       continue
     }
 
@@ -135,7 +167,7 @@ export function renderEmailBody(source: string): string {
         html.push('<ol style="margin:0 0 16px;padding-left:22px">')
         list = 'ol'
       }
-      html.push(`<li style="${P};margin:0 0 6px">${inline(numbered[1])}</li>`)
+      html.push(`<li style="${LI}">${inline(numbered[1])}</li>`)
       continue
     }
 
@@ -221,7 +253,7 @@ export function renderEmail(content: EmailContent): RenderedEmail {
 </html>`
 
   const text = [
-    content.body.trim(),
+    markdownToText(content.body).trim(),
     '',
     '—',
     `You received this because you are a contact of ${content.organizationName}.`,

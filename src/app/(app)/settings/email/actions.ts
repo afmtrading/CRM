@@ -137,7 +137,9 @@ export async function sendTest(formData: FormData) {
   const rendered = renderEmail({
     subject: input.subject,
     body: merged,
-    organizationName: context.organization.name,
+    // The From name, not the organization's internal label — the recipient
+    // knows the sender as one and has never heard of the other.
+    organizationName: sender.from_name,
     logoUrl: context.organization.logo_url,
     postalAddress: sender.postal_address,
     unsubscribeUrl: unsubscribeUrlFor(
