@@ -5,7 +5,13 @@ import { requireSession, scoped, firstRow } from "@/lib/tenancy";
 import { contactName, formatDay } from "@/lib/format";
 import { DateTime } from "@/components/date-time";
 import { Money } from "@/components/money";
-import { CONSENT_LABELS, blockedLabel, impliedConsentExpiry } from "@/lib/consent";
+import {
+  CONSENT_LABELS,
+  OVERRIDE_OPTIONS,
+  blockedLabel,
+  impliedConsentExpiry,
+  overrideLabel,
+} from "@/lib/consent";
 import {
   COMPANY_CARDS,
   CONTACT_CARDS,
@@ -49,7 +55,12 @@ import {
   optionColor,
 } from "@/components/contact-cards";
 
-import { deleteContact, mergeContactsAction, setContactTags } from "../actions";
+import {
+  deleteContact,
+  mergeContactsAction,
+  setContactTags,
+  setMailableOverride,
+} from "../actions";
 
 export default async function ContactDetailPage({
   params,
@@ -195,6 +206,7 @@ export default async function ContactDetailPage({
     (mailability as { blocked_reason: string | null } | null)?.blocked_reason as never,
   );
   const consentExpiry = impliedConsentExpiry(contact.marketing_consent, contact.consent_at);
+  const manualOverride = overrideLabel(contact.mailable_override);
   const notesHtml = renderMarkdown(contact.notes);
   const untilBirthday = daysUntilBirthday(contact.birthday);
   const extraLinks = Array.isArray(contact.links)
@@ -578,6 +590,56 @@ export default async function ContactDetailPage({
                 )}
               </Field>
             </dl>
+
+            {/*
+              The override sits under the answer it changes rather than on the
+              edit form, because it is a decision somebody makes while looking
+              at that answer.
+            */}
+            {context.canWrite && (
+              <form
+                action={setMailableOverride}
+                className="mt-4 space-y-2 border-t border-slate-100 pt-4"
+              >
+                <input type="hidden" name="id" value={id} />
+                <label className="label" htmlFor="mailable_override">
+                  Override
+                </label>
+                <select
+                  id="mailable_override"
+                  name="mailable_override"
+                  className="input"
+                  defaultValue={
+                    contact.mailable_override === null
+                      ? ""
+                      : String(contact.mailable_override)
+                  }
+                >
+                  {OVERRIDE_OPTIONS.map((option) => (
+                    <option key={option.value || "rules"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="btn-secondary w-full">
+                  Save override
+                </button>
+                {manualOverride && (
+                  <p className="text-xs text-slate-500">
+                    {manualOverride}
+                    {contact.mailable_override_at && (
+                      <>
+                        {" · "}
+                        <DateTime value={contact.mailable_override_at} />
+                      </>
+                    )}
+                  </p>
+                )}
+                <p className="text-xs text-slate-400">
+                  An unsubscribe or a bounced address cannot be overridden.
+                </p>
+              </form>
+            )}
           </Section>
 
           {/* ---------------------------------------------------------------- */}

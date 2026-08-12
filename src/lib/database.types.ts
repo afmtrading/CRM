@@ -145,6 +145,10 @@ export type ContactRow = {
   unsubscribed_at: string | null
   /** The secret in their unsubscribe link. Random, so a leaked link says nothing. */
   unsubscribe_token: string
+  /** null follows the consent rules, true vouches, false excludes. Cannot beat an unsubscribe or a bounce. */
+  mailable_override: boolean | null
+  mailable_override_at: string | null
+  mailable_override_by: string | null
   created_by: string | null
   updated_by: string | null
   /** Soft delete. Only an administrator sees a stamped record. */
@@ -209,10 +213,12 @@ export type ContactMailabilityRow = {
   email: string | null
   marketing_consent: MarketingConsent
   consent_at: string | null
+  mailable_override: boolean | null
   blocked_reason:
     | 'no_email'
     | 'unsubscribed'
     | 'suppressed'
+    | 'excluded'
     | 'no_consent'
     | 'consent_expired'
     | null

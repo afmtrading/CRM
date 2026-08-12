@@ -93,6 +93,18 @@ export function bulkFieldsFor(
             modes: SINGLE,
           },
           {
+            key: 'mailable_override',
+            label: 'Can be emailed',
+            multiple: false,
+            options: [
+              { value: 'true', label: 'Yes — send to them' },
+              { value: 'false', label: 'No — never send' },
+            ],
+            // Clearing puts them back on the consent rules, which is a real
+            // third state rather than an absence.
+            modes: SINGLE,
+          },
+          {
             key: 'role_type',
             label: 'Role type',
             multiple: true,

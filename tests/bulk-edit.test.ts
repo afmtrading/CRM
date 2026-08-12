@@ -45,6 +45,8 @@ describe('bulkFieldsFor', () => {
     expect(keys).toContain('owner_id')
     expect(keys).toContain('lifecycle_stage')
     expect(keys).toContain('role_type')
+    // The manual override, which is a field like any other once it exists.
+    expect(keys).toContain('mailable_override')
     // Identity is not a bulk operation. Nobody sets forty names at once, and a
     // field offered here is a field the database has been told to accept.
     expect(keys).not.toContain('first_name')
@@ -116,11 +118,16 @@ describe('bulkFieldsFor', () => {
 })
 
 describe('validateBulkChange', () => {
-  const [owner, , , , , roles] = bulkFieldsFor('contact', {
+  // Found by key rather than position: an earlier version of this destructured
+  // the array, and adding a field in the middle silently retargeted the tests.
+  const contactFields = bulkFieldsFor('contact', {
     owners: [{ value: 'u1', label: 'Ada' }],
     customFields: [],
     fieldOptions: [option('contact', 'role_type', 'Champion')],
   })
+  const byKey = (key: string) => contactFields.find((field) => field.key === key)
+  const owner = byKey('owner_id')
+  const roles = byKey('role_type')
 
   it('asks for a field before anything else', () => {
     expect(validateBulkChange(undefined, 'set', ['x'])).toMatch(/pick a field/i)
