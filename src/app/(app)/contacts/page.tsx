@@ -21,6 +21,12 @@ import {
   companyFieldValues,
   findCompanyField,
 } from "@/lib/company-fields";
+import {
+  BulkEdit,
+  SelectAll,
+  SelectRow,
+} from "@/components/bulk-bar";
+import { bulkFieldsFor } from "@/lib/bulk-edit";
 import { FilterBar } from "@/components/filter-bar";
 import {
   OptionBadge,
@@ -198,6 +204,24 @@ export default async function ContactsPage({
     companyList.map((company) => [company.id, company.name]),
   );
 
+  /*
+   * Region is not offered here. It belongs to the company, so setting it on a
+   * selection of contacts would quietly edit their employers — including for
+   * every other contact who works there. It is on the companies list instead.
+   */
+  const bulkFields = bulkFieldsFor("contact", {
+    owners: ownerList.map((user) => ({
+      value: user.id,
+      label: user.name || user.email,
+    })),
+    companies: companyList.map((company) => ({
+      value: company.id,
+      label: company.name,
+    })),
+    customFields: contactDefinitions,
+    fieldOptions: contactOptions,
+  });
+
   const groups = groupRows(rows, config.groupBy, (value) => {
     if (value === null) return "None";
     if (config.groupBy === "owner_id")
@@ -300,8 +324,9 @@ export default async function ContactsPage({
           }
         />
       ) : (
-        <div className="space-y-6">
-          {groups.map((group) => (
+        <BulkEdit entity="contact" fields={bulkFields}>
+          <div className="space-y-6">
+            {groups.map((group) => (
             <div key={group.key ?? "all"} className="card overflow-hidden">
               {config.groupBy && (
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
@@ -324,6 +349,9 @@ export default async function ContactsPage({
                       the mail icon covers one, the record page the other.
                     */}
                     <tr>
+                      <th className="w-10">
+                        <SelectAll label="Select every contact shown" />
+                      </th>
                       <th>Name</th>
                       <th>Owner</th>
                       <th>Priority</th>
@@ -341,6 +369,9 @@ export default async function ContactsPage({
                           key={contact.id}
                           className="transition-colors hover:bg-slate-50/70"
                         >
+                          <td>
+                            <SelectRow id={contact.id} label={`Select ${name}`} />
+                          </td>
                           {/* The company rides under the name rather than
                               taking its own column — who someone is and who
                               they work for read as one thing, and the row gets
@@ -441,8 +472,9 @@ export default async function ContactsPage({
                 </table>
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </BulkEdit>
       )}
     </>
   );
