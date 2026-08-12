@@ -586,4 +586,68 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- What the anonymous role may execute.
+--
+-- Added after a production advisory caught what these tests did not: `anon` had
+-- EXECUTE on every one of the drain's functions. It matters more than it looks.
+-- The anon key is published — it ships in the browser bundle — so `anon` is not
+-- a role nobody holds, it is everybody. A stranger could have called
+-- record_email_event through PostgREST and forged a bounce, suppressing any
+-- address they chose, going around the webhook's signature check instead of
+-- through it.
+--
+-- Two separate causes, which is why checking one is not enough:
+--
+--   * PUBLIC holds EXECUTE on every new function, and anon inherits through it
+--   * Supabase's default privileges *also* grant anon EXECUTE directly, so
+--     revoking from PUBLIC alone leaves that grant standing
+--
+-- Asserting on the role rather than on the revoke statements is what makes this
+-- test worth having: it asks the question the attacker asks.
+-- =============================================================================
+do $$
+declare
+  v_fn text;
+begin
+  raise notice 'What anon may execute:';
+
+  foreach v_fn in array array[
+    'public.claim_campaign_batch(integer)',
+    'public.finish_campaign_recipient(uuid, text, text, text, text)',
+    'public.settle_campaigns()',
+    'public.start_due_campaigns()',
+    'public.record_email_event(text, text, text, jsonb)',
+    'public.build_campaign_audience(uuid)',
+    'public.contact_blocked_reason(uuid)'
+  ]
+  loop
+    perform test_assert(
+      not has_function_privilege('anon', v_fn::regprocedure, 'execute'),
+      format('anon cannot execute %s', v_fn)
+    );
+  end loop;
+
+  -- And the drain's own functions stay reachable by the role that runs it.
+  foreach v_fn in array array[
+    'public.claim_campaign_batch(integer)',
+    'public.record_email_event(text, text, text, jsonb)',
+    'public.settle_campaigns()'
+  ]
+  loop
+    perform test_assert(
+      has_function_privilege('service_role', v_fn::regprocedure, 'execute'),
+      format('the service role can still execute %s', v_fn)
+    );
+  end loop;
+
+  -- The public unsubscribe page has no session and must keep working: a person
+  -- who asks to stop is not going to sign in first.
+  perform test_assert(
+    has_function_privilege('anon', 'public.unsubscribe_by_token(uuid)'::regprocedure, 'execute'),
+    'but a stranger can still unsubscribe themselves'
+  );
+end;
+$$;
+
 rollback;

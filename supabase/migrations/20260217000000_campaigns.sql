@@ -60,6 +60,13 @@ as $$
   where c.id = p_contact_id;
 $$;
 
+-- `anon` named explicitly, and not only PUBLIC. Supabase's default privileges
+-- grant EXECUTE to anon directly, so revoking from PUBLIC leaves that grant
+-- standing — and the anon key ships in the browser bundle, so anything anon may
+-- execute is reachable by anybody with the URL. Here it would answer "may this
+-- contact be emailed" about any contact in any account, since an anonymous
+-- caller has no organization for the guard inside to compare against.
+revoke execute on function public.contact_blocked_reason(uuid) from public, anon;
 grant execute on function public.contact_blocked_reason(uuid) to authenticated, service_role;
 
 drop view if exists contact_mailability;
@@ -494,11 +501,17 @@ $$;
 -- The drain and the webhook run as the service role from a cron job and a
 -- provider callback. Neither is a signed-in user, and neither should be
 -- reachable by one.
-revoke execute on function public.claim_campaign_batch(integer) from public, authenticated;
-revoke execute on function public.finish_campaign_recipient(uuid, text, text, text, text) from public, authenticated;
-revoke execute on function public.settle_campaigns() from public, authenticated;
-revoke execute on function public.start_due_campaigns() from public, authenticated;
-revoke execute on function public.record_email_event(text, text, text, jsonb) from public, authenticated;
+-- `anon` is named alongside PUBLIC deliberately. Supabase's default privileges
+-- grant EXECUTE to anon *directly*, so revoking from PUBLIC does not remove it
+-- — and the anon key is published in the browser bundle. Left as it was, a
+-- stranger could POST to /rest/v1/rpc/record_email_event and forge a bounce,
+-- suppressing any address they chose: around the webhook's signature check
+-- rather than through it.
+revoke execute on function public.claim_campaign_batch(integer) from public, anon, authenticated;
+revoke execute on function public.finish_campaign_recipient(uuid, text, text, text, text) from public, anon, authenticated;
+revoke execute on function public.settle_campaigns() from public, anon, authenticated;
+revoke execute on function public.start_due_campaigns() from public, anon, authenticated;
+revoke execute on function public.record_email_event(text, text, text, jsonb) from public, anon, authenticated;
 
 grant execute on function public.claim_campaign_batch(integer) to service_role;
 grant execute on function public.finish_campaign_recipient(uuid, text, text, text, text) to service_role;
@@ -506,6 +519,7 @@ grant execute on function public.settle_campaigns() to service_role;
 grant execute on function public.start_due_campaigns() to service_role;
 grant execute on function public.record_email_event(text, text, text, jsonb) to service_role;
 
+revoke execute on function public.build_campaign_audience(uuid) from public, anon;
 grant execute on function public.build_campaign_audience(uuid) to authenticated, service_role;
 
 -- -----------------------------------------------------------------------------
