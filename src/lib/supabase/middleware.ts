@@ -3,7 +3,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from '@/lib/env'
 
-const PUBLIC_PATHS = ['/login', '/auth', '/api/health']
+/*
+ * '/unsubscribe' is public on purpose. The person clicking has no account and
+ * must not need one — their unsubscribe token is the whole authorisation, and
+ * requiring a sign-in to honour a request to stop would be both hostile and,
+ * where anti-spam law applies, non-compliant.
+ */
+const PUBLIC_PATHS = ['/login', '/auth', '/api/health', '/unsubscribe']
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))

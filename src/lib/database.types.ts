@@ -136,6 +136,15 @@ export type ContactRow = {
   x_twitter: string | null
   linkedin: string | null
   links: ContactLink[]
+  /** Whether they may be sent marketing email, and on what basis. */
+  marketing_consent: MarketingConsent
+  /** Where that consent came from, in words somebody could defend later. */
+  consent_source: string | null
+  /** When it was given. Implied consent ages out from here. */
+  consent_at: string | null
+  unsubscribed_at: string | null
+  /** The secret in their unsubscribe link. Random, so a leaked link says nothing. */
+  unsubscribe_token: string
   created_by: string | null
   updated_by: string | null
   /** Soft delete. Only an administrator sees a stamped record. */
@@ -155,6 +164,58 @@ export type FieldOptionRow = {
   color: OptionColor
   order: number
   created_at: string
+}
+
+/** How, and on what basis, a contact may be sent marketing email. */
+export type MarketingConsent = 'express' | 'implied' | 'none' | 'unsubscribed'
+
+export type EmailSuppressionRow = {
+  id: string
+  organization_id: string
+  email: string
+  reason: 'unsubscribed' | 'bounced' | 'complained' | 'manual'
+  note: string | null
+  contact_id: string | null
+  created_at: string
+}
+
+export type EmailListRow = {
+  id: string
+  organization_id: string
+  name: string
+  description: string | null
+  /** Where the audience came from — the answer to "on what basis were these people mailed". */
+  source_note: string | null
+  /** Set means the list re-reads itself at send time; null means an explicit set of people. */
+  saved_filter_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EmailListMemberRow = {
+  id: string
+  organization_id: string
+  list_id: string
+  contact_id: string
+  added_by: string | null
+  added_at: string
+}
+
+/** One row per live contact; blocked_reason is null when they may be emailed. */
+export type ContactMailabilityRow = {
+  contact_id: string
+  organization_id: string
+  email: string | null
+  marketing_consent: MarketingConsent
+  consent_at: string | null
+  blocked_reason:
+    | 'no_email'
+    | 'unsubscribed'
+    | 'suppressed'
+    | 'no_consent'
+    | 'consent_expired'
+    | null
 }
 
 export type CompanyRow = {
@@ -705,6 +766,15 @@ export interface Database {
       move_stage: { Args: { p_stage_id: string; p_delta: number }; Returns: void }
       reorder_pipeline: { Args: { p_pipeline_id: string; p_position: number }; Returns: void }
       move_pipeline: { Args: { p_pipeline_id: string; p_delta: number }; Returns: void }
+      bulk_set_consent: {
+        Args: { p_ids: string[]; p_consent: string; p_source: string; p_at?: string }
+        Returns: number
+      }
+      unsubscribe_by_token: { Args: { p_token: string }; Returns: boolean }
+      unsubscribe_check: {
+        Args: { p_token: string }
+        Returns: { found: boolean; email: string | null; already: boolean }[]
+      }
       /** Returns the number of rows actually changed, which is the count after RLS. */
       bulk_update_records: {
         Args: {
