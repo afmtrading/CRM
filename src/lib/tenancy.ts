@@ -168,6 +168,7 @@ export type TenantTable =
   | 'field_options'
   | 'notifications'
   | 'mailbox_connections'
+  | 'sending_domains'
   | 'email_suppressions'
   | 'email_lists'
   | 'email_list_members'

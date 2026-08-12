@@ -72,6 +72,18 @@ export function googleRedirectUri(): string {
   return `${siteUrl()}/api/gmail/callback`
 }
 
+/**
+ * Resend's API key. Absent rather than throwing, so a page can say "email is
+ * not configured yet" instead of crashing — the CRM works fine without it.
+ */
+export function resendApiKey(): string | undefined {
+  return read('RESEND_API_KEY')
+}
+
+export function isEmailConfigured(): boolean {
+  return Boolean(read('RESEND_API_KEY'))
+}
+
 export function siteUrl(): string {
   return (
     read('NEXT_PUBLIC_SITE_URL') ??
