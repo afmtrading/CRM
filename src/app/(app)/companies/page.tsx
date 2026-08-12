@@ -10,6 +10,8 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
+import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
+import { bulkFieldsFor } from '@/lib/bulk-edit'
 import { FilterBar } from '@/components/filter-bar'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
@@ -80,6 +82,12 @@ export default async function CompaniesPage({
   const rows = (data ?? []) as (CompanyRow & { contacts: { count: number }[] })[]
 
   const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
+
+  const bulkFields = bulkFieldsFor('company', {
+    owners: ownerList.map((user) => ({ value: user.id, label: user.name || user.email })),
+    customFields: definitions,
+    fieldOptions: allOptions,
+  })
   const groups = groupRows(rows, config.groupBy, (value) => {
     if (value === null) return 'None'
     if (config.groupBy === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
@@ -121,8 +129,9 @@ export default async function CompaniesPage({
           }
         />
       ) : (
-        <div className="space-y-6">
-          {groups.map((group) => (
+        <BulkEdit entity="company" fields={bulkFields}>
+          <div className="space-y-6">
+            {groups.map((group) => (
             <div key={group.key ?? 'all'} className="card overflow-hidden">
               {config.groupBy && (
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
@@ -139,6 +148,9 @@ export default async function CompaniesPage({
                     under the name, where it reads as part of naming it.
                   */}
                   <tr>
+                    <th className="w-10">
+                      <SelectAll label="Select every company shown" />
+                    </th>
                     <th>Name</th>
                     <th>Market</th>
                     <th>Owner</th>
@@ -150,6 +162,9 @@ export default async function CompaniesPage({
                 <tbody>
                   {group.rows.map((company) => (
                     <tr key={company.id} className="transition-colors hover:bg-slate-50/70">
+                      <td>
+                        <SelectRow id={company.id} label={`Select ${company.name}`} />
+                      </td>
                       <td>
                         <div className="min-w-0">
                           <Link
@@ -194,8 +209,9 @@ export default async function CompaniesPage({
                 </tbody>
               </table>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </BulkEdit>
       )}
     </>
   )

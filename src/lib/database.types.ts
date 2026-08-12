@@ -705,6 +705,17 @@ export interface Database {
       move_stage: { Args: { p_stage_id: string; p_delta: number }; Returns: void }
       reorder_pipeline: { Args: { p_pipeline_id: string; p_position: number }; Returns: void }
       move_pipeline: { Args: { p_pipeline_id: string; p_delta: number }; Returns: void }
+      /** Returns the number of rows actually changed, which is the count after RLS. */
+      bulk_update_records: {
+        Args: {
+          p_entity: string
+          p_ids: string[]
+          p_field: string
+          p_mode: string
+          p_values: string[]
+        }
+        Returns: number
+      }
       soft_delete_product: { Args: { p_product_id: string }; Returns: void }
       restore_product: { Args: { p_product_id: string }; Returns: void }
       soft_delete_contact: { Args: { p_contact_id: string }; Returns: void }

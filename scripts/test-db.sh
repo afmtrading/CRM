@@ -58,5 +58,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/10_pipeline_ord
 echo "→ company rating card tests"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/11_company_rating_card.sql"
 
+echo "→ bulk update tests"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/12_bulk_update.sql"
+
 echo
 echo "All database tests passed."
