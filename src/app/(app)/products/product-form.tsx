@@ -27,7 +27,10 @@ import {
   RadioChips,
 } from '@/components/form-fields'
 
+import { productImageUrl } from '@/lib/product-image'
+
 import type { ProductActionState } from './actions'
+import { ProductImageField } from './image-field'
 import { StockEditor } from './stock-editor'
 
 /** A null column and an untouched box are the same thing to a form. */
@@ -360,6 +363,41 @@ export function ProductForm({
           hint={`Only ${PRODUCT_ACTIVE_STATUS} products are offered on new deals. Deals that already list it keep it.`}
         />
 
+        <div>
+          <label className="label" htmlFor="folder_url">
+            Folder Location
+          </label>
+          <input
+            id="folder_url"
+            name="folder_url"
+            type="url"
+            className="input"
+            placeholder="https://…"
+            defaultValue={product?.folder_url ?? ''}
+          />
+          <Hint>Where the paperwork lives.</Hint>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="knowledge_base_url">
+            Knowledge Base
+          </label>
+          <input
+            id="knowledge_base_url"
+            name="knowledge_base_url"
+            type="url"
+            className="input"
+            placeholder="https://…"
+            defaultValue={product?.knowledge_base_url ?? ''}
+          />
+          <Hint>The spec sheet, the manual, the write-up.</Hint>
+        </div>
+
+        <div className="sm:col-span-2">
+          <span className="label">Image</span>
+          <ProductImageField currentUrl={productImageUrl(product?.image_path)} />
+        </div>
+
         <div className="sm:col-span-2">
           <span className="label">Category</span>
           <RadioChips
@@ -373,12 +411,11 @@ export function ProductForm({
           <label className="label" htmlFor="item_notes">
             Item Notes
           </label>
-          <input
+          <NotesEditor
             id="item_notes"
             name="item_notes"
-            className="input"
-            placeholder="Anything worth knowing at a glance"
             defaultValue={product?.item_notes ?? ''}
+            placeholder={'Anything worth knowing at a glance'}
           />
         </div>
 
