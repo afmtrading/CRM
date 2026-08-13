@@ -45,13 +45,16 @@ export default async function CampaignPage({
   )
   if (!campaign) notFound()
 
-  const [{ data: lists }, { data: recipients }, senderRow] = await Promise.all([
+  const [{ data: lists }, { data: recipients }, senderRow, { data: linkRows }] = await Promise.all([
     scoped(context, 'email_lists').select('*').order('name'),
     scoped(context, 'campaign_recipients')
       .select('status, skip_reason')
       .eq('campaign_id', id),
     firstRow<SendingDomainRow>(scoped(context, 'sending_domains').select('*').maybeSingle()),
+    context.supabase.rpc('campaign_link_clicks', { p_campaign_id: id }),
   ])
+
+  const links = (linkRows ?? []) as { url: string; clicks: number; people: number }[]
 
   const listRows = (lists ?? []) as EmailListRow[]
   const recipientRows = (recipients ?? []) as { status: string; skip_reason: string | null }[]
@@ -474,6 +477,48 @@ export default async function CampaignPage({
                   Opens are counted by a hidden image, so they only register when the
                   recipient&rsquo;s client loads them. Real readers routinely show as unopened —
                   treat this as a floor, not a count.
+                </p>
+              )}
+
+              {/*
+                "Clicked: 12" is the least useful true thing this card could
+                say. Which link is the question anybody asks next, and the
+                provider names it in every click it reports.
+              */}
+              {links.length > 0 && (
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Links clicked
+                  </h3>
+                  <ul className="grid gap-2">
+                    {links.map((link) => (
+                      <li key={link.url} className="text-sm">
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="block truncate text-brand-700 hover:underline"
+                          title={link.url}
+                        >
+                          {link.url}
+                        </a>
+                        <span className="text-xs text-slate-500">
+                          {/* People first: one person clicking eleven times is
+                              not eleven times the interest. */}
+                          {link.people} {link.people === 1 ? 'person' : 'people'} ·{' '}
+                          {link.clicks} {link.clicks === 1 ? 'click' : 'clicks'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {tally.delivered > 0 && tally.clicked === 0 && (
+                <p className="mt-3 text-xs text-slate-500">
+                  No clicks recorded. Click tracking needs its own subdomain with a DNS record
+                  before any click can be reported, and a message with no links in it will never
+                  register one either way.
                 </p>
               )}
             </Section>

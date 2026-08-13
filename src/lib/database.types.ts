@@ -907,6 +907,10 @@ export interface Database {
         Returns: number
       }
       clear_campaign_audience: { Args: { p_campaign_id: string }; Returns: number }
+      campaign_link_clicks: {
+        Args: { p_campaign_id: string }
+        Returns: { url: string; clicks: number; people: number }[]
+      }
       claim_campaign_batch: { Args: { p_limit?: number }; Returns: ClaimedRecipientRow[] }
       finish_campaign_recipient: {
         Args: {

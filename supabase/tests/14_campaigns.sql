@@ -726,6 +726,99 @@ end;
 $$;
 
 -- =============================================================================
+-- Which links were clicked.
+--
+-- email_events is unreadable by signed-in users on purpose — it carries no
+-- organization_id, so no policy could scope it. This function is the one door
+-- into it, and it must open exactly one campaign's worth.
+-- =============================================================================
+do $$
+declare
+  v_id   uuid := (select id from fixture where key = 'campaign');
+  v_good uuid := (select id from fixture where key = 'good');
+  v_r    text;
+  v_rows integer;
+  v_url  text;
+  v_ppl  integer;
+begin
+  raise notice 'Links clicked:';
+
+  select provider_id into v_r
+  from campaign_recipients where campaign_id = v_id and contact_id = v_good;
+
+  -- The same person clicking the same link three times, and one other link.
+  perform record_email_event(v_r, 'email.clicked', 'good@example.com',
+    '{"data":{"click":{"link":"https://example.com/offer"}}}'::jsonb);
+  perform record_email_event(v_r, 'email.clicked', 'good@example.com',
+    '{"data":{"click":{"link":"https://example.com/offer"}}}'::jsonb);
+  perform record_email_event(v_r, 'email.clicked', 'good@example.com',
+    '{"data":{"click":{"link":"https://example.com/offer"}}}'::jsonb);
+  perform record_email_event(v_r, 'email.clicked', 'good@example.com',
+    '{"data":{"click":{"link":"https://example.com/terms"}}}'::jsonb);
+
+  select count(*) into v_rows from campaign_link_clicks(v_id);
+  perform test_assert(v_rows = 2, 'each distinct link is one row');
+
+  select url, people into v_url, v_ppl from campaign_link_clicks(v_id) limit 1;
+  perform test_assert(
+    v_url = 'https://example.com/offer' and v_ppl = 1,
+    'the busiest link leads, counted by people rather than by raw clicks'
+  );
+
+  perform test_assert(
+    (select clicks from campaign_link_clicks(v_id) where url = 'https://example.com/offer') = 3,
+    'and the raw clicks are still there beside it'
+  );
+
+  -- A click event with no link in the payload is a malformed event, not a row
+  -- reading "null" in somebody's report.
+  perform record_email_event(v_r, 'email.clicked', 'good@example.com', '{"data":{}}'::jsonb);
+  perform test_assert(
+    (select count(*) from campaign_link_clicks(v_id)) = 2,
+    'an event with no link in it is left out rather than shown as blank'
+  );
+end;
+$$;
+
+do $$
+declare
+  v_theirs uuid := (select id from fixture where key = 'theirs_campaign');
+  v_mine   uuid := (select id from fixture where key = 'campaign');
+begin
+  set local role authenticated;
+  perform sign_in_as('rep_auth');
+
+  -- Reading a report is not a manager action: anybody who can see the campaign
+  -- can see how it did.
+  perform test_assert(
+    (select count(*) from campaign_link_clicks(v_mine)) = 2,
+    'a rep can read the click report for their own organization'
+  );
+
+  begin
+    perform campaign_link_clicks(v_theirs);
+    raise exception 'TEST FAILED: read another organization’s clicks';
+  exception
+    when others then
+      if position('TEST FAILED' in sqlerrm) > 0 then raise; end if;
+      raise notice '  ok: another organization’s clicks are out of reach';
+  end;
+
+  -- And the raw table stays shut regardless — at the grant, before RLS is even
+  -- consulted. Stronger than "returns no rows": there is nothing to select.
+  begin
+    perform count(*) from email_events;
+    raise exception 'TEST FAILED: read the raw event log';
+  exception
+    when insufficient_privilege then
+      raise notice '  ok: the raw event log is not readable by a signed-in user at all';
+  end;
+
+  reset role;
+end;
+$$;
+
+-- =============================================================================
 -- What the anonymous role may execute.
 --
 -- Added after a production advisory caught what these tests did not: `anon` had
@@ -760,6 +853,7 @@ begin
     'public.build_campaign_audience(uuid)',
     'public.build_campaign_audience_for(uuid, uuid[])',
     'public.clear_campaign_audience(uuid)',
+    'public.campaign_link_clicks(uuid)',
     'public.contact_blocked_reason(uuid)'
   ]
   loop
