@@ -3,7 +3,16 @@
 import { useRef, useState } from 'react'
 
 import { MERGE_FIELDS, renderEmailBody } from '@/lib/email/render'
-import { insertAt, prefixLine, wrapSelection, type EditResult } from '@/lib/markdown-edit'
+import { AlignCenterIcon, AlignLeftIcon, AlignRightIcon } from '@/components/icons'
+import {
+  alignLines,
+  continueList,
+  insertAt,
+  listLines,
+  setHeading,
+  wrapSelection,
+  type EditResult,
+} from '@/lib/markdown-edit'
 
 /**
  * The message editor for a campaign.
@@ -15,9 +24,14 @@ import { insertAt, prefixLine, wrapSelection, type EditResult } from '@/lib/mark
  * rich-text surface would store HTML and force the opposite bargain — either
  * trust whatever the browser produced, or maintain a sanitiser.
  *
- * The toolbar is deliberately not the notes toolbar. It offers an Image button,
- * because an email can carry one, and no Code button, because renderEmailBody
- * has no rule for backticks and the recipient would see them.
+ * The toolbar is deliberately not the notes toolbar. It offers Image, four
+ * heading levels and alignment, because an email needs all of them, and no Code
+ * button, because renderEmailBody has no rule for backticks and the recipient
+ * would see them.
+ *
+ * Return continues a list rather than dropping out of it, and every list and
+ * alignment button works across a whole selection rather than on the one line
+ * the caret happens to be in.
  *
  * The preview runs the real renderer — the same function the sender calls — so
  * what is on screen is what goes out, rather than an approximation of it.
@@ -55,7 +69,34 @@ export function CampaignMessageEditor({
     })
   }
 
-  const buttons: { label: string; title: string; run: () => void; className?: string }[] = [
+  /** Return inside a list carries the list on; anywhere else it is just Return. */
+  function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey) return
+
+    const el = ref.current
+    if (!el || el.selectionStart !== el.selectionEnd) return
+
+    const result = continueList(value, el.selectionStart)
+    if (!result) return
+
+    event.preventDefault()
+    setValue(result.value)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(result.start, result.end)
+    })
+  }
+
+  type Btn = {
+    label: React.ReactNode
+    title: string
+    run: () => void
+    className?: string
+    /** Word-width rather than the square the single-letter marks sit in. */
+    wide?: boolean
+  }
+
+  const marks: Btn[] = [
     {
       label: 'B',
       title: 'Bold',
@@ -69,44 +110,98 @@ export function CampaignMessageEditor({
       className: 'italic',
     },
     {
-      label: 'H',
-      title: 'Heading',
-      run: () => apply((v, s) => prefixLine(v, s, '## ')),
-      className: 'font-semibold',
+      label: 'U',
+      title: 'Underline',
+      run: () => apply((v, s, e) => wrapSelection(v, s, e, '__')),
+      className: 'underline',
     },
-    { label: '• List', title: 'Bullet list', run: () => apply((v, s) => prefixLine(v, s, '- ')) },
+  ]
+
+  const headings: Btn[] = [1, 2, 3, 4].map((level) => ({
+    label: `H${level}`,
+    title: `Heading ${level}`,
+    run: () => apply((v, s) => setHeading(v, s, level)),
+    className: 'font-semibold',
+  }))
+
+  const lists: Btn[] = [
+    {
+      label: '• List',
+      title: 'Bullet list',
+      wide: true,
+      run: () => apply((v, s, e) => listLines(v, s, e, 'bullet')),
+    },
     {
       label: '1. List',
       title: 'Numbered list',
-      run: () => apply((v, s) => prefixLine(v, s, '1. ')),
+      wide: true,
+      run: () => apply((v, s, e) => listLines(v, s, e, 'numbered')),
     },
+  ]
+
+  const aligns: Btn[] = (
+    [
+      ['left', 'Align left', AlignLeftIcon],
+      ['center', 'Align centre', AlignCenterIcon],
+      ['right', 'Align right', AlignRightIcon],
+    ] as const
+  ).map(([align, title, Icon]) => ({
+    label: <Icon className="mx-auto h-3.5 w-3.5" />,
+    title,
+    run: () => apply((v, s, e) => alignLines(v, s, e, align)),
+  }))
+
+  const inserts: Btn[] = [
     {
       label: 'Link',
       title: 'Link',
+      wide: true,
       run: () => apply((v, s, e) => wrapSelection(v, s, e, '[', '](https://)', 'link text')),
     },
     {
       label: 'Image',
       title: 'Image',
+      wide: true,
       run: () => apply((v, s, e) => wrapSelection(v, s, e, '![', '](https://)', 'alt text')),
     },
   ]
 
-  return (
-    <div>
-      <div className="mb-1.5 flex flex-wrap items-center gap-1">
-        {buttons.map((button) => (
+  function Group({ items }: { items: Btn[] }) {
+    return (
+      <>
+        {items.map((button) => (
           <button
-            key={button.label}
+            key={button.title}
             type="button"
             title={button.title}
             onClick={button.run}
             disabled={preview}
-            className={`rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 ${button.className ?? ''}`}
+            className={`rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 ${
+              button.wide ? '' : 'w-8'
+            } ${button.className ?? ''}`}
           >
             {button.label}
           </button>
         ))}
+      </>
+    )
+  }
+
+  /** A hairline between groups, so thirteen buttons read as five clusters. */
+  const Divider = () => <span className="mx-0.5 h-5 w-px bg-slate-200" aria-hidden />
+
+  return (
+    <div>
+      <div className="mb-1.5 flex flex-wrap items-center gap-1">
+        <Group items={marks} />
+        <Divider />
+        <Group items={headings} />
+        <Divider />
+        <Group items={lists} />
+        <Divider />
+        <Group items={aligns} />
+        <Divider />
+        <Group items={inserts} />
 
         {/* A fixed list, because the renderer's is fixed: a field it does not
             know is left visible in the message rather than blanked, so this
@@ -156,6 +251,7 @@ export function CampaignMessageEditor({
         className={`input font-mono text-[13px] leading-relaxed ${preview ? 'hidden' : ''}`}
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        onKeyDown={onKeyDown}
         placeholder={'Hello {{first_name}},\n\nWe have new stock arriving next week…'}
       />
 

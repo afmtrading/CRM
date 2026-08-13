@@ -129,8 +129,9 @@ export default async function CampaignsPage({
                 </label>
                 <CampaignMessageEditor rows={8} />
                 <p className="mt-1 text-xs text-slate-500">
-                  Format it with the buttons, drop in a merge field, and press Preview to see what
-                  arrives. You can refine it on the next screen.
+                  Format it with the buttons — Return carries a list on to the next line — drop in a
+                  merge field, and press Preview to see what arrives. You can refine it on the next
+                  screen.
                 </p>
               </div>
 

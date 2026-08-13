@@ -58,7 +58,16 @@ function safeHref(url: string): string | null {
 
 const LINK = 'color:#1b6b47;text-decoration:underline'
 
-/** Bold, italic, links and images, applied after the text has been escaped. */
+/**
+ * Bold, italic, underline, links and images, applied after the text has been
+ * escaped.
+ *
+ * `__underline__` is this app's own spelling. Standard markdown reads it as a
+ * second way to write bold, which is a redundancy nobody needs, and there is no
+ * standard spelling for underline at all — so the slot is put to use. Worth
+ * knowing that on the web an underline reads as a link, so it earns its place
+ * on a heading or a signature and rarely in a sentence.
+ */
 function inline(source: string): string {
   let html = escapeHtml(source)
 
@@ -77,6 +86,8 @@ function inline(source: string): string {
 
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
+  // After bold, so that `**__both__**` survives in either order.
+  html = html.replace(/__([^_]+)__/g, '<u>$1</u>')
 
   return html
 }
@@ -98,24 +109,39 @@ export function markdownToText(source: string): string {
   return source
     .split(/\r?\n/)
     .map((line) => {
-      let text = line.replace(/^(#{1,3})\s+/, '')
+      // Alignment first: it sits in front of everything else on the line, and
+      // a plain-text reader has no columns to align anything in.
+      let text = line.replace(/^::(?:left|center|right)\s+/, '')
+      text = text.replace(/^(#{1,4})\s+/, '')
       // An image has nothing to show in text; its alt text is the whole point.
       text = text.replace(/!\[([^\]]*)\]\([^)\s]+\)/g, '$1')
       // A link keeps its address, in brackets, because a text reader cannot click.
       text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)')
       text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
       text = text.replace(/(^|[^*])\*([^*]+)\*/g, '$1$2')
+      text = text.replace(/__([^_]+)__/g, '$1')
       return text
     })
     .join('\n')
 }
 
+/** Heading sizes, largest first. Four levels, matching the toolbar. */
+const HEADING_SIZES = [26, 22, 18, 16]
+
 /**
  * The message body, as inline-styled HTML.
  *
- * Same small markdown subset the rest of the app uses — headings, bullets,
- * numbered lists, links, images — so somebody writing a campaign is not
- * learning a second syntax.
+ * Headings, bullets, numbered lists, links, images, and one line prefix for
+ * alignment — `::center Some text` — because markdown has no spelling for
+ * alignment and an email frequently needs one.
+ *
+ * Every list carries its `list-style-type` inline rather than relying on the
+ * browser default. Two reasons, and the first is the one that bit: this HTML is
+ * also shown in the app's own preview, where the CSS reset sets
+ * `list-style: none` on every list — so bullets and numbers vanished from the
+ * preview while the real email kept them, which is exactly the sort of
+ * disagreement a preview exists to prevent. The second is that email clients
+ * reset things unpredictably too.
  */
 export function renderEmailBody(source: string): string {
   const lines = source.split(/\r?\n/)
@@ -130,19 +156,30 @@ export function renderEmailBody(source: string): string {
   }
 
   for (const line of lines) {
-    const trimmed = line.trim()
+    let trimmed = line.trim()
 
     if (!trimmed) {
       closeList()
       continue
     }
 
-    const heading = /^(#{1,3})\s+(.*)$/.exec(trimmed)
+    // Alignment is read and stripped before anything else, so `::center ## Hi`
+    // is a centred heading rather than a paragraph starting with a hash.
+    let align = ''
+    const aligned = /^::(left|center|right)\s+(.*)$/.exec(trimmed)
+    if (aligned) {
+      // Left is the default; saying so in a style attribute would only be
+      // noise in the message source.
+      if (aligned[1] !== 'left') align = `;text-align:${aligned[1]}`
+      trimmed = aligned[2]
+    }
+
+    const heading = /^(#{1,4})\s+(.*)$/.exec(trimmed)
     if (heading) {
       closeList()
-      const size = heading[1].length === 1 ? 22 : heading[1].length === 2 ? 18 : 16
+      const size = HEADING_SIZES[heading[1].length - 1]
       html.push(
-        `<p style="margin:0 0 12px;font-size:${size}px;line-height:1.3;font-weight:600;color:#111827">${inline(
+        `<p style="margin:0 0 12px;font-size:${size}px;line-height:1.3;font-weight:600;color:#111827${align}">${inline(
           heading[2],
         )}</p>`,
       )
@@ -153,26 +190,30 @@ export function renderEmailBody(source: string): string {
     if (bullet) {
       if (list !== 'ul') {
         closeList()
-        html.push('<ul style="margin:0 0 16px;padding-left:22px">')
+        html.push('<ul style="margin:0 0 16px;padding-left:22px;list-style-type:disc">')
         list = 'ul'
       }
-      html.push(`<li style="${LI}">${inline(bullet[1])}</li>`)
+      html.push(`<li style="${LI}${align}">${inline(bullet[1])}</li>`)
       continue
     }
 
+    // The written numbers are not used: `<ol>` counts, so 1. 1. 1. and
+    // 1. 2. 3. both come out as one, two, three. That is the point of an
+    // ordered list — inserting a line in the middle must not mean renumbering
+    // the rest by hand.
     const numbered = /^\d+[.)]\s+(.*)$/.exec(trimmed)
     if (numbered) {
       if (list !== 'ol') {
         closeList()
-        html.push('<ol style="margin:0 0 16px;padding-left:22px">')
+        html.push('<ol style="margin:0 0 16px;padding-left:22px;list-style-type:decimal">')
         list = 'ol'
       }
-      html.push(`<li style="${LI}">${inline(numbered[1])}</li>`)
+      html.push(`<li style="${LI}${align}">${inline(numbered[1])}</li>`)
       continue
     }
 
     closeList()
-    html.push(`<p style="${P}">${inline(trimmed)}</p>`)
+    html.push(`<p style="${P}${align}">${inline(trimmed)}</p>`)
   }
 
   closeList()
