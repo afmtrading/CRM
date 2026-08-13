@@ -553,37 +553,91 @@ export function summariseLedger(rows: LedgerRow[]): LedgerSummary {
 // -----------------------------------------------------------------------------
 
 /**
- * One ledger row as flat columns for CSV.
+ * One cell of the export: the plain value behind a column.
  *
- * Lists are joined rather than repeated, so a spreadsheet keeps one line per
- * deal and the file's row count matches the screen's deal count.
+ * Money comes out as a bare number rather than the "$1,200 USD" the screen
+ * shows, because a spreadsheet should be able to total the column. The currency
+ * travels in its own column — see exportColumns, which refuses to let a money
+ * column leave without one.
+ *
+ * A null stays a null. An unknown margin is written as an empty cell, not a
+ * zero, for the same reason the screen writes "unknown".
  */
-export function ledgerCsvRow(row: LedgerRow): Record<string, string | number | null> {
-  return {
-    Deal: row.name,
-    Status: row.status,
-    Owner: row.owner_name ?? '',
-    'Closed by owner': row.closed_owner_name ?? '',
-    Pipeline: row.pipeline_name ?? '',
-    Stage: row.stage_name ?? '',
-    Value: row.value,
-    Currency: row.currency,
-    Probability: row.probability,
-    Weighted: row.weighted_value,
-    Revenue: row.revenue,
-    Cost: row.cost,
-    Margin: row.margin,
-    'Line items': row.line_count,
-    Company: row.company_name ?? '',
-    Contact: row.contact_name ?? '',
-    Initiated: row.created_at.slice(0, 10),
-    'Expected close': row.expected_close_date ?? '',
-    'Actual close': row.actual_close_date ?? '',
-    'Days to close': row.cycle_days,
-    'Loss reason': row.loss_reason ?? '',
-    Product: row.products.join(', '),
-    Region: row.regions.join(', '),
+export function ledgerCsvValue(row: LedgerRow, key: LedgerColumnKey): string | number | null {
+  switch (key) {
+    case 'name':
+      return row.name
+    case 'status':
+      return row.status
+    case 'owner_name':
+      return row.owner_name ?? ''
+    case 'pipeline_name':
+      return row.pipeline_name ?? ''
+    case 'stage_name':
+      return row.stage_name ?? ''
+    case 'company_name':
+      return row.company_name ?? ''
+    case 'contact_name':
+      return row.contact_name ?? ''
+    case 'value':
+      return row.value
+    case 'weighted_value':
+      return row.weighted_value
+    case 'margin':
+      return row.margin
+    case 'currency':
+      return row.currency
+    case 'created_at':
+      return row.created_at.slice(0, 10)
+    case 'expected_close_date':
+      return row.expected_close_date ?? ''
+    case 'actual_close_date':
+      return row.actual_close_date ?? ''
+    case 'cycle_days':
+      return row.cycle_days
+    case 'loss_reason':
+      return row.loss_reason ?? ''
+    // Lists are joined rather than repeated, so the file keeps one line per
+    // deal and its row count matches the screen's deal count.
+    case 'products':
+      return row.products.join(', ')
+    case 'regions':
+      return row.regions.join(', ')
   }
+}
+
+/**
+ * The columns an export should carry, given what is on screen.
+ *
+ * The chosen columns, plus Currency whenever a money column is going out
+ * without it. A column of bare amounts with no unit is the same wrong number
+ * this app refuses to print anywhere else — two currencies in one column and
+ * nothing to tell them apart — so the file keeps the unit even when the screen
+ * had it inline in the cell.
+ */
+export function exportColumns(chosen: LedgerColumn[]): LedgerColumn[] {
+  const hasMoney = chosen.some((column) => column.kind === 'money')
+  const hasCurrency = chosen.some((column) => column.key === 'currency')
+
+  if (!hasMoney || hasCurrency) return chosen
+
+  const currency = columnFor('currency')
+  return currency ? [...chosen, currency] : chosen
+}
+
+/**
+ * One ledger row as flat columns for CSV, matching what the screen shows.
+ *
+ * Headed by the same labels the table uses, in the same order, so a file and a
+ * screenshot of the report line up cell for cell.
+ */
+export function ledgerCsvRow(
+  row: LedgerRow,
+  columns: LedgerColumn[],
+): Record<string, string | number | null> {
+  const out: Record<string, string | number | null> = {}
+  for (const column of columns) out[column.label] = ledgerCsvValue(row, column.key)
+  return out
 }
 
 // -----------------------------------------------------------------------------

@@ -146,7 +146,12 @@ export default async function DealLedgerPage({
       }`,
     })
 
-  const exportHref = `/api/export?entity=deal_ledger&${ledgerFilterToParams(filter).toString()}`
+  // The export carries the layout too, so the file matches the screen.
+  const exportParams = ledgerFilterToParams(filter)
+  if (columnsParam(chosen) !== columnsParam(DEFAULT_COLUMNS)) {
+    exportParams.set('cols', columnsParam(chosen))
+  }
+  const exportHref = `/api/export?entity=deal_ledger&${exportParams.toString()}`
 
   return (
     <>
