@@ -2,8 +2,17 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { getSessionContext, scoped, type TenantTable } from '@/lib/tenancy'
 import { applyFilter, filterFromSearchParams } from '@/lib/filters'
+import {
+  applyLedgerFilter,
+  ledgerCsvRow,
+  ledgerFilterFromParams,
+  parseSort,
+  regionFieldKey,
+  sortLedger,
+  type LedgerRow,
+} from '@/lib/ledger'
 import { toCsv } from '@/lib/csv'
-import type { FilterEntityType } from '@/lib/database.types'
+import type { CustomFieldDefinitionRow, FilterEntityType } from '@/lib/database.types'
 
 /**
  * GET /export — bulk export of any filtered view (PRD 6.7), and the manual
@@ -74,6 +83,38 @@ export async function GET(request: NextRequest) {
         'content-disposition': `attachment; filename="${context.organization.slug}-full-export-${new Date()
           .toISOString()
           .slice(0, 10)}.json"`,
+      },
+    })
+  }
+
+  /*
+   * The deal ledger is not a table, so it cannot go through the generic path
+   * below. It runs the same filter and sort the screen does — literally the
+   * same functions — so the file and the page can never disagree about which
+   * deals are in the report.
+   */
+  if (entity === 'deal_ledger') {
+    const { data: definitions } = await scoped(context, 'custom_field_definitions').select('*')
+
+    const { data: ledger, error: ledgerError } = await context.supabase.rpc('deal_ledger', {
+      p_region_key: regionFieldKey((definitions ?? []) as CustomFieldDefinitionRow[]),
+    })
+
+    if (ledgerError) {
+      return NextResponse.json({ error: ledgerError.message }, { status: 500 })
+    }
+
+    const rows = sortLedger(
+      applyLedgerFilter((ledger ?? []) as LedgerRow[], ledgerFilterFromParams(params)),
+      parseSort(params.sort),
+    )
+
+    const date = new Date().toISOString().slice(0, 10)
+
+    return new NextResponse(toCsv(rows.map(ledgerCsvRow)), {
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': `attachment; filename="${context.organization.slug}-deal-ledger-${date}.csv"`,
       },
     })
   }

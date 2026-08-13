@@ -45,7 +45,9 @@ const NAV = [
   { href: '/activities', label: 'Activities', icon: <ActivityIcon className={ICON} /> },
   { href: '/lists', label: 'Lists', icon: <MailIcon className={ICON} /> },
   { href: '/campaigns', label: 'Campaigns', icon: <SendIcon className={ICON} /> },
-  { href: '/reports/pipeline-value', label: 'Reports', icon: <ReportsIcon className={ICON} /> },
+  // The ledger is where Reports starts: it is the only screen that answers
+  // "what happened", and the others are slices of it.
+  { href: '/reports/deals', label: 'Reports', icon: <ReportsIcon className={ICON} /> },
 ]
 
 const ADMIN_NAV = [

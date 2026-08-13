@@ -62,9 +62,14 @@ export default async function ProductMixReport({
         title="Product mix"
         description="What the pipeline is actually made of, summed from deal line items. Each currency is reported on its own."
         actions={
-          <Link href="/reports/pipeline-value" className="btn-secondary">
-            Pipeline value
-          </Link>
+          <>
+            <Link href="/reports/deals" className="btn-secondary">
+              Deal ledger
+            </Link>
+            <Link href="/reports/pipeline-value" className="btn-secondary">
+              Pipeline value
+            </Link>
+          </>
         }
       />
 

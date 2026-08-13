@@ -73,5 +73,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/15_stock.sql"
 echo "→ deal history tests"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/16_deal_history.sql"
 
+echo "→ deal ledger tests"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/17_deal_ledger.sql"
+
 echo
 echo "All database tests passed."
