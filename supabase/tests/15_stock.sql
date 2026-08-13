@@ -61,6 +61,7 @@ declare
   v_rep      uuid;
   v_pipeline uuid;
   v_stage    uuid;
+  v_won      uuid;
   v_product  uuid;
   v_rival    uuid;
   v_toronto  uuid;
@@ -90,6 +91,9 @@ begin
   values (v_org, 'Quotes', false) returning id into v_pipeline;
   insert into stages (organization_id, pipeline_id, name, "order", default_probability)
   values (v_org, v_pipeline, 'Quote', 0, 0.500) returning id into v_stage;
+  -- A closing stage, to prove that reaching it closes the deal.
+  insert into stages (organization_id, pipeline_id, name, "order", default_probability, outcome)
+  values (v_org, v_pipeline, 'Won', 1, 1, 'won') returning id into v_won;
 
   insert into products (organization_id, name, unit_price)
   values (v_org, 'Speaker', 100) returning id into v_product;
@@ -111,6 +115,7 @@ begin
     ('mgr_auth', v_mgr_a), ('rep_auth', v_rep_a), ('ro_auth', v_ro_a),
     ('badmin_auth', v_badmin_a),
     ('mgr', v_mgr), ('rep', v_rep),
+    ('pipeline', v_pipeline), ('stage', v_stage), ('won_stage', v_won),
     ('product', v_product), ('rival', v_rival),
     ('toronto', v_toronto), ('montreal', v_montreal), ('rack', v_rack),
     ('deal', v_deal);
@@ -444,6 +449,97 @@ begin
       'anon cannot execute ' || v_fn
     );
   end loop;
+end;
+$$;
+
+-- =============================================================================
+-- A stage that says Won means the deal is won.
+--
+-- The bug this was written for: dragging a deal into the Won stage moved
+-- stage_id and nothing else, so committed stock never dropped.
+-- =============================================================================
+do $$
+declare
+  v_product  uuid := (select id from fixture where key = 'product');
+  v_deal     uuid := (select id from fixture where key = 'deal');
+  v_open     uuid := (select id from fixture where key = 'stage');
+  v_won      uuid := (select id from fixture where key = 'won_stage');
+  v_summary  record;
+begin
+  raise notice 'Stage outcome:';
+
+  perform sign_in_as('mgr_auth');
+
+  -- The fixture deal already carries a 900-unit line item from the section
+  -- above, and is open and sitting in a working stage.
+  update deals set status = 'open', stage_id = v_open where id = v_deal;
+  select * into v_summary from public.product_stock_summary(v_product);
+  perform test_assert(v_summary.committed = 900, 'an open deal commits its line items');
+
+  update deals set stage_id = v_won where id = v_deal;
+  perform test_assert(
+    (select status from deals where id = v_deal) = 'won',
+    'moving the deal into a Won stage marks it won'
+  );
+
+  select * into v_summary from public.product_stock_summary(v_product);
+  perform test_assert(v_summary.committed = 0, 'and the stock it had promised is released');
+
+  perform test_assert(
+    (select actual_close_date from deals where id = v_deal) is not null,
+    'and the close date is stamped, because the status was set before that trigger ran'
+  );
+
+  -- Dragging it back out is the plain meaning of the move.
+  update deals set stage_id = v_open where id = v_deal;
+  perform test_assert(
+    (select status from deals where id = v_deal) = 'open',
+    'moving it back to a working stage reopens it'
+  );
+  select * into v_summary from public.product_stock_summary(v_product);
+  perform test_assert(v_summary.committed = 900, 'and the stock is committed again');
+
+  -- Editing a deal without moving it must leave the status alone, or the form's
+  -- own status field would be a control that argues with itself.
+  update deals set status = 'lost' where id = v_deal;
+  perform test_assert(
+    (select status from deals where id = v_deal) = 'lost',
+    'setting the status by hand, without moving stage, is respected'
+  );
+end;
+$$;
+
+-- =============================================================================
+-- The whole catalogue's stock in one query.
+-- =============================================================================
+do $$
+declare
+  v_product uuid := (select id from fixture where key = 'product');
+  v_rival   uuid := (select id from fixture where key = 'rival');
+  v_row     record;
+begin
+  raise notice 'Stock overview:';
+
+  perform sign_in_as('mgr_auth');
+
+  select * into v_row from public.product_stock_overview() where product_id = v_product;
+  perform test_assert(v_row.on_hand = 500, 'the overview agrees with the per-product summary on hand');
+  perform test_assert(v_row.reserved = 30, 'and on what is reserved');
+  perform test_assert(
+    array_length(v_row.locations, 1) >= 1,
+    'and says where the stock actually is'
+  );
+
+  perform test_assert(
+    (select count(*) from public.product_stock_overview() where product_id = v_rival) = 0,
+    'another organization''s catalogue is not in it'
+  );
+
+  perform sign_in_as('rep_auth');
+  perform test_assert(
+    (select count(*) from public.product_stock_overview()) > 0,
+    'a rep sees the overview too — how full the warehouse is is not a question about whose deal it is'
+  );
 end;
 $$;
 
