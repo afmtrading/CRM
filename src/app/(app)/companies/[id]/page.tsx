@@ -217,11 +217,28 @@ export default async function CompanyDetailPage({
         the deals below it. `auto` pins row one to the record's own height and
         `1fr` sends the overflow to row two, where it is absorbed.
       */}
+      {/*
+        Two stacked columns on a wide screen; one column, in reading order, on a
+        narrow one.
+
+        The wrappers are `display: contents` below lg, which dissolves them so
+        every card becomes a direct flex child of this container and can be
+        ordered individually. Without that, a narrow screen could only ever
+        stack one whole column after the other — which is why the details a
+        record is actually read for used to sit below everything else.
+
+        Cards are ordered visually rather than in the markup, so the tab order
+        still follows the source. They are landmarks with headings rather than a
+        sequence to step through, which makes that trade acceptable here.
+
+        A card added here without an order class defaults to 0 and lands at the
+        very top. Give every new card one.
+      */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:items-start">
         {/* Company info leads, above the activity feed, for the same reason it
             does on a contact: the record is what someone opened the page for. */}
-        <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1">
-          <Section title={COMPANY_CARDS[0].label}>
+        <div className="contents lg:block lg:col-span-2 lg:col-start-1 lg:row-start-1">
+          <Section title={COMPANY_CARDS[0].label} className="order-1">
             <dl className="grid gap-3 sm:grid-cols-2">
               <Field label="Company name">{company.name}</Field>
               <Field label="Website">
@@ -284,67 +301,10 @@ export default async function CompanyDetailPage({
           activity feed: what is being sold to this business is the reason to
           open its page, and it was previously below both.
         */}
-        <div className="order-3 space-y-5 lg:col-span-2 lg:col-start-1 lg:row-start-2">
-          <Section
-            title="Deals"
-            actions={
-              <Link
-                href={`/deals/new?company_id=${id}`}
-                className="btn-secondary py-1"
-              >
-                New deal
-              </Link>
-            }
-          >
-            {dealRows.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No deals linked to this company.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Deal</th>
-                      <th>Stage</th>
-                      <th>Value</th>
-                      <th>Status</th>
-                      <th>Expected close</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dealRows.map((deal) => (
-                      <tr key={deal.id}>
-                        <td>
-                          <Link
-                            href={`/deals/${deal.id}`}
-                            className="font-medium text-brand-700 hover:underline"
-                          >
-                            {deal.name}
-                          </Link>
-                        </td>
-                        <td>{deal.stages?.name ?? "—"}</td>
-                        <td>
-                          <Money
-                            value={Number(deal.value ?? 0)}
-                            currency={deal.currency}
-                            amountClassName="font-medium"
-                          />
-                        </td>
-                        <td>
-                          <DealStatusBadge status={deal.status} />
-                        </td>
-                        <td>{formatDay(deal.expected_close_date)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Section>
-
+        <div className="contents lg:block lg:space-y-5 lg:col-span-2 lg:col-start-1 lg:row-start-2">
           <Section
             title="Contacts"
+            className="order-6"
             actions={
               <Link
                 href={`/contacts/new?company_id=${id}`}
@@ -432,7 +392,66 @@ export default async function CompanyDetailPage({
             )}
           </Section>
 
-          <Section title="Activity">
+          <Section
+            title="Deals"
+            className="order-5"
+            actions={
+              <Link
+                href={`/deals/new?company_id=${id}`}
+                className="btn-secondary py-1"
+              >
+                New deal
+              </Link>
+            }
+          >
+            {dealRows.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No deals linked to this company.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Deal</th>
+                      <th>Stage</th>
+                      <th>Value</th>
+                      <th>Status</th>
+                      <th>Expected close</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dealRows.map((deal) => (
+                      <tr key={deal.id}>
+                        <td>
+                          <Link
+                            href={`/deals/${deal.id}`}
+                            className="font-medium text-brand-700 hover:underline"
+                          >
+                            {deal.name}
+                          </Link>
+                        </td>
+                        <td>{deal.stages?.name ?? "—"}</td>
+                        <td>
+                          <Money
+                            value={Number(deal.value ?? 0)}
+                            currency={deal.currency}
+                            amountClassName="font-medium"
+                          />
+                        </td>
+                        <td>
+                          <DealStatusBadge status={deal.status} />
+                        </td>
+                        <td>{formatDay(deal.expected_close_date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+
+          <Section title="Activity" className="order-10">
             <ActivityComposer
               relatedToType="company"
               relatedToId={id}
@@ -455,13 +474,13 @@ export default async function CompanyDetailPage({
           straight after it on a narrow one — before the activity feed, which is
           long and is not what most visits are for.
         */}
-        <div className="order-2 space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
+        <div className="contents lg:block lg:space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
           {/*
             Company Rating leads the sidebar, in the place Influence holds on a
             contact and for the same reason: what kind of business this is, is
             the first thing worth knowing after which business it is.
           */}
-          <Section title={COMPANY_CARDS[3].label}>
+          <Section title={COMPANY_CARDS[3].label} className="order-2">
             <dl className="grid gap-3 sm:grid-cols-2">
               <Field label="Market" wide>
                 <OptionBadges
@@ -483,7 +502,7 @@ export default async function CompanyDetailPage({
             </dl>
           </Section>
 
-          <Section title={COMPANY_CARDS[2].label}>
+          <Section title={COMPANY_CARDS[2].label} className="order-3">
             {/*
               No website field here: it is the first thing in Company info, and
               a value repeated in two cards is a value that can look like it
@@ -531,71 +550,7 @@ export default async function CompanyDetailPage({
             </dl>
           </Section>
 
-          <Section title={COMPANY_CARDS[1].label}>
-            <dl className="space-y-3">
-              <Field label="Owner">
-                {userName(company.owner_id) ?? <Empty />}
-              </Field>
-              <CustomFieldValues
-                fields={customByCard("additional")}
-                values={customValues}
-                fieldOptions={options}
-              />
-              <Field label="Notes">
-                {notesHtml ? (
-                  <div
-                    className="space-y-2 leading-relaxed text-slate-700"
-                    // Safe by construction: renderMarkdown escapes the stored
-                    // text before applying formatting.
-                    dangerouslySetInnerHTML={{ __html: notesHtml }}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-            </dl>
-          </Section>
-
-          <Section title="Products">
-            {purchaseRows.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Nothing yet. This is built from the line items on this
-                client&rsquo;s deals.
-              </p>
-            ) : (
-              <ul className="space-y-2.5">
-                {purchaseRows.map((row) => (
-                  <li
-                    key={`${row.id}-${row.currency}`}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <Link
-                      href={`/products/${row.id}`}
-                      className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 hover:text-brand-700"
-                    >
-                      {row.name}
-                    </Link>
-                    {/* Already grouped by currency — the key is id + currency —
-                        so each line is one currency and needs saying which. */}
-                    <div className="shrink-0 text-right">
-                      <Money
-                        value={row.won}
-                        currency={row.currency}
-                        amountClassName="text-sm font-semibold text-slate-900"
-                      />
-                      {row.open > 0 && (
-                        <p className="text-xs text-slate-500">
-                          <Money value={row.open} currency={row.currency} /> open
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-
-          <Section title="Tags">
+          <Section title="Tags" className="order-4">
             {tagList.length === 0 ? (
               <p className="text-sm text-slate-500">
                 No tags defined yet.{" "}
@@ -635,7 +590,71 @@ export default async function CompanyDetailPage({
             )}
           </Section>
 
-          <Section title="Record history">
+          <Section title={COMPANY_CARDS[1].label} className="order-7">
+            <dl className="space-y-3">
+              <Field label="Owner">
+                {userName(company.owner_id) ?? <Empty />}
+              </Field>
+              <CustomFieldValues
+                fields={customByCard("additional")}
+                values={customValues}
+                fieldOptions={options}
+              />
+              <Field label="Notes">
+                {notesHtml ? (
+                  <div
+                    className="space-y-2 leading-relaxed text-slate-700"
+                    // Safe by construction: renderMarkdown escapes the stored
+                    // text before applying formatting.
+                    dangerouslySetInnerHTML={{ __html: notesHtml }}
+                  />
+                ) : (
+                  <Empty />
+                )}
+              </Field>
+            </dl>
+          </Section>
+
+          <Section title="Products" className="order-9">
+            {purchaseRows.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nothing yet. This is built from the line items on this
+                client&rsquo;s deals.
+              </p>
+            ) : (
+              <ul className="space-y-2.5">
+                {purchaseRows.map((row) => (
+                  <li
+                    key={`${row.id}-${row.currency}`}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <Link
+                      href={`/products/${row.id}`}
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 hover:text-brand-700"
+                    >
+                      {row.name}
+                    </Link>
+                    {/* Already grouped by currency — the key is id + currency —
+                        so each line is one currency and needs saying which. */}
+                    <div className="shrink-0 text-right">
+                      <Money
+                        value={row.won}
+                        currency={row.currency}
+                        amountClassName="text-sm font-semibold text-slate-900"
+                      />
+                      {row.open > 0 && (
+                        <p className="text-xs text-slate-500">
+                          <Money value={row.open} currency={row.currency} /> open
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+
+          <Section title="Record history" className="order-8">
             <dl className="space-y-3">
               <Field label="Created by">
                 <span className="block">

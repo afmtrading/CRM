@@ -322,10 +322,27 @@ export default async function ContactDetailPage({
         the deals below it. `auto` pins row one to the record's own height and
         `1fr` sends the overflow to row two, where it is absorbed.
       */}
+      {/*
+        Two stacked columns on a wide screen; one column, in reading order, on a
+        narrow one.
+
+        The wrappers are `display: contents` below lg, which dissolves them so
+        every card becomes a direct flex child of this container and can be
+        ordered individually. Without that, a narrow screen could only ever
+        stack one whole column after the other — which is why the details a
+        record is actually read for used to sit below everything else.
+
+        Cards are ordered visually rather than in the markup, so the tab order
+        still follows the source. They are landmarks with headings rather than a
+        sequence to step through, which makes that trade acceptable here.
+
+        A card added here without an order class defaults to 0 and lands at the
+        very top. Give every new card one.
+      */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:items-start">
         {/* Contact details leads — it is what someone opened the page for. */}
-        <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1">
-          <Section title={CONTACT_CARDS[0].label}>
+        <div className="contents lg:block lg:col-span-2 lg:col-start-1 lg:row-start-1">
+          <Section title={CONTACT_CARDS[0].label} className="order-1">
             <div className="mb-4">
               <div className="min-w-0">
                 <p className="truncate font-semibold text-slate-900">{name}</p>
@@ -382,9 +399,10 @@ export default async function ContactDetailPage({
           this person is involved in selling is usually the reason their page
           was opened, and it was below the whole feed.
         */}
-        <div className="order-3 space-y-5 lg:col-span-2 lg:col-start-1 lg:row-start-2">
+        <div className="contents lg:block lg:space-y-5 lg:col-span-2 lg:col-start-1 lg:row-start-2">
           <Section
             title="Deals"
+            className="order-9"
             actions={
               <Link
                 href={`/deals/new?contact_id=${id}`}
@@ -441,7 +459,7 @@ export default async function ContactDetailPage({
             )}
           </Section>
 
-          <Section title="Activity">
+          <Section title="Activity" className="order-10">
             <ActivityComposer
               relatedToType="contact"
               relatedToId={id}
@@ -466,8 +484,8 @@ export default async function ContactDetailPage({
           much weight this person carries is the first thing worth knowing
           about them after who they are.
         */}
-        <div className="order-2 space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
-          <Section title={CONTACT_CARDS[1].label}>
+        <div className="contents lg:block lg:space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
+          <Section title={CONTACT_CARDS[1].label} className="order-2">
             <dl className="grid gap-3 sm:grid-cols-2">
               <Field label="Role type" wide>
                 <OptionBadges
@@ -526,6 +544,98 @@ export default async function ContactDetailPage({
             </dl>
           </Section>
 
+          <Section title="Tags" className="order-3">
+            {tagList.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No tags defined yet.{" "}
+                {context.isAdmin && (
+                  <Link
+                    href="/settings/tags"
+                    className="text-brand-700 hover:underline"
+                  >
+                    Create some
+                  </Link>
+                )}
+              </p>
+            ) : (
+              <form action={setContactTags} className="space-y-3">
+                <input type="hidden" name="contact_id" value={id} />
+                <div className="flex flex-wrap gap-2">
+                  {tagList.map((tag) => (
+                    <label
+                      key={tag.id}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-xs hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        name="tag_ids"
+                        value={tag.id}
+                        defaultChecked={selectedTagIds.has(tag.id)}
+                        className="rounded border-slate-300"
+                      />
+                      <span
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ backgroundColor: tag.color }}
+                        aria-hidden
+                      />
+                      {tag.name}
+                    </label>
+                  ))}
+                </div>
+                <button type="submit" className="btn-secondary">
+                  Save tags
+                </button>
+              </form>
+            )}
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title={CONTACT_CARDS[3].label} className="order-5">
+            <dl className="grid gap-3">
+              <Field label="Company website">
+                <ExternalLink url={companyWebsite} />
+              </Field>
+              <Field label="LinkedIn">
+                <ExternalLink url={socialUrl("linkedin", contact.linkedin)} />
+              </Field>
+              <Field label="Facebook">
+                <ExternalLink url={socialUrl("facebook", contact.facebook)} />
+              </Field>
+              <Field label="Instagram">
+                <ExternalLink url={socialUrl("instagram", contact.instagram)} />
+              </Field>
+              <Field label="TikTok">
+                <ExternalLink url={socialUrl("tiktok", contact.tiktok)} />
+              </Field>
+              <Field label="X (Twitter)">
+                <ExternalLink url={socialUrl("x_twitter", contact.x_twitter)} />
+              </Field>
+              <CustomFieldValues
+                fields={customByCard("digital")}
+                values={customValues}
+                fieldOptions={options}
+              />
+
+              {extraLinks.length > 0 && (
+                <div>
+                  <dt className="text-xs font-medium text-slate-500">
+                    Other links
+                  </dt>
+                  <dd className="mt-1 space-y-1 text-sm">
+                    {extraLinks.map((link, index) => (
+                      <div key={`${link.url}-${index}`}>
+                        <ExternalLink
+                          url={safeUrl(link.url)}
+                          label={link.label || undefined}
+                        />
+                      </div>
+                    ))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </Section>
+
           {/*
             What kind of business this person works for. Read from the company
             rather than stored again on the contact, so the two can never
@@ -535,6 +645,7 @@ export default async function ContactDetailPage({
           {company && (
             <Section
               title={COMPANY_CARDS[3].label}
+              className="order-4"
               actions={
                 <CardLink href={`/companies/${company.id}`}>
                   {company.name}
@@ -563,12 +674,84 @@ export default async function ContactDetailPage({
             </Section>
           )}
 
+          {/* ---------------------------------------------------------------- */}
+          <Section title={CONTACT_CARDS[2].label} className="order-6">
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <Field label="Owner">
+                {userName(contact.owner_id) ?? <Empty />}
+              </Field>
+              <Field label="Lead score">
+                <ScoreMeter score={contact.lead_score} />
+              </Field>
+              <Field label="Source">{contact.source || <Empty />}</Field>
+              <Field label="Lifecycle stage">
+                <LifecycleBadge stage={contact.lifecycle_stage} />
+              </Field>
+              <Field label="Birthday" wide>
+                {contact.birthday ? (
+                  <span className="flex flex-wrap items-center gap-2">
+                    {formatDay(contact.birthday)}
+                    {untilBirthday !== null && (
+                      <span className="text-xs text-slate-500">
+                        {untilBirthday === 0
+                          ? "today"
+                          : `in ${untilBirthday} day${untilBirthday === 1 ? "" : "s"}`}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <Empty />
+                )}
+              </Field>
+              <CustomFieldValues
+                fields={customByCard("additional")}
+                values={customValues}
+                fieldOptions={options}
+              />
+              <Field label="Notes" wide>
+                {notesHtml ? (
+                  <div
+                    className="space-y-2 leading-relaxed text-slate-700"
+                    // Safe by construction: renderMarkdown escapes the stored
+                    // text before applying formatting, so the only markup here
+                    // is what it generated. Covered by tests/field-options.test.ts.
+                    dangerouslySetInnerHTML={{ __html: notesHtml }}
+                  />
+                ) : (
+                  <Empty />
+                )}
+              </Field>
+            </dl>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Record history" className="order-7">
+            <dl className="space-y-3">
+              <Field label="Created by">
+                <span className="block">
+                  {userName(contact.created_by) ?? "Unknown"}
+                </span>
+                <span className="text-xs text-slate-500">
+                  <DateTime value={contact.created_at} />
+                </span>
+              </Field>
+              <Field label="Updated by">
+                <span className="block">
+                  {userName(contact.updated_by) ?? "Unknown"}
+                </span>
+                <span className="text-xs text-slate-500">
+                  <DateTime value={contact.updated_at} />
+                </span>
+              </Field>
+            </dl>
+          </Section>
+
           {/*
             Consent is its own card rather than a line in Additional info: it is
             the answer to "may we email this person", which is a different kind
             of question from who owns the record.
           */}
-          <Section title="Email consent">
+          <Section title="Email consent" className="order-8">
             <dl className="grid gap-3">
               <Field label="Basis">
                 {CONSENT_LABELS[contact.marketing_consent]}
@@ -638,170 +821,6 @@ export default async function ContactDetailPage({
                 <p className="text-xs text-slate-400">
                   An unsubscribe or a bounced address cannot be overridden.
                 </p>
-              </form>
-            )}
-          </Section>
-
-          {/* ---------------------------------------------------------------- */}
-          <Section title={CONTACT_CARDS[2].label}>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Owner">
-                {userName(contact.owner_id) ?? <Empty />}
-              </Field>
-              <Field label="Lead score">
-                <ScoreMeter score={contact.lead_score} />
-              </Field>
-              <Field label="Source">{contact.source || <Empty />}</Field>
-              <Field label="Lifecycle stage">
-                <LifecycleBadge stage={contact.lifecycle_stage} />
-              </Field>
-              <Field label="Birthday" wide>
-                {contact.birthday ? (
-                  <span className="flex flex-wrap items-center gap-2">
-                    {formatDay(contact.birthday)}
-                    {untilBirthday !== null && (
-                      <span className="text-xs text-slate-500">
-                        {untilBirthday === 0
-                          ? "today"
-                          : `in ${untilBirthday} day${untilBirthday === 1 ? "" : "s"}`}
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-              <CustomFieldValues
-                fields={customByCard("additional")}
-                values={customValues}
-                fieldOptions={options}
-              />
-              <Field label="Notes" wide>
-                {notesHtml ? (
-                  <div
-                    className="space-y-2 leading-relaxed text-slate-700"
-                    // Safe by construction: renderMarkdown escapes the stored
-                    // text before applying formatting, so the only markup here
-                    // is what it generated. Covered by tests/field-options.test.ts.
-                    dangerouslySetInnerHTML={{ __html: notesHtml }}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-            </dl>
-          </Section>
-
-          {/* ---------------------------------------------------------------- */}
-          <Section title={CONTACT_CARDS[3].label}>
-            <dl className="grid gap-3">
-              <Field label="Company website">
-                <ExternalLink url={companyWebsite} />
-              </Field>
-              <Field label="LinkedIn">
-                <ExternalLink url={socialUrl("linkedin", contact.linkedin)} />
-              </Field>
-              <Field label="Facebook">
-                <ExternalLink url={socialUrl("facebook", contact.facebook)} />
-              </Field>
-              <Field label="Instagram">
-                <ExternalLink url={socialUrl("instagram", contact.instagram)} />
-              </Field>
-              <Field label="TikTok">
-                <ExternalLink url={socialUrl("tiktok", contact.tiktok)} />
-              </Field>
-              <Field label="X (Twitter)">
-                <ExternalLink url={socialUrl("x_twitter", contact.x_twitter)} />
-              </Field>
-              <CustomFieldValues
-                fields={customByCard("digital")}
-                values={customValues}
-                fieldOptions={options}
-              />
-
-              {extraLinks.length > 0 && (
-                <div>
-                  <dt className="text-xs font-medium text-slate-500">
-                    Other links
-                  </dt>
-                  <dd className="mt-1 space-y-1 text-sm">
-                    {extraLinks.map((link, index) => (
-                      <div key={`${link.url}-${index}`}>
-                        <ExternalLink
-                          url={safeUrl(link.url)}
-                          label={link.label || undefined}
-                        />
-                      </div>
-                    ))}
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </Section>
-
-          {/* ---------------------------------------------------------------- */}
-          <Section title="Record history">
-            <dl className="space-y-3">
-              <Field label="Created by">
-                <span className="block">
-                  {userName(contact.created_by) ?? "Unknown"}
-                </span>
-                <span className="text-xs text-slate-500">
-                  <DateTime value={contact.created_at} />
-                </span>
-              </Field>
-              <Field label="Updated by">
-                <span className="block">
-                  {userName(contact.updated_by) ?? "Unknown"}
-                </span>
-                <span className="text-xs text-slate-500">
-                  <DateTime value={contact.updated_at} />
-                </span>
-              </Field>
-            </dl>
-          </Section>
-
-          <Section title="Tags">
-            {tagList.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No tags defined yet.{" "}
-                {context.isAdmin && (
-                  <Link
-                    href="/settings/tags"
-                    className="text-brand-700 hover:underline"
-                  >
-                    Create some
-                  </Link>
-                )}
-              </p>
-            ) : (
-              <form action={setContactTags} className="space-y-3">
-                <input type="hidden" name="contact_id" value={id} />
-                <div className="flex flex-wrap gap-2">
-                  {tagList.map((tag) => (
-                    <label
-                      key={tag.id}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-xs hover:bg-slate-50"
-                    >
-                      <input
-                        type="checkbox"
-                        name="tag_ids"
-                        value={tag.id}
-                        defaultChecked={selectedTagIds.has(tag.id)}
-                        className="rounded border-slate-300"
-                      />
-                      <span
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                        aria-hidden
-                      />
-                      {tag.name}
-                    </label>
-                  ))}
-                </div>
-                <button type="submit" className="btn-secondary">
-                  Save tags
-                </button>
               </form>
             )}
           </Section>
