@@ -86,8 +86,8 @@ export default async function SalesPerformancePage({
             <Link href="/reports/deals" className="btn-secondary">
               Deal ledger
             </Link>
-            <Link href="/reports/pipeline-value" className="btn-secondary">
-              Pipeline value
+            <Link href="/reports/charts" className="btn-secondary">
+              Charts
             </Link>
             <Link href="/reports/product-mix" className="btn-secondary">
               Product mix

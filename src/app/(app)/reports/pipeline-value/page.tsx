@@ -105,8 +105,8 @@ export default async function PipelineValueReport({
             <Link href="/reports/performance" className="btn-secondary">
               Performance
             </Link>
-            <Link href="/reports/product-mix" className="btn-secondary">
-              Product mix
+            <Link href="/reports/charts" className="btn-secondary">
+              Charts
             </Link>
           </>
         }
