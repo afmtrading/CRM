@@ -425,16 +425,26 @@ export default async function CampaignPage({
           {tally.sent > 0 && (
             <Section title="What happened">
               <dl className="grid gap-1.5 text-sm">
-                {[
-                  ['Sent', tally.sent],
-                  ['Delivered', tally.delivered],
-                  ['Opened', tally.opened],
-                  ['Clicked', tally.clicked],
-                  ['Bounced', tally.bounced],
-                  ['Marked as spam', tally.complained],
-                  ['Failed', tally.failed],
-                ]
-                  .filter(([, count]) => (count as number) > 0)
+                {/*
+                  The first four are always shown, zero included. Hiding a zero
+                  makes the difference between "nobody opened it" and "opens are
+                  not being recorded" invisible — the row is missing either way,
+                  and the reader is left to guess which. The last three are
+                  exceptions rather than measurements, so they appear only when
+                  there is something to report.
+                */}
+                {(
+                  [
+                    ['Sent', tally.sent, true],
+                    ['Delivered', tally.delivered, true],
+                    ['Opened', tally.opened, true],
+                    ['Clicked', tally.clicked, true],
+                    ['Bounced', tally.bounced, false],
+                    ['Marked as spam', tally.complained, false],
+                    ['Failed', tally.failed, false],
+                  ] as [string, number, boolean][]
+                )
+                  .filter(([, count, always]) => always || count > 0)
                   .map(([label, count]) => (
                     <div key={label as string} className="flex justify-between gap-2">
                       <dt className="text-slate-600">{label}</dt>
@@ -449,12 +459,21 @@ export default async function CampaignPage({
                 undercount either way — treating opens as a readership figure is
                 the mistake this line exists to prevent.
               */}
-              {tally.delivered > 0 && tally.opened < tally.delivered && (
+              {tally.delivered > 0 && tally.opened === 0 && (
                 <p className="mt-3 text-xs text-slate-500">
-                  Opens are counted by a hidden image, so they only register when the recipient&rsquo;s
-                  client loads images and only if open tracking is switched on for the sending
-                  domain. Real readers routinely show as unopened; treat this as a floor, not a
-                  count.
+                  <strong className="font-medium text-slate-700">
+                    Opens at zero usually means they are not being recorded, not that nobody read
+                    it.
+                  </strong>{' '}
+                  Open tracking has to be switched on for the sending domain in the email provider;
+                  until it is, no open is ever reported.
+                </p>
+              )}
+              {tally.opened > 0 && tally.opened < tally.delivered && (
+                <p className="mt-3 text-xs text-slate-500">
+                  Opens are counted by a hidden image, so they only register when the
+                  recipient&rsquo;s client loads them. Real readers routinely show as unopened —
+                  treat this as a floor, not a count.
                 </p>
               )}
             </Section>
