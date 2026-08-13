@@ -125,6 +125,9 @@ export default async function DealLedgerPage({
         description="Every deal ever recorded — open, won and lost. A deal leaves the board when it closes; it never leaves here."
         actions={
           <>
+            <Link href="/reports/performance" className="btn-secondary">
+              Performance
+            </Link>
             <Link href="/reports/pipeline-value" className="btn-secondary">
               Pipeline value
             </Link>
