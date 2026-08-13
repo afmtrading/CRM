@@ -69,6 +69,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
 
   const userList = (users ?? []) as UserRow[]
   const owner = userList.find((user) => user.id === deal.owner_id)
+  const closedOwner = userList.find((user) => user.id === deal.closed_owner_id)
 
   const lineItems = (lines ?? []) as (DealProductRow & {
     products: { id: string; name: string; sku: string | null; unit: string } | null
@@ -97,13 +98,33 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             </Link>
             <form action={deleteDeal}>
               <input type="hidden" name="id" value={id} />
-              <button type="submit" className="btn-danger">
+              <button
+                type="submit"
+                className="btn-danger"
+                title="The deal moves to the recycle bin — an administrator can restore it"
+              >
                 Delete
               </button>
             </form>
           </>
         }
       />
+
+      {/*
+        Only an administrator can reach this, since the policy hides a deleted
+        deal from everybody else. Saying so beats letting them edit a record
+        that no one else can see and wondering later why it never appeared.
+      */}
+      {deal.deleted_at && (
+        <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          This deal is in the recycle bin. Nobody else can see it, and it counts towards nothing —
+          not committed stock, not the pipeline.{' '}
+          <Link href="/settings/deleted" className="font-medium underline">
+            Restore it
+          </Link>
+          .
+        </p>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
@@ -397,6 +418,35 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
               <dt className="text-xs text-slate-500">Actual close</dt>
               <dd className="mt-0.5 text-slate-800">{formatDay(deal.actual_close_date)}</dd>
             </div>
+            {/*
+              Only once the deal has closed, and only when it says something the
+              Owner row above does not. Reporting reads closed_owner_id, so the
+              day the two disagree — an account handed over after the win — is
+              the day it matters that the record shows both.
+            */}
+            {deal.closed_owner_id && deal.closed_owner_id !== deal.owner_id && (
+              <div>
+                <dt className="text-xs text-slate-500">Closed by owner</dt>
+                <dd className="mt-0.5 text-slate-800">
+                  {closedOwner ? closedOwner.name || closedOwner.email : 'Someone since removed'}
+                  <span className="mt-0.5 block text-xs text-slate-400">
+                    Who this counts for in reporting. The account has changed hands since.
+                  </span>
+                </dd>
+              </div>
+            )}
+            {deal.status === 'lost' && (
+              <div>
+                <dt className="text-xs text-slate-500">Why it was lost</dt>
+                <dd className="mt-0.5 text-slate-800">
+                  {deal.loss_reason ?? (
+                    <Link href={`/deals/${id}/edit`} className="text-brand-700 hover:underline">
+                      Not recorded — say why
+                    </Link>
+                  )}
+                </dd>
+              </div>
+            )}
           </dl>
         </Section>
       </div>

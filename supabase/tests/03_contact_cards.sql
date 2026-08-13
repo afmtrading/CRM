@@ -71,12 +71,18 @@ begin
     'a new organization is seeded with the priority options'
   );
 
-  -- Five for people and businesses, three more for the catalogue. Not
-  -- product_category, which is seeded empty on purpose — an organization's own
-  -- categories are not a list this app can guess.
+  -- Five for people and businesses, three more for the catalogue, one for why a
+  -- deal was lost. Not product_category, which is seeded empty on purpose — an
+  -- organization's own categories are not a list this app can guess.
   perform test_assert(
-    (select count(distinct field_key) from field_options where organization_id = v_org_a) = 8,
+    (select count(distinct field_key) from field_options where organization_id = v_org_a) = 9,
     'every option list with a starting vocabulary is seeded'
+  );
+
+  perform test_assert(
+    (select count(*) from field_options
+     where organization_id = v_org_a and entity_type = 'deal' and field_key = 'loss_reason') = 8,
+    'a new organization is seeded with loss reasons'
   );
 
   perform test_assert(

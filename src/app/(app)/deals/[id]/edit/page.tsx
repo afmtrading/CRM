@@ -17,18 +17,29 @@ export default async function EditDealPage({ params }: { params: Promise<{ id: s
   )
   if (!deal) notFound()
 
-  const [{ data: pipelines }, { data: stages }, { data: contacts }, { data: companies }, { data: owners }] =
-    await Promise.all([
-      scoped(context, 'pipelines').select('*').order('name'),
-      scoped(context, 'stages').select('*').order('order'),
-      scoped(context, 'contacts')
-        .select('id, first_name, last_name, email')
-        .is('duplicate_of_id', null)
-        .order('last_name')
-        .limit(500),
-      scoped(context, 'companies').select('id, name').order('name').limit(500),
-      scoped(context, 'users').select('*').eq('status', 'active').order('name'),
-    ])
+  const [
+    { data: pipelines },
+    { data: stages },
+    { data: contacts },
+    { data: companies },
+    { data: owners },
+    { data: reasons },
+  ] = await Promise.all([
+    scoped(context, 'pipelines').select('*').order('name'),
+    scoped(context, 'stages').select('*').order('order'),
+    scoped(context, 'contacts')
+      .select('id, first_name, last_name, email')
+      .is('duplicate_of_id', null)
+      .order('last_name')
+      .limit(500),
+    scoped(context, 'companies').select('id, name').order('name').limit(500),
+    scoped(context, 'users').select('*').eq('status', 'active').order('name'),
+    scoped(context, 'field_options')
+      .select('value')
+      .eq('entity_type', 'deal')
+      .eq('field_key', 'loss_reason')
+      .order('order'),
+  ])
 
   return (
     <>
@@ -44,6 +55,7 @@ export default async function EditDealPage({ params }: { params: Promise<{ id: s
         }))}
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
+        lossReasons={((reasons ?? []) as { value: string }[]).map((row) => row.value)}
         defaultCurrency={context.organization.default_currency}
         submitLabel="Save changes"
       />

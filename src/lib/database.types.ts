@@ -77,6 +77,7 @@ export type OptionFieldKey =
   | 'product_type'
   | 'product_condition'
   | 'product_status'
+  | 'loss_reason'
 
 /** A named link on the Digital card, beyond the known social networks. */
 export type ContactLink = { label: string; url: string }
@@ -454,7 +455,20 @@ export type DealRow = {
   notes: string | null
   status: DealStatus
   owner_id: string | null
+  /**
+   * Who owned the deal at the moment it closed, and who closed it. Reporting
+   * reads closed_owner_id rather than owner_id, so handing an account to a
+   * colleague afterwards does not move the win with it.
+   */
+  closed_owner_id: string | null
+  closed_by: string | null
+  closed_at: string | null
+  /** Why a lost deal was lost. Offered from field_options (deal / loss_reason). */
+  loss_reason: string | null
   position: number
+  /** Set means the deal is in the recycle bin: only an admin sees it. */
+  deleted_at: string | null
+  deleted_by: string | null
   created_at: string
   updated_at: string
 }

@@ -16,6 +16,10 @@ const dealSchema = z.object({
   probability: z.string().trim().default(''),
   expected_close_date: z.string().trim().default(''),
   status: z.enum(['open', 'won', 'lost']).default('open'),
+  // Only meaningful on a lost deal. Not constrained to the option list: an
+  // import may carry a reason this organization has not written down yet, and
+  // dropping it would lose the very thing being recorded.
+  loss_reason: z.string().trim().max(120).default(''),
   owner_id: z.string().uuid().or(z.literal('')).default(''),
   // Markdown, like contact and company notes. Bounded so a paste of an entire
   // email thread cannot become the row.
@@ -47,6 +51,9 @@ export async function createDeal(_prev: DealActionState, formData: FormData): Pr
       probability_overridden: overridden,
       expected_close_date: input.expected_close_date || null,
       status: input.status,
+      // A reason belongs to a loss. Carrying one on a won or open deal would
+      // put a "why we lost" into the reports for a deal nobody lost.
+      loss_reason: input.status === 'lost' ? input.loss_reason || null : null,
       owner_id: input.owner_id || context.user.id,
       notes: input.notes || null,
     })
@@ -108,6 +115,7 @@ export async function updateDeal(_prev: DealActionState, formData: FormData): Pr
       probability_overridden: overridden,
       expected_close_date: input.expected_close_date || null,
       status: input.status,
+      loss_reason: input.status === 'lost' ? input.loss_reason || null : null,
       owner_id: input.owner_id || null,
       notes: input.notes || null,
     })
@@ -258,15 +266,42 @@ export async function useLineItemsForValue(formData: FormData) {
   revalidatePath('/deals')
 }
 
+/**
+ * Deleting a deal no longer destroys it.
+ *
+ * The row is stamped and leaves every view but an administrator's, who can put
+ * it back from Settings → Deleted records. A deal is the record of work that
+ * was done — an unrecoverable delete was the one thing in this app that could
+ * lose it for good.
+ */
 export async function deleteDeal(formData: FormData) {
   const context = await requireSession()
   const id = String(formData.get('id') ?? '')
 
-  const { error } = await scoped(context, 'deals').delete().eq('id', id)
+  const { error } = await context.supabase.rpc('soft_delete_deal', { p_deal_id: id })
   if (error) throw new Error(error.message)
 
   revalidatePath('/deals')
   redirect('/deals')
+}
+
+/**
+ * The same delete, from a card on the board.
+ *
+ * Returns rather than redirects: the board is already the page the user is on,
+ * and it removes the card optimistically. Deleting from a kanban card is the
+ * quick way to clear a deal that landed in Won or Lost and is finished with —
+ * the thing that was missing when dropping a card into Won stopped being a
+ * disappearance.
+ */
+export async function deleteDealFromBoard(dealId: string) {
+  const context = await requireSession()
+
+  const { error } = await context.supabase.rpc('soft_delete_deal', { p_deal_id: dealId })
+  if (error) return { error: error.message }
+
+  revalidatePath('/deals')
+  return { ok: true }
 }
 
 // -----------------------------------------------------------------------------

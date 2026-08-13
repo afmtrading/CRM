@@ -5,9 +5,10 @@ import Link from 'next/link'
 
 import { formatDay, formatPercent } from '@/lib/format'
 import { Money, MoneyTotals } from '@/components/money'
+import { TrashIcon } from '@/components/icons'
 import type { DealRow, StageRow } from '@/lib/database.types'
 
-import { moveDealToStage } from './actions'
+import { deleteDealFromBoard, moveDealToStage } from './actions'
 
 export interface KanbanDeal extends DealRow {
   contacts: { id: string; first_name: string; last_name: string } | null
@@ -21,29 +22,36 @@ export interface KanbanDeal extends DealRow {
  * interaction is one card into one column, and a dependency would not earn its
  * place. The move is optimistic, so the card lands before the round trip.
  */
+/** A move, or a removal. Both change which cards are on screen. */
+type BoardChange = { kind: 'move'; dealId: string; stageId: string } | { kind: 'remove'; dealId: string }
+
 export function Kanban({
   stages,
   deals,
   ownerNames,
   productNames,
+  canDelete,
 }: {
   stages: StageRow[]
   deals: KanbanDeal[]
   ownerNames: Record<string, string>
   /** Deal id → the distinct products on it, for the card. */
   productNames: Record<string, string[]>
+  canDelete: boolean
 }) {
   const [, startTransition] = useTransition()
   const [dragging, setDragging] = useState<string | null>(null)
   const [hoverStage, setHoverStage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const [optimisticDeals, applyMove] = useOptimistic(
+  const [optimisticDeals, applyChange] = useOptimistic(
     deals,
-    (current: KanbanDeal[], move: { dealId: string; stageId: string }) =>
-      current.map((deal) =>
-        deal.id === move.dealId ? { ...deal, stage_id: move.stageId } : deal,
-      ),
+    (current: KanbanDeal[], change: BoardChange) =>
+      change.kind === 'remove'
+        ? current.filter((deal) => deal.id !== change.dealId)
+        : current.map((deal) =>
+            deal.id === change.dealId ? { ...deal, stage_id: change.stageId } : deal,
+          ),
   )
 
   function onDrop(stageId: string) {
@@ -56,8 +64,29 @@ export function Kanban({
     if (!deal || deal.stage_id === stageId) return
 
     startTransition(async () => {
-      applyMove({ dealId, stageId })
+      applyChange({ kind: 'move', dealId, stageId })
       const result = await moveDealToStage(dealId, stageId)
+      if (result?.error) setError(result.error)
+    })
+  }
+
+  /**
+   * Clearing a finished card off the board.
+   *
+   * Confirmed rather than instant, because a card is a small target and this is
+   * the only destructive thing on the page. It is not really destructive — the
+   * deal goes to the recycle bin and an administrator can restore it — but the
+   * person clicking has no way to know that unless it is said.
+   */
+  function onDelete(deal: KanbanDeal) {
+    const ok = window.confirm(
+      `Delete "${deal.name}"?\n\nIt moves to the recycle bin, where an administrator can restore it.`,
+    )
+    if (!ok) return
+
+    startTransition(async () => {
+      applyChange({ kind: 'remove', dealId: deal.id })
+      const result = await deleteDealFromBoard(deal.id)
       if (result?.error) setError(result.error)
     })
   }
@@ -129,14 +158,33 @@ export function Kanban({
                         {deal.name}
                       </Link>
 
-                      {deal.owner_id && ownerNames[deal.owner_id] && (
-                        <span
-                          className="shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
-                          title={ownerNames[deal.owner_id]}
-                        >
-                          {ownerNames[deal.owner_id]}
-                        </span>
-                      )}
+                      <div className="flex shrink-0 items-center gap-1">
+                        {deal.owner_id && ownerNames[deal.owner_id] && (
+                          <span
+                            className="max-w-24 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+                            title={ownerNames[deal.owner_id]}
+                          >
+                            {ownerNames[deal.owner_id]}
+                          </span>
+                        )}
+
+                        {/*
+                          The quick way to clear a card that is finished with —
+                          the thing that was missing once a card dropped into Won
+                          stayed on the board instead of vanishing.
+                        */}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => onDelete(deal)}
+                            className="rounded-md p-1 text-slate-300 transition-colors hover:bg-red-50 hover:text-red-600"
+                            aria-label={`Delete ${deal.name}`}
+                            title="Delete — recoverable from the recycle bin"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <p className="mt-1">

@@ -1,12 +1,12 @@
 import Link from 'next/link'
 
 import { requireAdmin, scoped } from '@/lib/tenancy'
-import { contactName, formatCurrency } from '@/lib/format'
+import { contactName, formatCurrency, formatDay } from '@/lib/format'
 import { DateTime } from '@/components/date-time'
-import type { CompanyRow, ContactRow, ProductRow, UserRow } from '@/lib/database.types'
-import { EmptyState, PageHeader, Section } from '@/components/ui'
+import type { CompanyRow, ContactRow, DealRow, ProductRow, UserRow } from '@/lib/database.types'
+import { DealStatusBadge, EmptyState, PageHeader, Section } from '@/components/ui'
 
-import { restoreCompany, restoreContact, restoreProduct } from '../actions'
+import { restoreCompany, restoreContact, restoreDeal, restoreProduct } from '../actions'
 
 export const metadata = { title: 'Deleted records · FLO CRM' }
 
@@ -20,7 +20,7 @@ export const metadata = { title: 'Deleted records · FLO CRM' }
 export default async function DeletedRecordsPage() {
   const context = await requireAdmin()
 
-  const [{ data: contacts }, { data: companies }, { data: products }, { data: users }] =
+  const [{ data: contacts }, { data: companies }, { data: products }, { data: deals }, { data: users }] =
     await Promise.all([
       scoped(context, 'contacts')
         .select('*')
@@ -37,12 +37,18 @@ export default async function DeletedRecordsPage() {
         .not('deleted_at', 'is', null)
         .order('deleted_at', { ascending: false })
         .limit(200),
+      scoped(context, 'deals')
+        .select('*, stages(name)')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(200),
       scoped(context, 'users').select('*'),
     ])
 
   const contactRows = (contacts ?? []) as ContactRow[]
   const companyRows = (companies ?? []) as CompanyRow[]
   const productRows = (products ?? []) as ProductRow[]
+  const dealRows = (deals ?? []) as (DealRow & { stages: { name: string } | null })[]
   const userList = (users ?? []) as UserRow[]
 
   const deleterName = (id: string | null) => {
@@ -51,19 +57,20 @@ export default async function DeletedRecordsPage() {
     return user ? user.name || user.email : 'Unknown'
   }
 
-  const total = contactRows.length + companyRows.length + productRows.length
+  const total =
+    contactRows.length + companyRows.length + productRows.length + dealRows.length
 
   return (
     <>
       <PageHeader
         title="Deleted records"
-        description="Deleted records. Restoring puts one back where it was, with its owner, activities and deals intact. A deleted product stays readable on the deals that already list it, so their totals never move."
+        description="Deleted records. Restoring puts one back where it was, with its owner, activities and deals intact. A deleted product stays readable on the deals that already list it, so their totals never move — and a deleted deal keeps its line items, so restoring it recommits the stock it had spoken for."
       />
 
       {total === 0 ? (
         <EmptyState
           title="Nothing has been deleted"
-          description="When someone deletes a contact, a company or a product it lands here, and every administrator is notified."
+          description="When someone deletes a contact, a company, a product or a deal it lands here, and every administrator is notified."
         />
       ) : (
         <div className="space-y-5">
@@ -159,6 +166,64 @@ export default async function DeletedRecordsPage() {
               </div>
             </Section>
           )}
+          {/*
+            Deals first among the record types below: a deleted deal is the one
+            that takes numbers with it — stock it had committed, the pipeline it
+            was part of — so it is the one somebody is most likely here to undo.
+          */}
+          {dealRows.length > 0 && (
+            <Section title={`Deals (${dealRows.length})`}>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Deal</th>
+                      <th>Stage</th>
+                      <th>Status</th>
+                      <th className="text-right">Value</th>
+                      <th>Expected close</th>
+                      <th>Deleted by</th>
+                      <th>Deleted</th>
+                      <th className="text-right">Restore</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dealRows.map((deal) => (
+                      <tr key={deal.id}>
+                        <td>
+                          <Link
+                            href={`/deals/${deal.id}`}
+                            className="font-medium text-slate-900 hover:text-brand-700"
+                          >
+                            {deal.name}
+                          </Link>
+                        </td>
+                        <td className="text-slate-600">{deal.stages?.name ?? '—'}</td>
+                        <td>
+                          <DealStatusBadge status={deal.status} />
+                        </td>
+                        <td className="text-right text-slate-600">
+                          {formatCurrency(Number(deal.value), deal.currency)}
+                        </td>
+                        <td className="text-slate-500">{formatDay(deal.expected_close_date)}</td>
+                        <td className="text-slate-600">{deleterName(deal.deleted_by)}</td>
+                        <td className="text-slate-500"><DateTime value={deal.deleted_at} /></td>
+                        <td className="text-right">
+                          <form action={restoreDeal}>
+                            <input type="hidden" name="id" value={deal.id} />
+                            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                              Restore
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          )}
+
           {productRows.length > 0 && (
             <Section title={`Products (${productRows.length})`}>
               <div className="overflow-x-auto">
