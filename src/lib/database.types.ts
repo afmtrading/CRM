@@ -414,6 +414,8 @@ export type PipelineRow = {
   created_at: string
 }
 
+export type StageOutcome = 'open' | 'won' | 'lost'
+
 export type StageRow = {
   id: string
   organization_id: string
@@ -421,6 +423,12 @@ export type StageRow = {
   name: string
   order: number
   default_probability: number
+  /**
+   * What reaching this stage means for the deal. Moving a deal into a stage
+   * applies this to its status — see 20260224000000. 'open' is the ordinary
+   * working stage and says nothing.
+   */
+  outcome: StageOutcome
   created_at: string
 }
 

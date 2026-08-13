@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatDay, formatPercent } from '@/lib/format'
+import { dealVisibility } from '@/lib/filters'
 import type {
   DealRow,
   PipelineRow,
@@ -93,11 +94,31 @@ export default async function DealsPage({
   if (params.owner) dealQuery = dealQuery.eq('owner_id', params.owner)
 
   /*
-   * Status defaults to open on both views. A board of won and lost deals is a
-   * report rather than a pipeline, and "all" is one choice away in the picker.
+   * Status defaults to open, and on the board that has to mean "open, plus
+   * whatever is sitting in a closing stage".
+   *
+   * A board is arranged by stage. Once dragging a card into Won actually marks
+   * the deal won, filtering won deals out of the board makes the drop look like
+   * a delete — the card vanishes and the Won column can never hold anything.
+   * The column exists; what is in it should be visible.
+   *
+   * The list is arranged by nothing in particular, so there "Open deals" means
+   * open deals and nothing else. Same filter, two honest readings.
    */
   const status = params.status ?? 'open'
-  if (status !== 'all') dealQuery = dealQuery.eq('status', status)
+  const visibility = dealVisibility(
+    status,
+    view,
+    stageList.filter((stage) => stage.outcome !== 'open').map((stage) => stage.id),
+  )
+
+  if (visibility.kind === 'status') {
+    dealQuery = dealQuery.eq('status', visibility.status)
+  } else if (visibility.kind === 'open-or-closing') {
+    dealQuery = dealQuery.or(
+      `status.eq.open,stage_id.in.(${visibility.closingStageIds.join(',')})`,
+    )
+  }
 
   /*
    * Product is a filter across a join, which no column predicate can express:

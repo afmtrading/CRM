@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyFilter,
   conditionToPredicate,
+  dealVisibility,
   filterFromSearchParams,
   filterToSearchParams,
   groupRows,
@@ -240,5 +241,38 @@ describe('saved filter round-tripping', () => {
 
   it('ignores an unparseable condition list in the URL', () => {
     expect(filterFromSearchParams({ f: '{not json' }).conditions).toEqual([])
+  })
+})
+
+describe('dealVisibility', () => {
+  const closing = ['won-stage', 'lost-stage']
+
+  it('keeps a card on the board after it is dropped into Won', () => {
+    // The regression this exists for: once dragging into Won marked the deal
+    // won, the default filter swept the card off the board and the drop looked
+    // like a delete.
+    expect(dealVisibility('open', 'kanban', closing)).toEqual({
+      kind: 'open-or-closing',
+      closingStageIds: closing,
+    })
+  })
+
+  it('means open deals and nothing else on the list', () => {
+    // A list is not arranged by stage, so there is no empty column to explain.
+    expect(dealVisibility('open', 'list', closing)).toEqual({ kind: 'status', status: 'open' })
+  })
+
+  it('falls back to a plain filter when no stage closes anything', () => {
+    expect(dealVisibility('open', 'kanban', [])).toEqual({ kind: 'status', status: 'open' })
+  })
+
+  it('answers a deliberate choice literally, on either view', () => {
+    expect(dealVisibility('won', 'kanban', closing)).toEqual({ kind: 'status', status: 'won' })
+    expect(dealVisibility('lost', 'list', closing)).toEqual({ kind: 'status', status: 'lost' })
+  })
+
+  it('applies nothing at all for "open and closed"', () => {
+    expect(dealVisibility('all', 'kanban', closing)).toEqual({ kind: 'all' })
+    expect(dealVisibility('all', 'list', closing)).toEqual({ kind: 'all' })
   })
 })
