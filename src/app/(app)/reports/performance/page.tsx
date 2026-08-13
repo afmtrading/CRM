@@ -89,8 +89,8 @@ export default async function SalesPerformancePage({
             <Link href="/reports/charts" className="btn-secondary">
               Charts
             </Link>
-            <Link href="/reports/product-mix" className="btn-secondary">
-              Product mix
+            <Link href="/reports/diagnostics" className="btn-secondary">
+              Diagnostics
             </Link>
           </>
         }
