@@ -216,6 +216,62 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       {/* Cards sit to the right on a wide screen and lead on a narrow one. */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
         <div className="order-2 space-y-5 lg:order-1 lg:col-span-2">
+          <Section title={PRODUCT_CARDS[0].label}>
+            <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Field label="SKU">{product.sku || <Empty />}</Field>
+              <Field label="Brand">{product.brand || <Empty />}</Field>
+              <Field label="Model">{product.model || <Empty />}</Field>
+              <Field label="Count">{product.item_count || <Empty />}</Field>
+              <Field label="Size">{product.size || <Empty />}</Field>
+              <Field label="Color">{product.color || <Empty />}</Field>
+              <Field label="Case Pack">
+                {product.case_pack === null ? <Empty /> : formatNumber(product.case_pack)}
+              </Field>
+              <Field label="Product Type">
+                <OptionBadges
+                  values={product.product_type ? [product.product_type] : []}
+                  options={options.filter((option) => option.field_key === 'product_type')}
+                />
+              </Field>
+              <Field label="Condition">
+                <OptionBadges
+                  values={product.product_condition ? [product.product_condition] : []}
+                  options={options.filter((option) => option.field_key === 'product_condition')}
+                />
+              </Field>
+              <Field label="Status">
+                <OptionBadges
+                  values={product.status ? [product.status] : []}
+                  options={options.filter((option) => option.field_key === 'product_status')}
+                />
+              </Field>
+              <Field label="Category" wide>
+                <OptionBadges
+                  values={product.category ? [product.category] : []}
+                  options={options.filter((option) => option.field_key === 'product_category')}
+                />
+              </Field>
+              <Field label="Item Notes" wide>
+                {product.item_notes ? (
+                  <div
+                    className="space-y-2 leading-relaxed text-slate-700"
+                    // Safe by construction: renderMarkdown escapes the stored
+                    // text before applying formatting, so the only markup here
+                    // is what it generated.
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(product.item_notes) }}
+                  />
+                ) : (
+                  <Empty />
+                )}
+              </Field>
+              <CustomFieldValues
+                fields={forCard('details')}
+                values={product.custom_fields}
+                fieldOptions={options}
+              />
+            </dl>
+          </Section>
+
           <Section
             title="Pricing"
             actions={
@@ -309,23 +365,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 : ` of ${formatNumber(pricing.casePack)}.`}{' '}
               Type over any of them to fix a price; clear the box to hand it back.
             </p>
-          </Section>
-
-          <Section title="In the Market">
-            {marketLinks.every((link) => link.url === null) ? (
-              <p className="text-sm text-slate-500">
-                No comparisons saved. Add a barcode lookup or a competitor&rsquo;s listing when
-                editing the product.
-              </p>
-            ) : (
-              <dl className="grid gap-3 sm:grid-cols-3">
-                {marketLinks.map((link) => (
-                  <Field key={link.label} label={link.label}>
-                    <ExternalLink url={link.url} />
-                  </Field>
-                ))}
-              </dl>
-            )}
           </Section>
 
           <Section
@@ -538,103 +577,52 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               </>
             )}
           </Section>
-
-          <Section title="Interested contacts">
-            {interestedContacts.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Nobody has been marked as interested. Set it on a contact&rsquo;s Influence card.
-              </p>
-            ) : (
-              <ul className="flex flex-wrap gap-2">
-                {interestedContacts.map((contact) => (
-                  <li key={contact.id}>
-                    <Link
-                      href={`/contacts/${contact.id}`}
-                      className="badge bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    >
-                      {contactName(contact)}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
         </div>
 
         <div className="order-1 space-y-5 lg:order-2">
-          {imageUrl && (
-            <Section title="Image">
-              {/* eslint-disable-next-line @next/next/no-img-element -- a storage
-                  URL, which next/image would need a remote pattern for and
-                  which is already sized for the web on the way in. */}
-              <img
-                src={imageUrl}
-                alt={product.name}
-                className="mx-auto max-h-64 w-auto rounded-lg object-contain"
-              />
-            </Section>
+          {(imageUrl || product.folder_url || product.knowledge_base_url) && (
+            /* No heading: a picture announces itself, and the two links under it
+               are about where to find more of the same thing. */
+            <section className="card space-y-4 p-5">
+              {imageUrl && (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a
+                      storage URL, which next/image would need a remote pattern
+                      for and which is already sized for the web on the way in. */}
+                  <img
+                    src={imageUrl}
+                    alt={product.name}
+                    className="mx-auto max-h-64 w-auto rounded-lg object-contain"
+                  />
+                </>
+              )}
+
+              <dl className="grid gap-3">
+                <Field label="Folder Location">
+                  <ExternalLink url={safeUrl(product.folder_url)} />
+                </Field>
+                <Field label="Knowledge Base">
+                  <ExternalLink url={safeUrl(product.knowledge_base_url)} />
+                </Field>
+              </dl>
+            </section>
           )}
 
-          <Section title={PRODUCT_CARDS[0].label}>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="SKU">{product.sku || <Empty />}</Field>
-              <Field label="Brand">{product.brand || <Empty />}</Field>
-              <Field label="Model">{product.model || <Empty />}</Field>
-              <Field label="Count">{product.item_count || <Empty />}</Field>
-              <Field label="Size">{product.size || <Empty />}</Field>
-              <Field label="Color">{product.color || <Empty />}</Field>
-              <Field label="Case Pack">
-                {product.case_pack === null ? <Empty /> : formatNumber(product.case_pack)}
-              </Field>
-              <Field label="Product Type">
-                <OptionBadges
-                  values={product.product_type ? [product.product_type] : []}
-                  options={options.filter((option) => option.field_key === 'product_type')}
-                />
-              </Field>
-              <Field label="Condition">
-                <OptionBadges
-                  values={product.product_condition ? [product.product_condition] : []}
-                  options={options.filter((option) => option.field_key === 'product_condition')}
-                />
-              </Field>
-              <Field label="Status">
-                <OptionBadges
-                  values={product.status ? [product.status] : []}
-                  options={options.filter((option) => option.field_key === 'product_status')}
-                />
-              </Field>
-              <Field label="Category" wide>
-                <OptionBadges
-                  values={product.category ? [product.category] : []}
-                  options={options.filter((option) => option.field_key === 'product_category')}
-                />
-              </Field>
-              <Field label="Folder Location">
-                <ExternalLink url={safeUrl(product.folder_url)} />
-              </Field>
-              <Field label="Knowledge Base">
-                <ExternalLink url={safeUrl(product.knowledge_base_url)} />
-              </Field>
-              <Field label="Item Notes" wide>
-                {product.item_notes ? (
-                  <div
-                    className="space-y-2 leading-relaxed text-slate-700"
-                    // Safe by construction: renderMarkdown escapes the stored
-                    // text before applying formatting, so the only markup here
-                    // is what it generated.
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(product.item_notes) }}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-              <CustomFieldValues
-                fields={forCard('details')}
-                values={product.custom_fields}
-                fieldOptions={options}
-              />
-            </dl>
+          <Section title="In the Market">
+            {marketLinks.every((link) => link.url === null) ? (
+              <p className="text-sm text-slate-500">
+                No comparisons saved. Add a barcode lookup or a competitor&rsquo;s listing when
+                editing the product.
+              </p>
+            ) : (
+              <dl className="grid gap-3 sm:grid-cols-3">
+                {marketLinks.map((link) => (
+                  <Field key={link.label} label={link.label}>
+                    <ExternalLink url={link.url} />
+                  </Field>
+                ))}
+              </dl>
+            )}
           </Section>
 
           {forCard('pricing').length > 0 && (
@@ -670,6 +658,27 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 fieldOptions={options}
               />
             </dl>
+          </Section>
+
+          <Section title="Interested contacts">
+            {interestedContacts.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nobody has been marked as interested. Set it on a contact&rsquo;s Influence card.
+              </p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {interestedContacts.map((contact) => (
+                  <li key={contact.id}>
+                    <Link
+                      href={`/contacts/${contact.id}`}
+                      className="badge bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    >
+                      {contactName(contact)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Section>
         </div>
       </div>
