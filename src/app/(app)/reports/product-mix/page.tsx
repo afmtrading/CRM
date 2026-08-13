@@ -66,6 +66,9 @@ export default async function ProductMixReport({
             <Link href="/reports/deals" className="btn-secondary">
               Deal ledger
             </Link>
+            <Link href="/reports/performance" className="btn-secondary">
+              Performance
+            </Link>
             <Link href="/reports/pipeline-value" className="btn-secondary">
               Pipeline value
             </Link>
