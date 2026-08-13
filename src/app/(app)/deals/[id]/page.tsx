@@ -3,11 +3,14 @@ import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
 import { contactName, formatCurrency, formatDay, formatNumber, formatPercent } from '@/lib/format'
-import { renderMarkdown } from '@/lib/field-options'
+import { OPTION_COLOR_CLASSES, renderMarkdown } from '@/lib/field-options'
+import { definitionsOnCard, displayValue, hasAnyValue } from '@/lib/custom-fields'
 import type {
   ActivityRow,
+  CustomFieldDefinitionRow,
   DealProductRow,
   DealRow,
+  FieldOptionRow,
   ProductRow,
   StageRow,
   UserRow,
@@ -47,8 +50,14 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
 
   if (!deal) notFound()
 
-  const [{ data: activities }, { data: users }, { data: lines }, { data: catalogue }] =
-    await Promise.all([
+  const [
+    { data: activities },
+    { data: users },
+    { data: lines },
+    { data: catalogue },
+    { data: definitions },
+    { data: optionRows },
+  ] = await Promise.all([
       scoped(context, 'activities')
         .select('*')
         .eq('related_to_type', 'deal')
@@ -65,6 +74,8 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         .is('deleted_at', null)
         .eq('active', true)
         .order('name'),
+      scoped(context, 'custom_field_definitions').select('*').order('order'),
+      scoped(context, 'field_options').select('*').order('order'),
     ])
 
   const userList = (users ?? []) as UserRow[]
@@ -85,6 +96,13 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     !followsProducts && lineItems.length > 0 && Math.abs(lineTotal - Number(deal.value)) > 0.005
 
   const notesHtml = renderMarkdown(deal.notes)
+
+  // Organization-defined fields, split across the two cards a deal offers.
+  const allDefinitions = (definitions ?? []) as CustomFieldDefinitionRow[]
+  const options = (optionRows ?? []) as FieldOptionRow[]
+  const customValues = (deal.custom_fields ?? {}) as Record<string, unknown>
+  const detailFields = definitionsOnCard(allDefinitions, 'deal', 'details')
+  const additionalFields = definitionsOnCard(allDefinitions, 'deal', 'additional')
 
   return (
     <>
@@ -435,6 +453,19 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
                 </dd>
               </div>
             )}
+            {/* Whatever an admin put on this card, after the built-in rows. */}
+            {detailFields.map((field) => {
+              const shown = displayValue(customValues[field.key])
+              if (!shown) return null
+              return (
+                <div key={field.id}>
+                  <dt className="text-xs text-slate-500">{field.label}</dt>
+                  <dd className="mt-0.5">
+                    <CustomValue field={field} value={customValues[field.key]} options={options} />
+                  </dd>
+                </div>
+              )
+            })}
             {deal.status === 'lost' && (
               <div>
                 <dt className="text-xs text-slate-500">Why it was lost</dt>
@@ -450,6 +481,77 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           </dl>
         </Section>
       </div>
+
+      {/*
+        Drawn only when the organization has defined fields for it and this deal
+        has something in them — an empty card on every deal is furniture.
+      */}
+      {additionalFields.length > 0 && hasAnyValue(additionalFields, customValues) && (
+        <div className="mt-5">
+          <Section title="Additional info">
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              {additionalFields.map((field) => {
+                const shown = displayValue(customValues[field.key])
+                if (!shown) return null
+                return (
+                  <div key={field.id}>
+                    <dt className="text-xs text-slate-500">{field.label}</dt>
+                    <dd className="mt-0.5">
+                      <CustomValue field={field} value={customValues[field.key]} options={options} />
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </Section>
+        </div>
+      )}
     </>
   )
+}
+
+/**
+ * One organization-defined value.
+ *
+ * A select or multi-select renders as the coloured chips its options carry, so
+ * a custom field looks like the built-in ones rather than like a second, plainer
+ * mechanism bolted on beside them. Anything else is text.
+ */
+function CustomValue({
+  field,
+  value,
+  options,
+}: {
+  field: CustomFieldDefinitionRow
+  value: unknown
+  options: FieldOptionRow[]
+}) {
+  const shown = displayValue(value)
+  if (!shown) return <span className="text-slate-400">—</span>
+
+  if (field.field_type === 'select' || field.field_type === 'multiselect') {
+    const values = Array.isArray(value) ? value.map(String) : [String(value)]
+    return (
+      <span className="flex flex-wrap gap-1">
+        {values.map((entry) => {
+          const option = options.find(
+            (candidate) =>
+              candidate.entity_type === field.entity_type &&
+              candidate.field_key === field.key &&
+              candidate.value === entry,
+          )
+          return (
+            <span
+              key={entry}
+              className={`badge ${option ? OPTION_COLOR_CLASSES[option.color] : 'bg-slate-100 text-slate-700'}`}
+            >
+              {entry}
+            </span>
+          )
+        })}
+      </span>
+    )
+  }
+
+  return <span className="text-slate-800">{shown}</span>
 }

@@ -3,7 +3,16 @@
 import { useActionState, useState } from 'react'
 import Link from 'next/link'
 
-import type { DealRow, PipelineRow, StageRow, UserRow } from '@/lib/database.types'
+import type {
+  ContactCard,
+  CustomFieldDefinitionRow,
+  DealRow,
+  FieldOptionRow,
+  PipelineRow,
+  StageRow,
+  UserRow,
+} from '@/lib/database.types'
+import { CustomFieldInputs } from '@/components/form-fields'
 
 import type { DealActionState } from './actions'
 
@@ -16,6 +25,8 @@ export function DealForm({
   companies,
   owners,
   lossReasons,
+  customFields,
+  fieldOptions,
   defaultCurrency,
   defaultContactId,
   submitLabel,
@@ -29,6 +40,9 @@ export function DealForm({
   owners: UserRow[]
   /** The organization's own vocabulary for why a deal was lost. */
   lossReasons: string[]
+  /** Organization-defined fields on a deal, and the values their selects offer. */
+  customFields: CustomFieldDefinitionRow[]
+  fieldOptions: FieldOptionRow[]
   defaultCurrency: string
   defaultContactId?: string
   submitLabel: string
@@ -39,6 +53,10 @@ export function DealForm({
   const [pipelineId, setPipelineId] = useState(initialStage?.pipeline_id ?? pipelines[0]?.id ?? '')
   const [stageId, setStageId] = useState(initialStage?.id ?? '')
   const [status, setStatus] = useState(deal?.status ?? 'open')
+
+  const custom = (deal?.custom_fields ?? {}) as Record<string, unknown>
+  const onCard = (card: ContactCard) => customFields.filter((field) => field.card === card)
+  const additional = onCard('additional')
 
   const pipelineStages = stages.filter((stage) => stage.pipeline_id === pipelineId)
   const selectedStage = stages.find((stage) => stage.id === stageId)
@@ -282,6 +300,9 @@ export function DealForm({
           </select>
         </div>
 
+        {/* Whatever an admin put on the Details card, in the order they arranged. */}
+        <CustomFieldInputs fields={onCard('details')} values={custom} fieldOptions={fieldOptions} />
+
         {/*
           What the deal is actually about, in the same markdown the contact and
           company cards use — so the note reads the same wherever it is written
@@ -305,6 +326,17 @@ export function DealForm({
           </p>
         </div>
       </div>
+
+      {/*
+        A second card, drawn only when there is something to put in it: an empty
+        "Additional info" heading on every deal would be furniture.
+      */}
+      {additional.length > 0 && (
+        <div className="card grid gap-4 p-4 sm:grid-cols-2">
+          <h2 className="sm:col-span-2 text-sm font-semibold text-slate-900">Additional info</h2>
+          <CustomFieldInputs fields={additional} values={custom} fieldOptions={fieldOptions} />
+        </div>
+      )}
 
       <div className="flex gap-2">
         <button type="submit" className="btn-primary" disabled={pending}>

@@ -40,6 +40,19 @@ export const PRODUCT_CARDS: { key: ContactCard; label: string; description: stri
   { key: 'additional', label: 'Additional info', description: 'Description and anything else' },
 ]
 
+/**
+ * A deal's cards. Two, because a deal record has two places a field can go: the
+ * Details card beside the money and the dates, and everything else.
+ */
+export const DEAL_CARDS: { key: ContactCard; label: string; description: string }[] = [
+  { key: 'details', label: 'Details', description: 'Beside the stage, value and dates' },
+  { key: 'additional', label: 'Additional info', description: 'Anything else the desk tracks' },
+]
+
+export const DEAL_CARD_LABELS = Object.fromEntries(
+  DEAL_CARDS.map((card) => [card.key, card.label]),
+) as Record<ContactCard, string>
+
 export const PRODUCT_CARD_LABELS = Object.fromEntries(
   PRODUCT_CARDS.map((card) => [card.key, card.label]),
 ) as Record<ContactCard, string>
@@ -74,6 +87,7 @@ export const COMPANY_CARD_LABELS = Object.fromEntries(
 export function cardLabel(entity: string, card: ContactCard): string {
   if (entity === 'company') return COMPANY_CARD_LABELS[card] ?? CONTACT_CARD_LABELS[card] ?? card
   if (entity === 'product') return PRODUCT_CARD_LABELS[card] ?? CONTACT_CARD_LABELS[card] ?? card
+  if (entity === 'deal') return DEAL_CARD_LABELS[card] ?? CONTACT_CARD_LABELS[card] ?? card
   return CONTACT_CARD_LABELS[card] ?? card
 }
 
@@ -125,16 +139,13 @@ export const OPTION_COLOR_SWATCHES: Record<OptionColor, string> = {
 /** Records that can carry organization-defined fields and option lists. */
 export type OptionEntity = 'contact' | 'company' | 'product' | 'deal'
 
-/*
- * A deal is deliberately absent: this list drives the "add a custom field"
- * picker, and a deal record has nowhere to render one yet. Its one option list —
- * why a deal was lost — is built in, and appears in the editor through
- * OPTION_FIELDS below.
- */
 export const OPTION_ENTITIES: { value: OptionEntity; label: string }[] = [
   { value: 'contact', label: 'Contact' },
   { value: 'company', label: 'Company' },
   { value: 'product', label: 'Product' },
+  // A deal was absent here until it had somewhere to render a field. It has
+  // two cards now, so an admin can define one.
+  { value: 'deal', label: 'Deal' },
 ]
 
 export const OPTION_FIELDS: {
@@ -371,7 +382,9 @@ export function optionOwners(
           ? 'company'
           : field.entity_type === 'product'
             ? 'product'
-            : 'contact',
+            : field.entity_type === 'deal'
+              ? 'deal'
+              : 'contact',
       multiple: field.field_type === 'multiselect',
       builtIn: false,
       card: field.card,

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped, firstRow } from '@/lib/tenancy'
+import { readCustomFields } from '@/lib/custom-fields'
 
 const dealSchema = z.object({
   name: z.string().trim().min(1, 'A deal needs a name').max(200),
@@ -56,6 +57,7 @@ export async function createDeal(_prev: DealActionState, formData: FormData): Pr
       loss_reason: input.status === 'lost' ? input.loss_reason || null : null,
       owner_id: input.owner_id || context.user.id,
       notes: input.notes || null,
+      custom_fields: readCustomFields(formData),
     })
     .select('id')
     .single()
@@ -118,6 +120,10 @@ export async function updateDeal(_prev: DealActionState, formData: FormData): Pr
       loss_reason: input.status === 'lost' ? input.loss_reason || null : null,
       owner_id: input.owner_id || null,
       notes: input.notes || null,
+      // Replaced wholesale rather than merged: the form posts every field it
+      // drew, so a value cleared on screen has to disappear from the record
+      // instead of surviving underneath as a value nobody can see.
+      custom_fields: readCustomFields(formData),
     })
     .eq('id', id)
 

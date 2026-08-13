@@ -224,13 +224,23 @@ describe('option owners', () => {
   })
 
   /*
-   * The list an admin edits and the picker for "add a custom field" are two
-   * different things. A deal belongs in the first and not the second: it has an
-   * option list, but nowhere on the record to render a custom field yet, and
-   * offering one would promise a field that never appears.
+   * A deal was kept out of this picker until it had somewhere to render a
+   * field. It has two cards now, so offering it no longer promises a field that
+   * never appears.
    */
-  it('does not offer a deal as a record type for new custom fields', () => {
-    expect(OPTION_ENTITIES.map((entity) => entity.value)).not.toContain('deal')
-    expect(optionOwners([]).some((owner) => owner.entity === 'deal')).toBe(true)
+  it('offers a deal as a record type for new custom fields', () => {
+    expect(OPTION_ENTITIES.map((entity) => entity.value)).toContain('deal')
+  })
+
+  it('keeps a custom field defined on a deal on the deal', () => {
+    const owners = optionOwners([
+      { key: 'incoterm', label: 'Incoterm', entity_type: 'deal', field_type: 'select', card: 'details' },
+    ])
+    expect(owners.find((owner) => owner.key === 'incoterm')?.entity).toBe('deal')
+  })
+
+  it('names the deal cards', () => {
+    expect(cardLabel('deal', 'additional')).toBe('Additional info')
+    expect(cardLabel('deal', 'details')).toBe('Details')
   })
 })
