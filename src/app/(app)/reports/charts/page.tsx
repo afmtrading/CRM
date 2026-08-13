@@ -12,8 +12,10 @@ import {
   closedByMonth,
   currenciesIn,
   cycleHistogram,
+  funnelSteps,
   openByStage,
   ownerBars,
+  type StageFunnelRow,
 } from '@/lib/charts'
 import type { CustomFieldDefinitionRow } from '@/lib/database.types'
 import {
@@ -21,6 +23,7 @@ import {
   MonthlyColumns,
   OwnerBars,
   StageBars,
+  StageFunnel,
 } from '@/components/charts'
 import { EmptyState, ErrorNote, PageHeader } from '@/components/ui'
 
@@ -55,9 +58,12 @@ export default async function ReportChartsPage({
     p_region_key: regionFieldKey((definitions ?? []) as CustomFieldDefinitionRow[]),
   })
 
+  const { data: funnel } = await context.supabase.rpc('stage_funnel', { p_pipeline_id: null })
+
   const rows = (ledger ?? []) as LedgerRow[]
   const currencies = currenciesIn(rows)
   const cycles = cycleHistogram(rows, period)
+  const steps = funnelSteps((funnel ?? []) as StageFunnelRow[])
 
   const link = (overrides: Record<string, string | undefined>) => {
     const next = new URLSearchParams()
@@ -191,6 +197,18 @@ export default async function ReportChartsPage({
               </div>
             )
           })}
+
+          {/*
+            Deals, not money, so the funnel is not split by currency either.
+            This is the chart the stage snapshot above could not be: it counts
+            arrivals that were recorded as they happened.
+          */}
+          <Panel
+            title="The funnel"
+            note="How many deals ever reached each stage, and what became of them. Counted from recorded stage moves, so it covers deals from the point that recording began."
+          >
+            <StageFunnel steps={steps} />
+          </Panel>
 
           {/* Days are days in any currency, so this one is not split. */}
           <Panel

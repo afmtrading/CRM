@@ -1,5 +1,14 @@
 import { currencySymbol, formatNumber, formatPercent } from '@/lib/format'
-import { fraction, niceMax, ticks, type CycleBucket, type MonthBucket, type OwnerBar, type StageBucket } from '@/lib/charts'
+import {
+  fraction,
+  niceMax,
+  ticks,
+  type CycleBucket,
+  type FunnelStep,
+  type MonthBucket,
+  type OwnerBar,
+  type StageBucket,
+} from '@/lib/charts'
 
 /**
  * The report charts.
@@ -285,6 +294,80 @@ export function CycleHistogram({ buckets }: { buckets: CycleBucket[] }) {
 // -----------------------------------------------------------------------------
 // Where the open pipeline sits
 // -----------------------------------------------------------------------------
+
+/**
+ * The funnel: how many deals ever reached each stage, and what became of them.
+ *
+ * Drawn from recorded arrivals rather than from where deals are sitting now,
+ * which is what makes it a funnel rather than a snapshot. Conversion is against
+ * the stage above, so the step that loses deals is the one that reads low.
+ */
+export function StageFunnel({ steps }: { steps: FunnelStep[] }) {
+  const anyReached = steps.some((step) => step.reached > 0)
+  if (!anyReached) {
+    return (
+      <ChartEmpty>
+        No stage movements recorded yet. Every move from here is counted.
+      </ChartEmpty>
+    )
+  }
+
+  return (
+    <div className="space-y-3 px-5 py-4">
+      <Legend
+        items={[
+          { label: 'Reached the stage', className: 'bg-brand-600' },
+          { label: 'Still there', className: 'bg-brand-300' },
+        ]}
+      />
+
+      <ul className="space-y-3">
+        {steps.map((step) => (
+          <li key={step.stage_id}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className="text-sm text-slate-700">{step.stage_name}</span>
+              <span className="text-xs text-slate-500">
+                {formatNumber(step.reached)} reached
+                {step.conversion !== null && (
+                  <>
+                    {' · '}
+                    <span
+                      className={step.conversion < 0.5 ? 'text-amber-700' : undefined}
+                      title="Of the deals that reached the stage above"
+                    >
+                      {formatPercent(step.conversion)} of the stage above
+                    </span>
+                  </>
+                )}
+                {step.median_days !== null && ` · ${formatNumber(Math.round(step.median_days))}d median`}
+              </span>
+            </div>
+
+            <div className="mt-1 h-3 w-full overflow-hidden rounded-full bg-slate-100">
+              <div className="h-3 bg-brand-600" style={{ width: `${step.share * 100}%` }}>
+                <div
+                  className="h-3 bg-brand-300"
+                  style={{
+                    marginLeft: `${fraction(step.reached - step.still_there, Math.max(1, step.reached)) * 100}%`,
+                    width: `${fraction(step.still_there, Math.max(1, step.reached)) * 100}%`,
+                  }}
+                  title={`${formatNumber(step.still_there)} still in this stage`}
+                />
+              </div>
+            </div>
+
+            {(step.won_after > 0 || step.lost_after > 0) && (
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                {formatNumber(step.won_after)} went on to win ·{' '}
+                {formatNumber(step.lost_after)} were lost
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 export function StageBars({ stages, currency }: { stages: StageBucket[]; currency: string }) {
   if (stages.length === 0) return <ChartEmpty>Nothing open in this currency.</ChartEmpty>
