@@ -12,6 +12,7 @@ import { EmptyState, ErrorNote, PageHeader, Section } from '@/components/ui'
 import { DateTime } from '@/components/date-time'
 
 import { createCampaign } from './actions'
+import { CampaignMessageEditor } from './message-editor'
 
 export const metadata = { title: 'Campaigns · FLO CRM' }
 
@@ -126,10 +127,10 @@ export default async function CampaignsPage({
                 <label className="label" htmlFor="body">
                   Message
                 </label>
-                <textarea id="body" name="body" required rows={6} className="input" />
+                <CampaignMessageEditor rows={8} />
                 <p className="mt-1 text-xs text-slate-500">
-                  Markdown, and {'{{first_name}}'} style merge fields. You can refine it on the next
-                  screen.
+                  Format it with the buttons, drop in a merge field, and press Preview to see what
+                  arrives. You can refine it on the next screen.
                 </p>
               </div>
 

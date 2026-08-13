@@ -26,6 +26,7 @@ import {
   sendCampaignTest,
   updateCampaign,
 } from '../actions'
+import { CampaignMessageEditor } from '../message-editor'
 
 export const metadata = { title: 'Campaign · FLO CRM' }
 
@@ -225,18 +226,9 @@ export default async function CampaignPage({
                   <label className="label" htmlFor="body">
                     Message
                   </label>
-                  <textarea
-                    id="body"
-                    name="body"
-                    required
-                    rows={16}
-                    defaultValue={campaign.body}
-                    className="input font-mono text-[13px]"
-                  />
+                  <CampaignMessageEditor rows={16} defaultValue={campaign.body} />
                   <p className="mt-1 text-xs text-slate-500">
-                    Markdown: <code># heading</code>, <code>**bold**</code>, <code>- bullets</code>,{' '}
-                    <code>[link](https://…)</code>, <code>![alt](https://…image.png)</code>. Merge
-                    fields:{' '}
+                    The buttons write markdown, which you can also type by hand. Merge fields:{' '}
                     {MERGE_FIELDS.map((field) => (
                       <code key={field} className="mr-1">{`{{${field}}}`}</code>
                     ))}
