@@ -131,6 +131,9 @@ export default async function DealLedgerPage({
             <Link href="/reports/charts" className="btn-secondary">
               Charts
             </Link>
+            <Link href="/reports/diagnostics" className="btn-secondary">
+              Diagnostics
+            </Link>
             <a href={exportHref} className="btn-secondary">
               Export CSV
             </a>

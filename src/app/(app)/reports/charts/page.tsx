@@ -92,8 +92,8 @@ export default async function ReportChartsPage({
             <Link href="/reports/performance" className="btn-secondary">
               Performance
             </Link>
-            <Link href="/reports/product-mix" className="btn-secondary">
-              Product mix
+            <Link href="/reports/diagnostics" className="btn-secondary">
+              Diagnostics
             </Link>
           </>
         }
