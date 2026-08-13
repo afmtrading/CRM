@@ -13,6 +13,7 @@ import type {
   StockLevelRow,
 } from '@/lib/database.types'
 import { availableTone, formatDelta, formatQuantity } from '@/lib/stock'
+import { productImageUrl } from '@/lib/product-image'
 import {
   type DerivedPrice,
   derivePricing,
@@ -179,6 +180,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     reserved: 0,
     available: 0,
   }) as { on_hand: number; committed: number; reserved: number; available: number }
+
+  const imageUrl = productImageUrl(product.image_path)
 
   const marketLinks = [
     { label: 'Barcode Lookup', url: safeUrl(product.barcode_url) },
@@ -559,6 +562,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="order-1 space-y-5 lg:order-2">
+          {imageUrl && (
+            <Section title="Image">
+              {/* eslint-disable-next-line @next/next/no-img-element -- a storage
+                  URL, which next/image would need a remote pattern for and
+                  which is already sized for the web on the way in. */}
+              <img
+                src={imageUrl}
+                alt={product.name}
+                className="mx-auto max-h-64 w-auto rounded-lg object-contain"
+              />
+            </Section>
+          )}
+
           <Section title={PRODUCT_CARDS[0].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
               <Field label="SKU">{product.sku || <Empty />}</Field>
@@ -594,8 +610,24 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   options={options.filter((option) => option.field_key === 'product_category')}
                 />
               </Field>
+              <Field label="Folder Location">
+                <ExternalLink url={safeUrl(product.folder_url)} />
+              </Field>
+              <Field label="Knowledge Base">
+                <ExternalLink url={safeUrl(product.knowledge_base_url)} />
+              </Field>
               <Field label="Item Notes" wide>
-                {product.item_notes || <Empty />}
+                {product.item_notes ? (
+                  <div
+                    className="space-y-2 leading-relaxed text-slate-700"
+                    // Safe by construction: renderMarkdown escapes the stored
+                    // text before applying formatting, so the only markup here
+                    // is what it generated.
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(product.item_notes) }}
+                  />
+                ) : (
+                  <Empty />
+                )}
               </Field>
               <CustomFieldValues
                 fields={forCard('details')}

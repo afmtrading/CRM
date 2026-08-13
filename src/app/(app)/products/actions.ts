@@ -8,6 +8,12 @@ import { assertCanManage, requireSession, scoped } from '@/lib/tenancy'
 import type { SessionContext } from '@/lib/tenancy'
 import { PRODUCT_ACTIVE_STATUS } from '@/lib/products'
 import { type StockEntry, normaliseEntries, placeKey } from '@/lib/stock'
+import {
+  PRODUCT_IMAGE_BUCKET,
+  describeImageProblem,
+  keyBelongsTo,
+  productImageKey,
+} from '@/lib/product-image'
 
 /**
  * A price box left empty is not a price of zero.
@@ -52,7 +58,9 @@ const productSchema = z.object({
     })
     .nullable()
     .default(null),
-  item_notes: text(500),
+  // Markdown now, rendered through renderMarkdown() on the record — so it
+  // needs the room prose needs rather than the line it used to be.
+  item_notes: z.string().max(20_000).default(''),
   /*
    * Free text, not an enum: these three are drawn from field_options and an
    * administrator can rename or extend them without a deployment. The database
@@ -77,6 +85,8 @@ const productSchema = z.object({
   barcode_url: text(500),
   comp_1_url: text(500),
   comp_2_url: text(500),
+  folder_url: text(500),
+  knowledge_base_url: text(500),
 })
 
 export type ProductActionState = { ok?: boolean; error?: string }
@@ -110,7 +120,7 @@ function productColumns(input: z.infer<typeof productSchema>, formData: FormData
     size: input.size || null,
     color: input.color || null,
     case_pack: input.case_pack,
-    item_notes: input.item_notes || null,
+    item_notes: input.item_notes.trim() || null,
     product_type: input.product_type || null,
     product_condition: input.product_condition || null,
     // `active` is deliberately absent: a trigger derives it from the status, so
@@ -130,6 +140,8 @@ function productColumns(input: z.infer<typeof productSchema>, formData: FormData
     barcode_url: input.barcode_url || null,
     comp_1_url: input.comp_1_url || null,
     comp_2_url: input.comp_2_url || null,
+    folder_url: input.folder_url || null,
+    knowledge_base_url: input.knowledge_base_url || null,
 
     custom_fields: readCustomFields(formData),
   }
@@ -202,6 +214,60 @@ async function applyStock(
   return problems.length > 0 ? `Saved, but the stock did not: ${problems[0]}` : null
 }
 
+/**
+ * Puts the product's photo where it belongs, or takes it away.
+ *
+ * Order matters and is deliberate: the new object is uploaded first, the row is
+ * pointed at it, and only then is the old object deleted. Deleting first would
+ * mean a failed upload leaves a product with no picture and no way back; this
+ * way the worst case is one orphaned file, which costs a few kilobytes and
+ * nothing else.
+ *
+ * The old key is re-checked against the caller's organization before anything
+ * is deleted. The storage policies say the same thing and are the real defence
+ * — but this code chooses the key to delete, and a value chosen from a row it
+ * has just read is worth checking before it is acted on.
+ */
+async function applyImage(
+  context: SessionContext,
+  productId: string,
+  formData: FormData,
+  currentPath: string | null,
+): Promise<{ path?: string | null; error?: string }> {
+  const organizationId = context.organization.id
+  const file = formData.get('image')
+  const removing = formData.get('remove_image') === 'true'
+
+  const drop = async (path: string | null) => {
+    if (!path || !keyBelongsTo(path, organizationId)) return
+    await context.supabase.storage.from(PRODUCT_IMAGE_BUCKET).remove([path])
+  }
+
+  if (file instanceof File && file.size > 0) {
+    const problem = describeImageProblem(file)
+    if (problem) return { error: problem }
+
+    const key = productImageKey(organizationId, productId, file.type, crypto.randomUUID())
+
+    const { error } = await context.supabase.storage
+      .from(PRODUCT_IMAGE_BUCKET)
+      .upload(key, file, { contentType: file.type, upsert: false })
+
+    if (error) return { error: `The image did not upload: ${error.message}` }
+
+    await drop(currentPath)
+    return { path: key }
+  }
+
+  if (removing) {
+    await drop(currentPath)
+    return { path: null }
+  }
+
+  // Nothing said about the image, so nothing happens to it.
+  return {}
+}
+
 /** A duplicate SKU is the one failure worth explaining in the caller's words. */
 function readable(message: string): string {
   return message.includes('products_org_sku_idx') || message.includes('duplicate key')
@@ -226,6 +292,14 @@ export async function createProduct(
 
   if (error) return { error: readable(error.message) }
 
+  // After the insert, because the key contains the product id and there is no
+  // product id until the row exists.
+  const image = await applyImage(context, data.id, formData, null)
+  if (image.error) return { error: image.error }
+  if (image.path !== undefined) {
+    await scoped(context, 'products').update({ image_path: image.path }).eq('id', data.id)
+  }
+
   const stockError = await applyStock(context, data.id, formData)
   if (stockError) return { error: stockError }
 
@@ -244,8 +318,25 @@ export async function updateProduct(
   const parsed = productSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid product' }
 
+  const { data: existing } = await scoped(context, 'products')
+    .select('image_path')
+    .eq('id', id)
+    .maybeSingle()
+
+  const image = await applyImage(
+    context,
+    id,
+    formData,
+    ((existing ?? {}) as { image_path?: string | null }).image_path ?? null,
+  )
+  if (image.error) return { error: image.error }
+
   const { error } = await scoped(context, 'products')
-    .update({ ...productColumns(parsed.data, formData), updated_by: context.user.id })
+    .update({
+      ...productColumns(parsed.data, formData),
+      ...(image.path !== undefined ? { image_path: image.path } : {}),
+      updated_by: context.user.id,
+    })
     .eq('id', id)
 
   if (error) return { error: readable(error.message) }

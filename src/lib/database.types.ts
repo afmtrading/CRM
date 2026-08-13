@@ -483,6 +483,7 @@ export type ProductRow = {
   color: string | null
   /** Pieces to a unit. Divides the unit prices into piece prices. */
   case_pack: number | null
+  /** Markdown, rendered through renderMarkdown() — never raw HTML. */
   item_notes: string | null
   /*
    * All three are drawn from field_options, like category — an organization
@@ -514,6 +515,17 @@ export type ProductRow = {
   barcode_url: string | null
   comp_1_url: string | null
   comp_2_url: string | null
+  /** Wherever the paperwork lives — Drive, Dropbox, a network share. */
+  folder_url: string | null
+  /** The spec sheet, the manual, the internal write-up. */
+  knowledge_base_url: string | null
+
+  /**
+   * Object key in the product-images bucket, not a URL — productImageUrl()
+   * builds the URL. Storing the whole thing would bake this project's hostname
+   * into every row and leave dead links behind a restore or a move.
+   */
+  image_path: string | null
   created_by: string | null
   updated_by: string | null
   deleted_at: string | null
