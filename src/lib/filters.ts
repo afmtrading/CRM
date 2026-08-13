@@ -413,3 +413,40 @@ export function filterFromSearchParams(
     sort: sortField ? { field: sortField, direction: sortDirection === 'asc' ? 'asc' : 'desc' } : null,
   }
 }
+
+// -----------------------------------------------------------------------------
+// What the deal board shows
+// -----------------------------------------------------------------------------
+
+export type DealVisibility =
+  | { kind: 'all' }
+  | { kind: 'status'; status: string }
+  | { kind: 'open-or-closing'; closingStageIds: string[] }
+
+/**
+ * How the status filter should be applied, given which view is asking.
+ *
+ * A board is arranged by stage, so once dragging a card into Won actually marks
+ * the deal won, filtering won deals off the board makes the drop look like a
+ * delete — the card vanishes and the Won column can never hold anything. On the
+ * board, "Open deals" therefore means open deals plus whatever is sitting in a
+ * closing stage: the column exists, and what is in it should be visible.
+ *
+ * The list is arranged by nothing in particular, so there "Open deals" means
+ * open deals and nothing else. One filter, two honest readings.
+ */
+export function dealVisibility(
+  status: string,
+  view: 'kanban' | 'list',
+  closingStageIds: string[],
+): DealVisibility {
+  if (status === 'all') return { kind: 'all' }
+
+  if (status === 'open' && view === 'kanban' && closingStageIds.length > 0) {
+    return { kind: 'open-or-closing', closingStageIds }
+  }
+
+  // Asking for "Won only" is a deliberate choice and is answered literally,
+  // on either view.
+  return { kind: 'status', status }
+}
