@@ -435,6 +435,49 @@ describe('export', () => {
       expect(ledgerCsvValue(row, column.key)).not.toBeUndefined()
     }
   })
+
+  /*
+   * The fraction as stored. A spreadsheet can format 0.35 as a percentage; it
+   * cannot get back to a fraction from 35 without knowing the column was scaled
+   * on the way out.
+   */
+  it('writes probability as the fraction, not the printed percentage', () => {
+    expect(ledgerCsvValue(deal({ probability: 0.35 }), 'probability')).toBe(0.35)
+  })
+
+  it('writes a zero probability rather than reading it as missing', () => {
+    expect(ledgerCsvValue(deal({ probability: 0 }), 'probability')).toBe(0)
+    expect(ledgerCsvValue(deal({ line_count: 0 }), 'line_count')).toBe(0)
+  })
+
+  /*
+   * Margin's rule, applied to the two numbers it is made of: a deal priced by
+   * hand has no revenue or cost recorded anywhere, and a zero would read as a
+   * fact rather than a gap.
+   */
+  it('leaves revenue and cost empty when there are no line items', () => {
+    const row = deal({ revenue: null, cost: null })
+    expect(ledgerCsvValue(row, 'revenue')).toBeNull()
+    expect(ledgerCsvValue(row, 'cost')).toBeNull()
+  })
+
+  it('writes revenue and cost as bare numbers when there are', () => {
+    const row = deal({ revenue: 900, cost: 400, line_count: 3 })
+    expect(ledgerCsvValue(row, 'revenue')).toBe(900)
+    expect(ledgerCsvValue(row, 'cost')).toBe(400)
+    expect(ledgerCsvValue(row, 'line_count')).toBe(3)
+  })
+
+  it('writes the owner a deal counted for when it closed', () => {
+    expect(ledgerCsvValue(deal({ closed_owner_name: 'Priya' }), 'closed_owner_name')).toBe('Priya')
+    // Open deals have not counted for anybody yet.
+    expect(ledgerCsvValue(deal(), 'closed_owner_name')).toBe('')
+  })
+
+  it('sends the currency along with revenue and cost too', () => {
+    const columns = exportColumns(cols('revenue', 'cost'))
+    expect(columns.map((column) => column.key)).toEqual(['revenue', 'cost', 'currency'])
+  })
 })
 
 describe('finding the region field', () => {
@@ -469,9 +512,68 @@ describe('finding the region field', () => {
 })
 
 describe('choosing columns', () => {
-  it('defaults to every column, in the order they were specified', () => {
-    expect(DEFAULT_COLUMNS).toEqual(LEDGER_COLUMNS.map((column) => column.key))
+  /*
+   * Pinned as a list rather than derived from the definitions, so that adding a
+   * column has to be a deliberate change to what everybody sees on Monday
+   * morning instead of a side effect of defining one.
+   */
+  it('defaults to the reporting columns, in the order they were specified', () => {
+    expect(DEFAULT_COLUMNS).toEqual([
+      'name',
+      'status',
+      'owner_name',
+      'pipeline_name',
+      'stage_name',
+      'value',
+      'weighted_value',
+      'margin',
+      'company_name',
+      'contact_name',
+      'created_at',
+      'expected_close_date',
+      'actual_close_date',
+      'cycle_days',
+      'products',
+      'regions',
+      'loss_reason',
+      'currency',
+    ])
     expect(isDefaultColumns(DEFAULT_COLUMNS)).toBe(true)
+  })
+
+  /*
+   * The workings behind the reporting columns: revenue and cost behind margin,
+   * line items behind both, probability behind Weighted, and who the deal
+   * counted for when it closed. Anybody checking a number wants them; anybody
+   * reading the report does not, so they are on offer rather than on screen.
+   */
+  it('offers the detail columns without putting them on screen unasked', () => {
+    const detail: LedgerColumnKey[] = [
+      'closed_owner_name',
+      'probability',
+      'revenue',
+      'cost',
+      'line_count',
+    ]
+    const available = hiddenColumns(DEFAULT_COLUMNS).map((column) => column.key)
+
+    for (const key of detail) {
+      expect(columnFor(key)).toBeDefined()
+      expect(DEFAULT_COLUMNS).not.toContain(key)
+      expect(available).toContain(key)
+    }
+  })
+
+  it('leaves nothing defined but unreachable', () => {
+    const reachable = new Set([...DEFAULT_COLUMNS, ...hiddenColumns(DEFAULT_COLUMNS).map((c) => c.key)])
+    expect(reachable.size).toBe(LEDGER_COLUMNS.length)
+  })
+
+  it('puts a detail column next to the one it explains', () => {
+    const keys = LEDGER_COLUMNS.map((column) => column.key)
+    expect(keys.indexOf('cost')).toBe(keys.indexOf('margin') - 1)
+    expect(keys.indexOf('revenue')).toBe(keys.indexOf('cost') - 1)
+    expect(keys.indexOf('closed_owner_name')).toBe(keys.indexOf('owner_name') + 1)
   })
 
   it('reads a layout from a comma separated list', () => {

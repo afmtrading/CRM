@@ -82,7 +82,9 @@ export function ColumnPicker({
       >
         Columns
         <span className="ml-1.5 text-xs text-slate-400">
-          {shown.length}/{offered(DEFAULT_COLUMNS).length}
+          {/* Out of everything on offer here, not out of the default set —
+              otherwise switching on an extra column reads as 19/18. */}
+          {shown.length}/{shown.length + available.length}
         </span>
       </button>
 
@@ -139,8 +141,10 @@ export function ColumnPicker({
 
           {available.length > 0 && (
             <>
+              {/* "Available" rather than "Hidden": some of these have never
+                  been on screen, so there is nothing to un-hide. */}
               <p className="mt-3 border-t border-slate-100 pt-3 text-xs font-medium uppercase tracking-wide text-slate-400">
-                Hidden
+                Available
               </p>
               <ul className="mt-1 space-y-0.5">
                 {available.map((column) => (

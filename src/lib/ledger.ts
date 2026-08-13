@@ -62,11 +62,16 @@ export type LedgerColumnKey =
   | 'pipeline_name'
   | 'stage_name'
   | 'owner_name'
+  | 'closed_owner_name'
   | 'company_name'
   | 'contact_name'
   | 'value'
   | 'weighted_value'
+  | 'probability'
+  | 'revenue'
+  | 'cost'
   | 'margin'
+  | 'line_count'
   | 'products'
   | 'regions'
   | 'created_at'
@@ -80,11 +85,21 @@ export interface LedgerColumn {
   key: LedgerColumnKey
   label: string
   /** How the value is rendered and sorted. */
-  kind: 'text' | 'money' | 'number' | 'date' | 'list' | 'status'
+  kind: 'text' | 'money' | 'number' | 'percent' | 'date' | 'list' | 'status'
   groupable: boolean
   /** A value on this row may belong to several groups at once. */
   multi?: boolean
   numeric?: boolean
+  /**
+   * Available in the picker, but not on screen until somebody asks for it.
+   *
+   * The ledger is already eighteen columns wide. These are the workings behind
+   * columns that are shown — revenue and cost behind margin, line items behind
+   * both, probability behind Weighted — and a reader who wants to check a number
+   * wants them, while a reader reading the report does not. Off by default is
+   * how both get what they want.
+   */
+  offByDefault?: boolean
 }
 
 /**
@@ -93,16 +108,60 @@ export interface LedgerColumn {
  * Owner is not on the original list and is the reason the ledger exists — every
  * question in the plan below it is per-owner. Currency is here because a total
  * without one is not a number.
+ *
+ * Each column sits next to the one it explains rather than at the end, so a
+ * reader who switches on Cost finds it beside Margin instead of hunting for it.
  */
 export const LEDGER_COLUMNS: LedgerColumn[] = [
   { key: 'name', label: 'Deal', kind: 'text', groupable: false },
   { key: 'status', label: 'Status', kind: 'status', groupable: true },
   { key: 'owner_name', label: 'Owner', kind: 'text', groupable: true },
+  // Who the deal counted for when it closed — what the performance report
+  // credits. Groupable for the same reason: "who actually closed these".
+  {
+    key: 'closed_owner_name',
+    label: 'Owner at close',
+    kind: 'text',
+    groupable: true,
+    offByDefault: true,
+  },
   { key: 'pipeline_name', label: 'Pipeline', kind: 'text', groupable: true },
   { key: 'stage_name', label: 'Stage', kind: 'text', groupable: true },
   { key: 'value', label: 'Value', kind: 'money', groupable: false, numeric: true },
   { key: 'weighted_value', label: 'Weighted', kind: 'money', groupable: false, numeric: true },
+  {
+    key: 'probability',
+    label: 'Probability',
+    kind: 'percent',
+    groupable: false,
+    numeric: true,
+    offByDefault: true,
+  },
+  {
+    key: 'revenue',
+    label: 'Revenue',
+    kind: 'money',
+    groupable: false,
+    numeric: true,
+    offByDefault: true,
+  },
+  {
+    key: 'cost',
+    label: 'Cost',
+    kind: 'money',
+    groupable: false,
+    numeric: true,
+    offByDefault: true,
+  },
   { key: 'margin', label: 'Margin', kind: 'money', groupable: false, numeric: true },
+  {
+    key: 'line_count',
+    label: 'Line items',
+    kind: 'number',
+    groupable: false,
+    numeric: true,
+    offByDefault: true,
+  },
   { key: 'company_name', label: 'Company', kind: 'text', groupable: true },
   { key: 'contact_name', label: 'Contact', kind: 'text', groupable: true },
   { key: 'created_at', label: 'Initiated', kind: 'date', groupable: false },
@@ -117,8 +176,16 @@ export const LEDGER_COLUMNS: LedgerColumn[] = [
 
 export const GROUPABLE_COLUMNS = LEDGER_COLUMNS.filter((column) => column.groupable)
 
-/** Every column, in the order they were asked for — what a ledger shows by default. */
-export const DEFAULT_COLUMNS: LedgerColumnKey[] = LEDGER_COLUMNS.map((column) => column.key)
+/**
+ * What a ledger shows when nobody has said otherwise.
+ *
+ * Derived rather than listed, so a column is added in one place. The columns
+ * marked off by default are still offered by the picker — see hiddenColumns —
+ * they just do not widen the table for somebody who never asked for them.
+ */
+export const DEFAULT_COLUMNS: LedgerColumnKey[] = LEDGER_COLUMNS.filter(
+  (column) => !column.offByDefault,
+).map((column) => column.key)
 
 /**
  * Where a chosen layout is remembered.
@@ -571,6 +638,8 @@ export function ledgerCsvValue(row: LedgerRow, key: LedgerColumnKey): string | n
       return row.status
     case 'owner_name':
       return row.owner_name ?? ''
+    case 'closed_owner_name':
+      return row.closed_owner_name ?? ''
     case 'pipeline_name':
       return row.pipeline_name ?? ''
     case 'stage_name':
@@ -583,6 +652,21 @@ export function ledgerCsvValue(row: LedgerRow, key: LedgerColumnKey): string | n
       return row.value
     case 'weighted_value':
       return row.weighted_value
+    /*
+     * The fraction as stored, not the 35 the screen prints. A spreadsheet
+     * formats 0.35 as a percentage; it cannot get back to a fraction from 35
+     * without knowing that column was scaled on the way out.
+     */
+    case 'probability':
+      return row.probability
+    // Null when the deal has no line items, and an empty cell is the honest
+    // way to write "we do not know", exactly as with margin.
+    case 'revenue':
+      return row.revenue
+    case 'cost':
+      return row.cost
+    case 'line_count':
+      return row.line_count
     case 'margin':
       return row.margin
     case 'currency':
