@@ -260,6 +260,25 @@ export const LayersIcon: IconComponent = (p) => (
   </Svg>
 )
 
+/* Three rules of differing length, ragged on the side they align away from. */
+export const AlignLeftIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M3 6h18M3 12h12M3 18h15" />
+  </Svg>
+)
+
+export const AlignCenterIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M3 6h18M6 12h12M4.5 18h15" />
+  </Svg>
+)
+
+export const AlignRightIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M3 6h18M9 12h12M6 18h15" />
+  </Svg>
+)
+
 /** A crate — what stock is counted in. */
 export const StockIcon: IconComponent = (p) => (
   <Svg {...p}>

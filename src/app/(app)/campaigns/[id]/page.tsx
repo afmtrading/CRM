@@ -228,7 +228,10 @@ export default async function CampaignPage({
                   </label>
                   <CampaignMessageEditor rows={16} defaultValue={campaign.body} />
                   <p className="mt-1 text-xs text-slate-500">
-                    The buttons write markdown, which you can also type by hand. Merge fields:{' '}
+                    The buttons write markdown, which you can also type by hand:{' '}
+                    <code>## heading</code>, <code>**bold**</code>, <code>*italic*</code>,{' '}
+                    <code>__underline__</code>, <code>- bullets</code>, <code>1. numbers</code>,{' '}
+                    <code>::center</code> or <code>::right</code> in front of a line. Merge fields:{' '}
                     {MERGE_FIELDS.map((field) => (
                       <code key={field} className="mr-1">{`{{${field}}}`}</code>
                     ))}

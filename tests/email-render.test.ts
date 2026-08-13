@@ -64,6 +64,69 @@ describe('renderEmailBody', () => {
   })
 })
 
+describe('renderEmailBody — lists, headings and alignment', () => {
+  it('says outright what marker a list uses', () => {
+    // The bug this fixes: the app's own CSS reset sets list-style:none on every
+    // list, so the preview showed neither bullets nor numbers while the real
+    // email kept them — the one disagreement a preview exists to prevent.
+    const html = renderEmailBody('- one\n- two')
+    expect(html).toContain('list-style-type:disc')
+  })
+
+  it('and numbers an ordered one', () => {
+    const html = renderEmailBody('1. one\n2. two')
+    expect(html).toContain('<ol')
+    expect(html).toContain('list-style-type:decimal')
+  })
+
+  it('lets the list do the counting, whatever numbers were typed', () => {
+    // 1. 1. 1. is legal markdown and the point of an ordered list: inserting a
+    // line in the middle must not mean renumbering the rest by hand.
+    const repeated = renderEmailBody('1. one\n1. two\n1. three')
+    const counted = renderEmailBody('1. one\n2. two\n3. three')
+
+    expect(repeated).toBe(counted)
+    expect(repeated.match(/<li/g)).toHaveLength(3)
+  })
+
+  it('offers four heading levels, each smaller than the last', () => {
+    const sizes = [1, 2, 3, 4].map((level) => {
+      const html = renderEmailBody(`${'#'.repeat(level)} Heading`)
+      return Number(/font-size:(\d+)px/.exec(html)?.[1])
+    })
+
+    expect(sizes).toHaveLength(4)
+    expect(sizes.every((size, i) => i === 0 || size < sizes[i - 1])).toBe(true)
+  })
+
+  it('underlines what is written between double underscores', () => {
+    expect(renderEmailBody('__underlined__')).toContain('<u>underlined</u>')
+  })
+
+  it('aligns a line that asks to be aligned', () => {
+    expect(renderEmailBody('::center Middle')).toContain('text-align:center')
+    expect(renderEmailBody('::right End')).toContain('text-align:right')
+  })
+
+  it('writes no style for left, which is what a line does anyway', () => {
+    expect(renderEmailBody('::left Start')).not.toContain('text-align')
+    expect(renderEmailBody('::left Start')).toContain('Start')
+  })
+
+  it('aligns a heading rather than reading the hashes as text', () => {
+    const html = renderEmailBody('::center ## Heading')
+
+    expect(html).toContain('text-align:center')
+    expect(html).toContain('Heading')
+    expect(html).not.toContain('##')
+  })
+
+  it('leaves an alignment directive nobody wrote alone', () => {
+    // `::caps lock` is prose, not a directive, and must survive as prose.
+    expect(renderEmailBody('::caps lock')).toContain('::caps lock')
+  })
+})
+
 describe('renderEmail', () => {
   it('will not build a message without a working unsubscribe link', () => {
     // Enforced in the renderer rather than the template, so no campaign can be
