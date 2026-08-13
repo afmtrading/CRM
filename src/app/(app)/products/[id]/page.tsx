@@ -13,12 +13,8 @@ import type {
 import {
   type DerivedPrice,
   derivePricing,
-  productConditionLabel,
-  productConditionTone,
-  productStatusLabel,
-  productStatusTone,
-  productTypeLabel,
-  unitMargin,
+  showroomMargin,
+  wholesaleMargin,
 } from '@/lib/products'
 import {
   CustomFieldValues,
@@ -118,7 +114,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   // Six of the price columns are null unless somebody typed into them; this is
   // what turns those holes back into a price list. See src/lib/products.ts.
   const pricing = derivePricing(product)
-  const margin = unitMargin(product)
+  const showroom = showroomMargin(product)
+  const wholesale = wholesaleMargin(product)
   const currency = product.currency
 
   const marketLinks = [
@@ -131,12 +128,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <>
       <PageHeader
         title={product.name}
-        description={[
-          product.brand,
-          product.sku,
-          product.category,
-          productStatusLabel(product.status),
-        ]
+        description={[product.brand, product.sku, product.category, product.status]
           .filter(Boolean)
           .join(' · ')}
         actions={
@@ -165,10 +157,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               <span className="text-xs text-slate-500">
                 {currency}
                 <span className="mx-2 text-slate-300">·</span>
-                margin{' '}
-                <span className={margin.amount < 0 ? 'text-red-600' : undefined}>
-                  {formatPrice(margin.amount, currency)}
-                  {margin.percent !== null && ` (${margin.percent}%)`}
+                showroom{' '}
+                <span className={showroom.amount < 0 ? 'text-red-600' : undefined}>
+                  {formatPrice(showroom.amount, currency)}
+                  {showroom.percent !== null && ` (${showroom.percent}%)`}
+                </span>
+                <span className="mx-2 text-slate-300">·</span>
+                wholesale{' '}
+                <span className={wholesale.amount < 0 ? 'text-red-600' : undefined}>
+                  {formatPrice(wholesale.amount, currency)}
+                  {wholesale.percent !== null && ` (${wholesale.percent}%)`}
                 </span>
               </span>
             }
@@ -290,7 +288,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                         {formatCurrency(entry.open, currency)} open
                       </p>
                       <p className="text-xs text-slate-500">
-                        {formatNumber(entry.quantity)} {product.unit || 'units'}
+                        {formatNumber(entry.quantity)} units
                       </p>
                     </div>
                   ))}
@@ -386,21 +384,23 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               <Field label="Case Pack">
                 {product.case_pack === null ? <Empty /> : formatNumber(product.case_pack)}
               </Field>
-              <Field label="Unit">{product.unit || <Empty />}</Field>
-              <Field label="Product Type">{productTypeLabel(product.product_type) ?? <Empty />}</Field>
+              <Field label="Product Type">
+                <OptionBadges
+                  values={product.product_type ? [product.product_type] : []}
+                  options={options.filter((option) => option.field_key === 'product_type')}
+                />
+              </Field>
               <Field label="Condition">
-                {product.product_condition ? (
-                  <span className={`badge ${productConditionTone(product.product_condition)}`}>
-                    {productConditionLabel(product.product_condition)}
-                  </span>
-                ) : (
-                  <Empty />
-                )}
+                <OptionBadges
+                  values={product.product_condition ? [product.product_condition] : []}
+                  options={options.filter((option) => option.field_key === 'product_condition')}
+                />
               </Field>
               <Field label="Status">
-                <span className={`badge ${productStatusTone(product.status)}`}>
-                  {productStatusLabel(product.status)}
-                </span>
+                <OptionBadges
+                  values={product.status ? [product.status] : []}
+                  options={options.filter((option) => option.field_key === 'product_status')}
+                />
               </Field>
               <Field label="Category" wide>
                 <OptionBadges

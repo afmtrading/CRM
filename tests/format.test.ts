@@ -210,8 +210,8 @@ describe('totalsByCurrency', () => {
         { value: 100, currency: 'USD' },
       ]),
     ).toEqual([
-      { currency: 'CAD', total: 10 },
       { currency: 'USD', total: 100 },
+      { currency: 'CAD', total: 10 },
     ])
   })
 
@@ -231,7 +231,8 @@ describe('totalsByCurrency', () => {
       { value: 1, currency: 'EUR' },
       { value: 1, currency: 'CAD' },
     ])
-    expect(totals.map((entry) => entry.currency)).toEqual(['CAD', 'USD', 'EUR', 'GBP'])
+    // USD leads because the app does: dollars mean US dollars here.
+    expect(totals.map((entry) => entry.currency)).toEqual(['USD', 'CAD', 'EUR', 'GBP'])
   })
 
   it('puts anything unrecognised after the four the app offers', () => {

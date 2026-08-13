@@ -11,11 +11,10 @@ import type {
 import { CURRENCIES, formatPrice } from '@/lib/format'
 import { PRODUCT_CARDS } from '@/lib/field-options'
 import {
-  PRODUCT_CONDITIONS,
-  PRODUCT_STATUSES,
-  PRODUCT_TYPES,
+  PRODUCT_ACTIVE_STATUS,
   derivePricing,
-  unitMargin,
+  showroomMargin,
+  wholesaleMargin,
 } from '@/lib/products'
 import {
   CustomFieldInputs,
@@ -81,6 +80,91 @@ function MoneyField({
   )
 }
 
+/**
+ * A select whose options an administrator owns.
+ *
+ * Drawn from field_options rather than from a list in the code, so Product
+ * Type, Condition and Status are edited in Settings → Fields alongside
+ * Category. Rendered as a dropdown rather than as coloured chips because five
+ * to ten states is more list than the eye wants to scan across a form.
+ */
+function OptionSelect({
+  name,
+  label,
+  options,
+  value,
+  hint,
+  required = false,
+}: {
+  name: string
+  label: string
+  options: FieldOptionRow[]
+  value: string
+  hint?: string
+  required?: boolean
+}) {
+  // A value saved before somebody edited the list would otherwise vanish from
+  // the dropdown and be silently rewritten on the next save.
+  const orphan = value && !options.some((option) => option.value === value) ? value : null
+
+  return (
+    <div>
+      <label className="label" htmlFor={name}>
+        {label}
+      </label>
+      <select id={name} name={name} className="input" defaultValue={value}>
+        {!required && <option value="">—</option>}
+        {options.map((option) => (
+          <option key={option.id} value={option.value}>
+            {option.value}
+          </option>
+        ))}
+        {orphan && <option value={orphan}>{orphan} (no longer on the list)</option>}
+      </select>
+      {options.length === 0 ? (
+        <Hint>
+          <Link href="/settings/fields" className="text-brand-700 hover:underline">
+            Add some options
+          </Link>{' '}
+          in Settings &rarr; Fields.
+        </Hint>
+      ) : (
+        hint && <Hint>{hint}</Hint>
+      )}
+    </div>
+  )
+}
+
+/** A margin, worked out as the prices are typed. */
+function MarginReadout({
+  label,
+  margin,
+  currency,
+  hint,
+}: {
+  label: string
+  margin: { amount: number; percent: number | null }
+  currency: string
+  hint: string
+}) {
+  return (
+    <div>
+      <span className="label">{label}</span>
+      <p
+        className={`mt-1 text-sm font-medium ${
+          margin.amount < 0 ? 'text-red-600' : 'text-slate-800'
+        }`}
+      >
+        {formatPrice(margin.amount, currency)}
+        {margin.percent !== null && (
+          <span className="ml-2 text-xs font-normal text-slate-500">{margin.percent}%</span>
+        )}
+      </p>
+      <Hint>{margin.amount < 0 ? 'The price is below cost.' : hint}</Hint>
+    </div>
+  )
+}
+
 export function ProductForm({
   action,
   product,
@@ -136,11 +220,11 @@ export function ProductForm({
     case_pack: prices.case_pack,
   })
 
-  const margin = unitMargin(prices)
+  const showroom = showroomMargin(prices)
+  const wholesale = wholesaleMargin(prices)
 
-  const categoryOptions = fieldOptions.filter(
-    (option) => option.entity_type === 'product' && option.field_key === 'product_category',
-  )
+  const optionsFor = (key: string) =>
+    fieldOptions.filter((option) => option.entity_type === 'product' && option.field_key === key)
 
   const forCard = (card: string) => customFields.filter((field) => field.card === card)
   const cardDescription = (key: string) =>
@@ -241,80 +325,36 @@ export function ProductForm({
           <Hint>Pieces to a unit. Divides the unit prices into piece prices.</Hint>
         </div>
 
-        <div>
-          <label className="label" htmlFor="unit">
-            Unit
-          </label>
-          <input
-            id="unit"
-            name="unit"
-            className="input"
-            placeholder="kg, MT, container…"
-            defaultValue={product?.unit ?? ''}
-          />
-          <Hint>What a quantity on a deal counts.</Hint>
-        </div>
+        <OptionSelect
+          name="product_type"
+          label="Product Type"
+          options={optionsFor('product_type')}
+          value={product?.product_type ?? ''}
+        />
 
-        <div>
-          <label className="label" htmlFor="product_type">
-            Product Type
-          </label>
-          <select
-            id="product_type"
-            name="product_type"
-            className="input"
-            defaultValue={product?.product_type ?? ''}
-          >
-            <option value="">—</option>
-            {PRODUCT_TYPES.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <OptionSelect
+          name="product_condition"
+          label="Condition"
+          options={optionsFor('product_condition')}
+          value={product?.product_condition ?? ''}
+        />
 
-        <div>
-          <label className="label" htmlFor="product_condition">
-            Condition
-          </label>
-          <select
-            id="product_condition"
-            name="product_condition"
-            className="input"
-            defaultValue={product?.product_condition ?? ''}
-          >
-            <option value="">—</option>
-            {PRODUCT_CONDITIONS.map((condition) => (
-              <option key={condition.value} value={condition.value}>
-                {condition.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="label" htmlFor="status">
-            Status
-          </label>
-          <select
-            id="status"
-            name="status"
-            className="input"
-            defaultValue={product?.status ?? 'active'}
-          >
-            {PRODUCT_STATUSES.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-          <Hint>Only Active products are offered on new deals. Deals that already list it keep it.</Hint>
-        </div>
+        <OptionSelect
+          name="status"
+          label="Status"
+          options={optionsFor('product_status')}
+          value={product?.status ?? PRODUCT_ACTIVE_STATUS}
+          required
+          hint={`Only ${PRODUCT_ACTIVE_STATUS} products are offered on new deals. Deals that already list it keep it.`}
+        />
 
         <div className="sm:col-span-2">
           <span className="label">Category</span>
-          <RadioChips name="category" options={categoryOptions} selected={product?.category ?? null} />
+          <RadioChips
+            name="category"
+            options={optionsFor('product_category')}
+            selected={product?.category ?? null}
+          />
         </div>
 
         <div className="sm:col-span-2">
@@ -384,72 +424,25 @@ export function ProductForm({
           <Hint>A default. A line item is always priced in its own deal&rsquo;s currency.</Hint>
         </div>
 
-        <div>
-          <span className="label">Unit margin</span>
-          <p
-            className={`mt-1 text-sm font-medium ${
-              margin.amount < 0 ? 'text-red-600' : 'text-slate-800'
-            }`}
-          >
-            {formatPrice(margin.amount, currency)}
-            {margin.percent !== null && (
-              <span className="ml-2 text-xs font-normal text-slate-500">{margin.percent}%</span>
-            )}
-          </p>
-          {margin.amount < 0 && <Hint>Retail is below cost.</Hint>}
-        </div>
+        <MarginReadout
+          label="Showroom Margin"
+          margin={showroom}
+          currency={currency}
+          hint="Showroom price less unit cost"
+        />
+
+        <MarginReadout
+          label="Wholesale Margin"
+          margin={wholesale}
+          currency={currency}
+          hint="Wholesale price less unit cost"
+        />
 
         <CustomFieldInputs
           fields={forCard('pricing')}
           values={product?.custom_fields ?? {}}
           fieldOptions={fieldOptions}
         />
-      </FormCard>
-
-      <FormCard
-        title="In the Market"
-        description="What everyone else is charging for it"
-        columns={3}
-      >
-        <div>
-          <label className="label" htmlFor="barcode_url">
-            Barcode Lookup
-          </label>
-          <input
-            id="barcode_url"
-            name="barcode_url"
-            type="url"
-            className="input"
-            placeholder="https://…"
-            defaultValue={product?.barcode_url ?? ''}
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="comp_1_url">
-            Comp 1
-          </label>
-          <input
-            id="comp_1_url"
-            name="comp_1_url"
-            type="url"
-            className="input"
-            placeholder="https://…"
-            defaultValue={product?.comp_1_url ?? ''}
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="comp_2_url">
-            Comp 2
-          </label>
-          <input
-            id="comp_2_url"
-            name="comp_2_url"
-            type="url"
-            className="input"
-            placeholder="https://…"
-            defaultValue={product?.comp_2_url ?? ''}
-          />
-        </div>
       </FormCard>
 
       <FormCard title="Cost" description="What it costs us at each quantity" columns={3}>
@@ -519,6 +512,52 @@ export function ProductForm({
           value={prices.pallet_price_wholesale}
           onChange={set('pallet_price_wholesale')}
         />
+      </FormCard>
+
+      <FormCard
+        title="In the Market"
+        description="What everyone else is charging for it"
+        columns={3}
+      >
+        <div>
+          <label className="label" htmlFor="barcode_url">
+            Barcode Lookup
+          </label>
+          <input
+            id="barcode_url"
+            name="barcode_url"
+            type="url"
+            className="input"
+            placeholder="https://…"
+            defaultValue={product?.barcode_url ?? ''}
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="comp_1_url">
+            Comp 1
+          </label>
+          <input
+            id="comp_1_url"
+            name="comp_1_url"
+            type="url"
+            className="input"
+            placeholder="https://…"
+            defaultValue={product?.comp_1_url ?? ''}
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="comp_2_url">
+            Comp 2
+          </label>
+          <input
+            id="comp_2_url"
+            name="comp_2_url"
+            type="url"
+            className="input"
+            placeholder="https://…"
+            defaultValue={product?.comp_2_url ?? ''}
+          />
+        </div>
       </FormCard>
 
       <FormCard title="Additional info" description={cardDescription('additional')}>

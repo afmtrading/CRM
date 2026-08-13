@@ -577,7 +577,7 @@ export async function updateOrganization(formData: FormData) {
     .update({
       name: String(formData.get('name') ?? '').trim() || context.organization.name,
       primary_color: String(formData.get('primary_color') ?? context.organization.primary_color),
-      default_currency: String(formData.get('default_currency') ?? 'CAD').toUpperCase(),
+      default_currency: String(formData.get('default_currency') ?? 'USD').toUpperCase(),
       logo_url: String(formData.get('logo_url') ?? '').trim() || null,
     })
     .eq('id', context.organizationId)

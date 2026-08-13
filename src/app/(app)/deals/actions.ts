@@ -12,7 +12,7 @@ const dealSchema = z.object({
   company_id: z.string().uuid().or(z.literal('')).default(''),
   stage_id: z.string().uuid('Pick a stage'),
   value: z.coerce.number().min(0).default(0),
-  currency: z.string().trim().min(3).max(3).default('CAD'),
+  currency: z.string().trim().min(3).max(3).default('USD'),
   probability: z.string().trim().default(''),
   expected_close_date: z.string().trim().default(''),
   status: z.enum(['open', 'won', 'lost']).default('open'),

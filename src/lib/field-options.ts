@@ -35,7 +35,7 @@ export const COMPANY_CARDS: { key: ContactCard; label: string; description: stri
  * counterpart on a person or a business.
  */
 export const PRODUCT_CARDS: { key: ContactCard; label: string; description: string }[] = [
-  { key: 'details', label: 'Product details', description: 'What it is and how it is counted' },
+  { key: 'details', label: 'Product details', description: '' },
   { key: 'pricing', label: 'Pricing', description: 'What it sells for and what it costs' },
   { key: 'additional', label: 'Additional info', description: 'Description and anything else' },
 ]
@@ -149,6 +149,12 @@ export const OPTION_FIELDS: {
   // Seeded with nothing on purpose: a catalogue's categories are the
   // organization's own vocabulary, not one this app can guess.
   { key: 'product_category', label: 'Product category', card: 'details', multiple: false, entity: 'product' },
+  // Type, condition and status started life as check constraints. They are the
+  // organization's vocabulary after all — "Reserved" and "In Transit" are real
+  // states nobody should need a deployment to add.
+  { key: 'product_type', label: 'Product type', card: 'details', multiple: false, entity: 'product' },
+  { key: 'product_condition', label: 'Condition', card: 'details', multiple: false, entity: 'product' },
+  { key: 'product_status', label: 'Product status', card: 'details', multiple: false, entity: 'product' },
 ]
 
 export const OPTION_FIELD_LABELS = Object.fromEntries(

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanManage, requireSession, scoped } from '@/lib/tenancy'
+import { PRODUCT_ACTIVE_STATUS } from '@/lib/products'
 
 /**
  * A price box left empty is not a price of zero.
@@ -30,10 +31,9 @@ const productSchema = z.object({
   name: z.string().trim().min(1, 'A product needs a name').max(200),
   sku: text(60),
   category: text(120),
-  unit: text(40),
   unit_price: z.coerce.number().min(0).default(0),
   unit_cost: z.coerce.number().min(0).default(0),
-  currency: z.string().trim().min(3).max(3).default('CAD'),
+  currency: z.string().trim().min(3).max(3).default('USD'),
   description: z.string().max(20_000).default(''),
 
   brand: text(120),
@@ -51,13 +51,16 @@ const productSchema = z.object({
     .nullable()
     .default(null),
   item_notes: text(500),
-  product_type: z.enum(['', 'item', 'case', 'pallet', 'kit', 'bin']).default(''),
-  product_condition: z
-    .enum(['', 'new', 'open_box', 'damaged', 'refurbished', 'expired'])
-    .default(''),
-  status: z
-    .enum(['active', 'inactive', 'discontinued', 'quarantined', 'sold'])
-    .default('active'),
+  /*
+   * Free text, not an enum: these three are drawn from field_options and an
+   * administrator can rename or extend them without a deployment. The database
+   * no longer constrains them either — what it does instead is derive
+   * products.active from the status, treating "Active" as the one value that
+   * means "sell it".
+   */
+  product_type: text(80),
+  product_condition: text(80),
+  status: text(80),
 
   price_showroom: optionalMoney,
   price_wholesale: optionalMoney,
@@ -94,7 +97,6 @@ function productColumns(input: z.infer<typeof productSchema>, formData: FormData
     name: input.name,
     sku: input.sku || null,
     category: input.category || null,
-    unit: input.unit,
     unit_price: input.unit_price,
     unit_cost: input.unit_cost,
     currency: input.currency.toUpperCase(),
@@ -111,7 +113,7 @@ function productColumns(input: z.infer<typeof productSchema>, formData: FormData
     product_condition: input.product_condition || null,
     // `active` is deliberately absent: a trigger derives it from the status, so
     // sending one would be sending a second opinion the database throws away.
-    status: input.status,
+    status: input.status || PRODUCT_ACTIVE_STATUS,
 
     price_showroom: input.price_showroom,
     price_wholesale: input.price_wholesale,
