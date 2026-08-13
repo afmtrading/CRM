@@ -34,6 +34,30 @@ alter table products drop constraint if exists products_condition_check;
 alter table products drop constraint if exists products_status_check;
 
 -- -----------------------------------------------------------------------------
+-- The rule that survives a vocabulary nobody has written yet
+--
+-- Case-insensitive because an admin editing the option list is typing into a
+-- text box, and "active" and "Active" are the same intention.
+--
+-- This has to be replaced BEFORE the rename below rather than after it. The
+-- rename fires this very trigger, and the version it replaces compared the
+-- status to 'active' exactly — so renaming 'active' to 'Active' under the old
+-- rule set active = false on every product in the catalogue and quietly emptied
+-- the deal picker. Caught by running the migration against a copy of the real
+-- data rather than against an empty table.
+-- -----------------------------------------------------------------------------
+create or replace function public.products_sync_active()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.active := (new.status is null or lower(trim(new.status)) = 'active');
+  return new;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
 -- Slugs become labels
 --
 -- Written as a mapping rather than a blanket initcap so that anything already
@@ -69,23 +93,6 @@ alter table products alter column status set default 'Active';
 
 comment on column products.status is
   'Drawn from field_options (product_status). Only "Active" is offered on new deals; products.active is derived from it and should not be written directly.';
-
--- -----------------------------------------------------------------------------
--- The rule that survives a vocabulary nobody has written yet
---
--- Case-insensitive because an admin editing the option list is typing into a
--- text box, and "active" and "Active" are the same intention.
--- -----------------------------------------------------------------------------
-create or replace function public.products_sync_active()
-returns trigger
-language plpgsql
-set search_path = public, pg_temp
-as $$
-begin
-  new.active := (new.status is null or lower(trim(new.status)) = 'active');
-  return new;
-end;
-$$;
 
 -- -----------------------------------------------------------------------------
 -- The starting vocabulary
