@@ -3,6 +3,9 @@ import Link from 'next/link'
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatNumber, formatPrice } from '@/lib/format'
 import type { FieldOptionRow, ProductRow } from '@/lib/database.types'
+import { derivePricing } from '@/lib/products'
+import { availableTone, formatQuantity } from '@/lib/stock'
+import { productImageUrl } from '@/lib/product-image'
 import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
 import { CurrencyIcon, LayersIcon, ProductsIcon, SearchIcon, TagIcon } from '@/components/icons'
@@ -29,19 +32,28 @@ export default async function ProductsPage({
   if (category) query = query.eq('category', category)
   if (!showRetired) query = query.eq('active', true)
 
-  const [{ data }, { data: fieldOptions }] = await Promise.all([
+  const [{ data }, { data: fieldOptions }, { data: stockRows }] = await Promise.all([
     query.order('name').limit(500),
     scoped(context, 'field_options')
       .select('*')
       .eq('entity_type', 'product')
       .in('field_key', ['product_category', 'product_status'])
       .order('order'),
+    // One call for every product rather than one per row: committed comes off
+    // the open deals, which no page-level query could see through its own
+    // policies anyway.
+    context.supabase.rpc('product_stock_overview'),
   ])
 
   const products = (data ?? []) as ProductRow[]
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
   const categoryOptions = allOptions.filter((o) => o.field_key === 'product_category')
   const statusOptions = allOptions.filter((o) => o.field_key === 'product_status')
+
+  type StockRow = { product_id: string; available: number; locations: string[] }
+  const stockByProduct = new Map<string, StockRow>(
+    ((stockRows ?? []) as StockRow[]).map((row) => [row.product_id, row]),
+  )
 
   const active = products.filter((product) => product.active)
   const categories = new Set(products.map((product) => product.category).filter(Boolean))
@@ -170,25 +182,39 @@ export default async function ProductsPage({
             <thead>
               <tr>
                 <th>Product</th>
-                <th>Category</th>
                 <th>Status</th>
-                <th className="text-right">Unit retail</th>
-                <th className="text-right">Cost</th>
-                <th className="text-right">Margin</th>
+                <th className="text-center">Available</th>
+                <th className="text-center">Location</th>
+                <th className="text-center">Showroom $</th>
+                <th className="text-center">Wholesale $</th>
               </tr>
             </thead>
             <tbody>
               {products.map((product) => {
-                const price = Number(product.unit_price)
-                const margin = price - Number(product.unit_cost)
-                const pct = price > 0 ? Math.round((margin / price) * 100) : null
+                const pricing = derivePricing(product)
+                const stock = stockByProduct.get(product.id)
+                const available = Number(stock?.available ?? 0)
+                const locations = stock?.locations ?? []
+                const imageUrl = productImageUrl(product.image_path)
 
                 return (
                   <tr key={product.id}>
                     <td>
                       <div className="flex items-center gap-3">
-                        <span className="icon-chip h-9 w-9 bg-brand-50 text-brand-700">
-                          <ProductsIcon className="h-4 w-4" />
+                        <span className="icon-chip h-9 w-9 overflow-hidden bg-brand-50 text-brand-700">
+                          {imageUrl ? (
+                            /* The product's own photo where there is one. A 36px
+                               square of a storage URL is not worth next/image,
+                               which would also need a remote pattern for it. */
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={imageUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <ProductsIcon className="h-4 w-4" />
+                          )}
                         </span>
                         <div className="min-w-0">
                           <Link
@@ -203,31 +229,34 @@ export default async function ProductsPage({
                         </div>
                       </div>
                     </td>
-                    <td>
-                      <OptionBadges
-                        values={product.category ? [product.category] : []}
-                        options={categoryOptions}
-                      />
-                    </td>
+
                     <td>
                       <OptionBadges
                         values={product.status ? [product.status] : []}
                         options={statusOptions}
                       />
                     </td>
-                    <td className="text-right text-slate-800">
-                      {formatPrice(price, product.currency)}
+
+                    <td className={`text-center font-medium ${availableTone(available)}`}>
+                      {formatQuantity(available)}
                     </td>
-                    <td className="text-right text-slate-600">
-                      {formatPrice(Number(product.unit_cost), product.currency)}
+
+                    <td className="text-center text-slate-600">
+                      {locations.length === 0 ? (
+                        <span className="text-slate-300">—</span>
+                      ) : (
+                        // Everywhere it is stocked, because "TOR +2" makes
+                        // somebody open the product to find out what the two are.
+                        <span className="text-xs">{locations.join(' · ')}</span>
+                      )}
                     </td>
-                    <td
-                      className={`text-right font-medium ${
-                        margin < 0 ? 'text-red-600' : 'text-slate-800'
-                      }`}
-                    >
-                      {formatPrice(margin, product.currency)}
-                      {pct !== null && <span className="ml-1 text-xs text-slate-400">{pct}%</span>}
+
+                    <td className="text-center text-slate-800">
+                      {formatPrice(pricing.unit.showroom.value ?? 0, product.currency)}
+                    </td>
+
+                    <td className="text-center text-slate-800">
+                      {formatPrice(pricing.unit.wholesale.value ?? 0, product.currency)}
                     </td>
                   </tr>
                 )
