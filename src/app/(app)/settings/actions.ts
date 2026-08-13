@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
+import { assertCanManage, requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
@@ -718,4 +718,96 @@ export async function restoreProduct(formData: FormData) {
 
   revalidatePath('/settings/deleted')
   revalidatePath('/products')
+}
+
+// -----------------------------------------------------------------------------
+// Warehouses and bins
+//
+// The catalogue's own reference data: everyone reads it, managers arrange it.
+// The RLS policies say so too, so these actions are the convenient path rather
+// than the enforcing one.
+// -----------------------------------------------------------------------------
+
+export async function createStockLocation(formData: FormData) {
+  const context = await requireSession()
+  assertCanManage(context)
+
+  const name = String(formData.get('name') ?? '').trim()
+  if (!name) throw new Error('A location needs a name')
+
+  const { error } = await scoped(context, 'stock_locations').insert({
+    name,
+    code: String(formData.get('code') ?? '').trim() || null,
+    address: String(formData.get('address') ?? '').trim() || null,
+    created_by: context.user.id,
+  })
+
+  if (error) {
+    throw new Error(
+      error.message.includes('duplicate key')
+        ? `There is already a location called "${name}".`
+        : error.message,
+    )
+  }
+
+  revalidatePath('/settings/locations')
+}
+
+/**
+ * Retires a location, or brings it back.
+ *
+ * Not a delete: stock_levels references it with `on delete restrict`, precisely
+ * so that removing a warehouse can never quietly destroy the record of what was
+ * counted in it. A retired location keeps its history and leaves the pickers.
+ */
+export async function setStockLocationActive(formData: FormData) {
+  const context = await requireSession()
+  assertCanManage(context)
+
+  const { error } = await scoped(context, 'stock_locations')
+    .update({ active: formData.get('active') === 'true' })
+    .eq('id', String(formData.get('id') ?? ''))
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/settings/locations')
+}
+
+export async function createStockBin(formData: FormData) {
+  const context = await requireSession()
+  assertCanManage(context)
+
+  const locationId = String(formData.get('location_id') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  if (!locationId || !name) throw new Error('A bin needs a location and a name')
+
+  const { error } = await scoped(context, 'stock_bins').insert({ location_id: locationId, name })
+
+  if (error) {
+    throw new Error(
+      error.message.includes('duplicate key')
+        ? `That location already has a bin called "${name}".`
+        : error.message,
+    )
+  }
+
+  revalidatePath('/settings/locations')
+}
+
+/**
+ * Deletes a bin.
+ *
+ * Safe to delete outright where a location is not: stock_levels.bin_id is
+ * `on delete set null`, so the stock stays where it is and simply stops naming
+ * a shelf. Nothing is lost but the shelf.
+ */
+export async function deleteStockBin(formData: FormData) {
+  const context = await requireSession()
+  assertCanManage(context)
+
+  const { error } = await scoped(context, 'stock_bins')
+    .delete()
+    .eq('id', String(formData.get('id') ?? ''))
+
+  if (error) throw new Error(error.message)
+  revalidatePath('/settings/locations')
 }

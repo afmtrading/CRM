@@ -5,7 +5,9 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanManage, requireSession, scoped } from '@/lib/tenancy'
+import type { SessionContext } from '@/lib/tenancy'
 import { PRODUCT_ACTIVE_STATUS } from '@/lib/products'
+import { type StockEntry, normaliseEntries, placeKey } from '@/lib/stock'
 
 /**
  * A price box left empty is not a price of zero.
@@ -133,6 +135,73 @@ function productColumns(input: z.infer<typeof productSchema>, formData: FormData
   }
 }
 
+/**
+ * Writes whatever the stock card was holding.
+ *
+ * Rows arrive as one JSON field because the editor adds and removes them in the
+ * browser. Each surviving place goes through set_stock_level, which is the only
+ * thing that may move a quantity and which records the movement as it does;
+ * places that were on the record and are no longer in the form are cleared, so
+ * removing a row is a recorded movement to zero rather than a disappearance.
+ *
+ * Failures are collected rather than thrown. The product itself has already
+ * saved by the time this runs, and losing that save because one warehouse row
+ * was wrong would be the worse outcome — so the caller is told which places did
+ * not take.
+ */
+async function applyStock(
+  context: SessionContext,
+  productId: string,
+  formData: FormData,
+): Promise<string | null> {
+  const raw = formData.get('stock')
+  if (raw === null) return null
+
+  let submitted: StockEntry[]
+  try {
+    const parsed = JSON.parse(String(raw))
+    submitted = Array.isArray(parsed) ? (parsed as StockEntry[]) : []
+  } catch {
+    return 'The stock rows could not be read.'
+  }
+
+  const entries = normaliseEntries(submitted)
+
+  const { data: existing } = await scoped(context, 'stock_levels')
+    .select('location_id, bin_id')
+    .eq('product_id', productId)
+
+  const wanted = new Set(entries.map((entry) => placeKey(entry.location_id, entry.bin_id)))
+  const problems: string[] = []
+
+  for (const entry of entries) {
+    const { error } = await context.supabase.rpc('set_stock_level', {
+      p_product_id: productId,
+      p_location_id: entry.location_id,
+      p_bin_id: entry.bin_id || null,
+      p_quantity: Number(entry.quantity),
+      p_reserved: null,
+      p_reason: 'Edited on the product',
+      p_note: null,
+    })
+    if (error) problems.push(error.message)
+  }
+
+  for (const place of (existing ?? []) as { location_id: string; bin_id: string | null }[]) {
+    if (wanted.has(placeKey(place.location_id, place.bin_id))) continue
+
+    const { error } = await context.supabase.rpc('clear_stock_level', {
+      p_product_id: productId,
+      p_location_id: place.location_id,
+      p_bin_id: place.bin_id,
+      p_reason: 'Removed on the product',
+    })
+    if (error) problems.push(error.message)
+  }
+
+  return problems.length > 0 ? `Saved, but the stock did not: ${problems[0]}` : null
+}
+
 /** A duplicate SKU is the one failure worth explaining in the caller's words. */
 function readable(message: string): string {
   return message.includes('products_org_sku_idx') || message.includes('duplicate key')
@@ -157,6 +226,9 @@ export async function createProduct(
 
   if (error) return { error: readable(error.message) }
 
+  const stockError = await applyStock(context, data.id, formData)
+  if (stockError) return { error: stockError }
+
   revalidatePath('/products')
   redirect(`/products/${data.id}`)
 }
@@ -178,9 +250,11 @@ export async function updateProduct(
 
   if (error) return { error: readable(error.message) }
 
+  const stockError = await applyStock(context, id, formData)
+
   revalidatePath('/products')
   revalidatePath(`/products/${id}`)
-  return { ok: true }
+  return stockError ? { error: stockError } : { ok: true }
 }
 
 /**

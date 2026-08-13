@@ -547,6 +547,66 @@ export type DealProductRow = {
 }
 
 /** What a contact has asked about. Intent, not purchase history. */
+/** A warehouse. Org-wide reference data: everyone reads, managers arrange. */
+export type StockLocationRow = {
+  id: string
+  organization_id: string
+  name: string
+  /** A short label for tables and pickers — "TOR", "MTL-3". */
+  code: string | null
+  address: string | null
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** A shelf, a rack, an aisle. Optional, and belongs to exactly one location. */
+export type StockBinRow = {
+  id: string
+  organization_id: string
+  location_id: string
+  name: string
+  created_at: string
+}
+
+/**
+ * How many of a product are in one place.
+ *
+ * Read freely; never written directly — `authenticated` holds SELECT and
+ * nothing else. Every change goes through the set_stock_level RPC, which writes
+ * the adjustment beside it in the same statement.
+ */
+export type StockLevelRow = {
+  id: string
+  organization_id: string
+  product_id: string
+  location_id: string
+  bin_id: string | null
+  quantity: number
+  /** Held back by hand, for a reason that is not a deal yet. */
+  reserved: number
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Append-only. What moved, by how much, why, and who did it. */
+export type StockAdjustmentRow = {
+  id: string
+  organization_id: string
+  product_id: string
+  location_id: string | null
+  bin_id: string | null
+  field: 'quantity' | 'reserved'
+  delta: number
+  quantity_after: number
+  reason: string | null
+  note: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export type ContactProductRow = {
   organization_id: string
   contact_id: string

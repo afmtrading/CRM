@@ -9,7 +9,10 @@ import type {
   DealProductRow,
   FieldOptionRow,
   ProductRow,
+  StockAdjustmentRow,
+  StockLevelRow,
 } from '@/lib/database.types'
+import { availableTone, formatDelta, formatQuantity } from '@/lib/stock'
 import {
   type DerivedPrice,
   derivePricing,
@@ -24,6 +27,7 @@ import {
   OptionBadges,
 } from '@/components/contact-cards'
 import { DealStatusBadge, EmptyState, PageHeader, Section } from '@/components/ui'
+import { DateTime } from '@/components/date-time'
 
 import { deleteProduct } from '../actions'
 
@@ -44,6 +48,26 @@ function PriceCell({ price, currency }: { price: DerivedPrice; currency: string 
     >
       {formatPrice(price.value, currency)}
     </span>
+  )
+}
+
+/** One of the four headline stock numbers. */
+function StockTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number | string
+  tone?: string
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`mt-1 text-lg font-semibold ${tone ?? 'text-slate-900'}`}>
+        {formatQuantity(value)}
+      </p>
+    </div>
   )
 }
 
@@ -68,8 +92,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   if (!product) notFound()
 
-  const [{ data: lines }, { data: interest }, { data: customFields }, { data: fieldOptions }] =
-    await Promise.all([
+  const [
+    { data: lines },
+    { data: interest },
+    { data: customFields },
+    { data: fieldOptions },
+    { data: levels },
+    { data: movements },
+    { data: stockSummary },
+  ] = await Promise.all([
       scoped(context, 'deal_products')
         .select('*, deals(id, name, status, currency, probability, companies(id, name))')
         .eq('product_id', id)
@@ -84,6 +115,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         .eq('entity_type', 'product')
         .order('order'),
       scoped(context, 'field_options').select('*').eq('entity_type', 'product').order('order'),
+      scoped(context, 'stock_levels')
+        .select('*, stock_locations(name, code), stock_bins(name)')
+        .eq('product_id', id),
+      scoped(context, 'stock_adjustments')
+        .select('*, stock_locations(name), stock_bins(name), users:created_by(name)')
+        .eq('product_id', id)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      context.supabase.rpc('product_stock_summary', { p_product_id: id }),
     ])
 
   const lineItems = ((lines ?? []) as LineItem[]).filter((line) => line.deals !== null)
@@ -117,6 +157,28 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const showroom = showroomMargin(product)
   const wholesale = wholesaleMargin(product)
   const currency = product.currency
+
+  type LevelWithPlace = StockLevelRow & {
+    stock_locations: { name: string; code: string | null } | null
+    stock_bins: { name: string } | null
+  }
+  type MovementRow = StockAdjustmentRow & {
+    stock_locations: { name: string } | null
+    stock_bins: { name: string } | null
+    users: { name: string } | null
+  }
+
+  const stockLevels = (levels ?? []) as LevelWithPlace[]
+  const stockMovements = (movements ?? []) as MovementRow[]
+
+  // The summary is the authority on all four numbers — committed in particular,
+  // which is read off open deals the page cannot see through its own policies.
+  const stock = ((stockSummary ?? [])[0] ?? {
+    on_hand: 0,
+    committed: 0,
+    reserved: 0,
+    available: 0,
+  }) as { on_hand: number; committed: number; reserved: number; available: number }
 
   const marketLinks = [
     { label: 'Barcode Lookup', url: safeUrl(product.barcode_url) },
@@ -262,6 +324,130 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               </dl>
             )}
           </Section>
+
+          <Section
+            title="Stock"
+            actions={
+              context.canManage ? (
+                <Link href={`/products/${id}/edit`} className="text-xs text-brand-700 hover:underline">
+                  Adjust
+                </Link>
+              ) : undefined
+            }
+          >
+            <div className="mb-4 grid gap-3 sm:grid-cols-4">
+              <StockTile label="On Hand" value={stock.on_hand} />
+              <StockTile label="Committed" value={stock.committed} tone="text-amber-600" />
+              <StockTile label="Reserved" value={stock.reserved} tone="text-amber-600" />
+              <StockTile
+                label="Available"
+                value={stock.available}
+                tone={availableTone(Number(stock.available))}
+              />
+            </div>
+
+            {stockLevels.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nothing counted yet. Add a location and a quantity on the product&rsquo;s Stock card.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Location</th>
+                      <th>Bin</th>
+                      <th className="text-right">On hand</th>
+                      <th className="text-right">Reserved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockLevels.map((level) => (
+                      <tr key={level.id}>
+                        <td className="font-medium text-slate-800">
+                          {level.stock_locations?.name ?? <Empty />}
+                          {level.stock_locations?.code && (
+                            <span className="ml-2 text-xs text-slate-400">
+                              {level.stock_locations.code}
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-slate-600">{level.stock_bins?.name ?? '—'}</td>
+                        <td className="text-right font-medium text-slate-900">
+                          {formatQuantity(level.quantity)}
+                        </td>
+                        <td className="text-right text-slate-600">
+                          {Number(level.reserved) > 0 ? formatQuantity(level.reserved) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p className="mt-3 text-xs text-slate-400">
+              Committed is what open deals have already asked for — it follows the line items rather
+              than being entered here. Available can go negative, which means more has been promised
+              than exists.
+            </p>
+          </Section>
+
+          {stockMovements.length > 0 && (
+            <Section
+              title="Stock history"
+              actions={
+                <span className="text-xs text-slate-500">
+                  {stockMovements.length} movement{stockMovements.length === 1 ? '' : 's'}
+                </span>
+              }
+            >
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Where</th>
+                      <th className="text-right">Change</th>
+                      <th className="text-right">After</th>
+                      <th>Why</th>
+                      <th>Who</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockMovements.map((movement) => (
+                      <tr key={movement.id}>
+                        <td className="whitespace-nowrap text-slate-600">
+                          <DateTime value={movement.created_at} />
+                        </td>
+                        <td className="text-slate-600">
+                          {movement.stock_locations?.name ?? 'A former location'}
+                          {movement.stock_bins?.name && (
+                            <span className="text-slate-400"> · {movement.stock_bins.name}</span>
+                          )}
+                          {movement.field === 'reserved' && (
+                            <span className="badge ml-2 bg-amber-100 text-amber-800">reserved</span>
+                          )}
+                        </td>
+                        <td
+                          className={`text-right font-medium ${
+                            Number(movement.delta) < 0 ? 'text-red-600' : 'text-emerald-700'
+                          }`}
+                        >
+                          {formatDelta(movement.delta)}
+                        </td>
+                        <td className="text-right text-slate-600">
+                          {formatQuantity(movement.quantity_after)}
+                        </td>
+                        <td className="text-slate-600">{movement.reason ?? <Empty />}</td>
+                        <td className="text-slate-600">{movement.users?.name ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          )}
 
           <Section
             title="On deals"
