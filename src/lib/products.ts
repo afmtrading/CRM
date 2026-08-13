@@ -1,99 +1,31 @@
 /**
- * The product vocabulary, and the arithmetic behind a price list.
+ * The arithmetic behind a price list.
  *
  * Pure by design — no server imports, nothing from Supabase — so the pricing
  * rules can be unit tested directly and so the same function runs on the form
  * as the user types and on the record when it is read back. If those two ever
  * disagreed, the number somebody saw while typing would not be the number that
  * got saved.
+ *
+ * Product type, condition and status are deliberately NOT here. They are drawn
+ * from field_options and edited in Settings → Fields, so there is no list in
+ * the code that could claim to know what they are.
  */
-
-import type { ProductCondition, ProductStatus, ProductType } from '@/lib/database.types'
-
-export type { ProductCondition, ProductStatus, ProductType }
-
-// -----------------------------------------------------------------------------
-// What kind of thing, in what state, and where in its life
-// -----------------------------------------------------------------------------
-
-export const PRODUCT_TYPES: { value: ProductType; label: string }[] = [
-  { value: 'item', label: 'Item' },
-  { value: 'case', label: 'Case' },
-  { value: 'pallet', label: 'Pallet' },
-  { value: 'kit', label: 'Kit' },
-  { value: 'bin', label: 'Bin' },
-]
-
-export const PRODUCT_CONDITIONS: { value: ProductCondition; label: string; tone: string }[] = [
-  { value: 'new', label: 'New', tone: 'bg-emerald-100 text-emerald-700' },
-  { value: 'open_box', label: 'Open Box', tone: 'bg-blue-100 text-blue-700' },
-  { value: 'damaged', label: 'Damaged', tone: 'bg-red-100 text-red-700' },
-  { value: 'refurbished', label: 'Refurbished', tone: 'bg-violet-100 text-violet-700' },
-  { value: 'expired', label: 'Expired', tone: 'bg-amber-100 text-amber-800' },
-]
 
 /**
- * Only 'active' is offered on new deals. That is not a convention the UI
- * enforces — the database derives products.active from this column, so a
- * quarantined pallet leaves the picker whether or not anyone remembers to
- * untick anything.
+ * The one status value the code has an opinion about.
+ *
+ * `products.active` — which the deal picker and the catalogue list both filter
+ * on — is derived from this by a database trigger: a product is on offer when
+ * its status is "Active" and off offer whatever else it is called. That rule
+ * survives an admin adding "Reserved" or "In Transit" without a deployment.
+ * Renaming this particular option is the one edit that would misbehave, and it
+ * misbehaves loudly — the whole catalogue leaves the deal form at once.
  */
-export const PRODUCT_STATUSES: { value: ProductStatus; label: string; tone: string; hint: string }[] =
-  [
-    {
-      value: 'active',
-      label: 'Active',
-      tone: 'bg-emerald-100 text-emerald-700',
-      hint: 'Offered on new deals',
-    },
-    {
-      value: 'inactive',
-      label: 'Inactive',
-      tone: 'bg-slate-100 text-slate-600',
-      hint: 'Kept, but not on offer',
-    },
-    {
-      value: 'discontinued',
-      label: 'Discontinued',
-      tone: 'bg-slate-100 text-slate-600',
-      hint: 'Not coming back',
-    },
-    {
-      value: 'quarantined',
-      label: 'Quarantined',
-      tone: 'bg-amber-100 text-amber-800',
-      hint: 'Held — do not sell',
-    },
-    { value: 'sold', label: 'Sold', tone: 'bg-blue-100 text-blue-700', hint: 'All of it is gone' },
-  ]
+export const PRODUCT_ACTIVE_STATUS = 'Active'
 
-function labelFrom<T extends { value: string; label: string }>(
-  list: T[],
-  value: string | null | undefined,
-): string | null {
-  if (!value) return null
-  return list.find((entry) => entry.value === value)?.label ?? value
-}
-
-export const productTypeLabel = (value: string | null | undefined) =>
-  labelFrom(PRODUCT_TYPES, value)
-
-export const productConditionLabel = (value: string | null | undefined) =>
-  labelFrom(PRODUCT_CONDITIONS, value)
-
-export const productStatusLabel = (value: string | null | undefined) =>
-  labelFrom(PRODUCT_STATUSES, value) ?? 'Active'
-
-export function productStatusTone(value: string | null | undefined): string {
-  return (
-    PRODUCT_STATUSES.find((entry) => entry.value === value)?.tone ?? 'bg-slate-100 text-slate-600'
-  )
-}
-
-export function productConditionTone(value: string | null | undefined): string {
-  return (
-    PRODUCT_CONDITIONS.find((entry) => entry.value === value)?.tone ?? 'bg-slate-100 text-slate-600'
-  )
+export function isOnOffer(status: string | null | undefined): boolean {
+  return !status || status.trim().toLowerCase() === PRODUCT_ACTIVE_STATUS.toLowerCase()
 }
 
 // -----------------------------------------------------------------------------
@@ -227,13 +159,25 @@ function optional(value: Money): DerivedPrice {
   return parsed === null ? blank : typed(parsed)
 }
 
-/**
- * Margin on the unit, which is the only quantity that has both a price and a
- * cost that are always present.
- */
-export function unitMargin(input: PricingInput): { amount: number; percent: number | null } {
-  const price = toNumber(input.unit_price) ?? 0
-  const cost = toNumber(input.unit_cost) ?? 0
-  const amount = round2(price - cost)
-  return { amount, percent: price > 0 ? Math.round((amount / price) * 100) : null }
+export type Margin = { amount: number; percent: number | null }
+
+/** What is left after cost, and what share of the price that is. */
+export function margin(price: number | null, cost: number | null): Margin {
+  const p = price ?? 0
+  const amount = round2(p - (cost ?? 0))
+  return { amount, percent: p > 0 ? Math.round((amount / p) * 100) : null }
 }
+
+/*
+ * The two margins the price list is actually run on.
+ *
+ * Retail is the headline but nothing is sold at it — the showroom and the
+ * wholesale prices are where the business happens, so those are the two numbers
+ * worth putting on the form. Both are measured against the unit cost, which is
+ * the only cost that is always present.
+ */
+export const showroomMargin = (input: PricingInput): Margin =>
+  margin(derivePricing(input).unit.showroom.value, toNumber(input.unit_cost) ?? 0)
+
+export const wholesaleMargin = (input: PricingInput): Margin =>
+  margin(derivePricing(input).unit.wholesale.value, toNumber(input.unit_cost) ?? 0)

@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatNumber, formatPrice } from '@/lib/format'
 import type { FieldOptionRow, ProductRow } from '@/lib/database.types'
-import { productStatusLabel, productStatusTone } from '@/lib/products'
 import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
 import { CurrencyIcon, LayersIcon, ProductsIcon, SearchIcon, TagIcon } from '@/components/icons'
@@ -35,12 +34,14 @@ export default async function ProductsPage({
     scoped(context, 'field_options')
       .select('*')
       .eq('entity_type', 'product')
-      .eq('field_key', 'product_category')
+      .in('field_key', ['product_category', 'product_status'])
       .order('order'),
   ])
 
   const products = (data ?? []) as ProductRow[]
-  const categoryOptions = (fieldOptions ?? []) as FieldOptionRow[]
+  const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
+  const categoryOptions = allOptions.filter((o) => o.field_key === 'product_category')
+  const statusOptions = allOptions.filter((o) => o.field_key === 'product_status')
 
   const active = products.filter((product) => product.active)
   const categories = new Set(products.map((product) => product.category).filter(Boolean))
@@ -170,7 +171,7 @@ export default async function ProductsPage({
               <tr>
                 <th>Product</th>
                 <th>Category</th>
-                <th>Unit</th>
+                <th>Status</th>
                 <th className="text-right">Unit retail</th>
                 <th className="text-right">Cost</th>
                 <th className="text-right">Margin</th>
@@ -198,11 +199,6 @@ export default async function ProductsPage({
                           </Link>
                           <p className="text-xs text-slate-500">
                             {[product.brand, product.sku].filter(Boolean).join(' · ') || '—'}
-                            {!product.active && (
-                              <span className={`badge ml-2 ${productStatusTone(product.status)}`}>
-                                {productStatusLabel(product.status)}
-                              </span>
-                            )}
                           </p>
                         </div>
                       </div>
@@ -213,7 +209,12 @@ export default async function ProductsPage({
                         options={categoryOptions}
                       />
                     </td>
-                    <td className="text-slate-600">{product.unit || '—'}</td>
+                    <td>
+                      <OptionBadges
+                        values={product.status ? [product.status] : []}
+                        options={statusOptions}
+                      />
+                    </td>
                     <td className="text-right text-slate-800">
                       {formatPrice(price, product.currency)}
                     </td>

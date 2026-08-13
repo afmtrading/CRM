@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  PRODUCT_CONDITIONS,
-  PRODUCT_STATUSES,
-  PRODUCT_TYPES,
+  PRODUCT_ACTIVE_STATUS,
   SHOWROOM_SHARE,
   WHOLESALE_SHARE,
   derivePricing,
-  productStatusLabel,
+  isOnOffer,
+  showroomMargin,
   toNumber,
-  unitMargin,
+  wholesaleMargin,
 } from '../src/lib/products'
 
 /*
@@ -150,43 +149,47 @@ describe('derivePricing — pallets and costs', () => {
   })
 })
 
-describe('unitMargin', () => {
-  it('is the difference and the share of retail it represents', () => {
-    expect(unitMargin({ unit_price: 100, unit_cost: 60 })).toEqual({ amount: 40, percent: 40 })
+describe('the two margins the price list is run on', () => {
+  it('measures the showroom price against the unit cost', () => {
+    // Showroom is 70% of 200 = 140, against a cost of 100.
+    expect(showroomMargin({ unit_price: 200, unit_cost: 100 })).toEqual({ amount: 40, percent: 29 })
   })
 
-  it('goes negative rather than pretending', () => {
-    expect(unitMargin({ unit_price: 50, unit_cost: 80 }).amount).toBe(-30)
+  it('measures the wholesale price against the same cost', () => {
+    // Wholesale is 30% of 200 = 60, which is below the 100 it cost.
+    expect(wholesaleMargin({ unit_price: 200, unit_cost: 100 })).toEqual({
+      amount: -40,
+      percent: -67,
+    })
+  })
+
+  it('follows an overridden price rather than the rule it replaced', () => {
+    // Without the override the showroom price would be 140 and the margin 40.
+    expect(showroomMargin({ unit_price: 200, unit_cost: 100, price_showroom: 180 }).amount).toBe(80)
   })
 
   it('has no percentage to give when nothing is charged', () => {
-    // Dividing by a retail price of zero would produce Infinity and render as
-    // "∞%" on the record.
-    expect(unitMargin({ unit_price: 0, unit_cost: 10 }).percent).toBeNull()
+    // Dividing by a price of zero would produce Infinity and render as "∞%".
+    expect(showroomMargin({ unit_price: 0, unit_cost: 10 }).percent).toBeNull()
   })
 })
 
-describe('the closed vocabularies', () => {
-  it('offers exactly the values the check constraints allow', () => {
-    expect(PRODUCT_TYPES.map((t) => t.value)).toEqual(['item', 'case', 'pallet', 'kit', 'bin'])
-    expect(PRODUCT_CONDITIONS.map((c) => c.value)).toEqual([
-      'new',
-      'open_box',
-      'damaged',
-      'refurbished',
-      'expired',
-    ])
-    expect(PRODUCT_STATUSES.map((s) => s.value)).toEqual([
-      'active',
-      'inactive',
-      'discontinued',
-      'quarantined',
-      'sold',
-    ])
+describe('what counts as on offer', () => {
+  /*
+   * The vocabulary itself lives in field_options and an admin can rewrite it,
+   * so the only thing the code may assert is which value means "sell it".
+   */
+  it('is the Active status, however it is capitalised or spaced', () => {
+    expect(isOnOffer(PRODUCT_ACTIVE_STATUS)).toBe(true)
+    expect(isOnOffer('active')).toBe(true)
+    expect(isOnOffer('  Active ')).toBe(true)
   })
 
-  it('names a status even when a row somehow carries none', () => {
-    expect(productStatusLabel('quarantined')).toBe('Quarantined')
-    expect(productStatusLabel(null)).toBe('Active')
+  it('is nothing else, including statuses nobody has written yet', () => {
+    expect(isOnOffer('Sold')).toBe(false)
+    expect(isOnOffer('Quarantined')).toBe(false)
+    // The point of the rule: a status invented in Settings next month is
+    // correctly off offer without this file being touched.
+    expect(isOnOffer('Reserved for Costco')).toBe(false)
   })
 })

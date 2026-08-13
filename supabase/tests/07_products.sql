@@ -554,18 +554,18 @@ begin
   values (v_org, 'Statusless') returning id into v_new;
 
   perform test_assert(
-    (select status from products where id = v_new) = 'active'
+    (select status from products where id = v_new) = 'Active'
       and (select active from products where id = v_new),
-    'a product nobody assigned a status to is active and on offer'
+    'a product nobody assigned a status to is Active and on offer'
   );
 
-  update products set status = 'quarantined' where id = v_new;
+  update products set status = 'Quarantined' where id = v_new;
   perform test_assert(
     not (select active from products where id = v_new),
     'quarantining a product takes it off the picker without anybody unticking a box'
   );
 
-  update products set status = 'sold' where id = v_new;
+  update products set status = 'Sold' where id = v_new;
   perform test_assert(
     not (select active from products where id = v_new),
     'and so does selling out of it'
@@ -580,14 +580,23 @@ begin
     'writing the flag directly cannot contradict the status'
   );
 
-  update products set status = 'active' where id = v_new;
+  update products set status = 'active' where id = v_new;  -- lower case on purpose
   perform test_assert(
     (select active from products where id = v_new),
-    'putting it back on offer restores the flag'
+    'putting it back on offer restores the flag, whatever the casing'
+  );
+
+  -- The whole reason the rule is "Active, and nothing else": an organization
+  -- can invent a status in Settings → Fields and it behaves correctly without
+  -- anybody editing a constraint or a migration.
+  update products set status = 'Reserved for a customer' where id = v_new;
+  perform test_assert(
+    not (select active from products where id = v_new),
+    'a status nobody wrote code for is off offer rather than an error'
   );
 
   perform test_assert(
-    (select status from products where id = v_shea) = 'active',
+    (select status from products where id = v_shea) = 'Active',
     'products that predate the lifecycle inherited it from the flag they carried'
   );
 end;
@@ -614,19 +623,13 @@ begin
     perform test_assert(true, 'a case pack of zero is refused — every piece price divides by it');
   end;
 
-  begin
-    update products set status = 'retired' where id = v_id;
-    perform test_assert(false, 'an invented status should have been refused');
-  exception when check_violation then
-    perform test_assert(true, 'a status outside the five is refused');
-  end;
-
-  begin
-    update products set product_condition = 'mint' where id = v_id;
-    perform test_assert(false, 'an invented condition should have been refused');
-  exception when check_violation then
-    perform test_assert(true, 'a condition outside the five is refused');
-  end;
+  -- No constraint on the three vocabularies any more: they are field_options
+  -- rows, and refusing a value an administrator just added would be the bug.
+  update products set status = 'Reserved', product_condition = 'Mint' where id = v_id;
+  perform test_assert(
+    (select status = 'Reserved' and product_condition = 'Mint' from products where id = v_id),
+    'a vocabulary the organization invented is accepted'
+  );
 
   begin
     update products set price_showroom = -1 where id = v_id;
@@ -642,9 +645,52 @@ begin
     'a price nobody typed stays null, so the rule that derives it stays in force'
   );
 
+  update products set product_type = null, product_condition = null where id = v_id;
   perform test_assert(
     (select product_type is null and product_condition is null from products where id = v_id),
     'type and condition are optional — plenty of a catalogue has neither'
+  );
+end;
+$$;
+
+-- =============================================================================
+-- The starting vocabulary is seeded, and belongs to the organization.
+-- =============================================================================
+do $$
+declare
+  v_org uuid := (select id from fixture where key = 'org');
+begin
+  raise notice 'Product option lists:';
+
+  perform sign_in_as('rep_auth');
+  perform test_assert(
+    (select count(*) from field_options
+      where entity_type = 'product' and field_key = 'product_status') = 5,
+    'the five statuses are seeded for an organization that already existed'
+  );
+  perform test_assert(
+    (select count(*) from field_options
+      where entity_type = 'product' and field_key = 'product_condition') = 5,
+    'and the five conditions with them'
+  );
+  perform test_assert(
+    exists (select 1 from field_options
+             where entity_type = 'product' and field_key = 'product_status'
+               and value = 'Active'),
+    'including the one value products.active is derived from'
+  );
+  perform test_assert(
+    (select count(*) from field_options
+      where entity_type = 'product' and field_key = 'product_category') = 0,
+    'but not a single category — that vocabulary is nobody else''s to guess'
+  );
+
+  perform sign_in_as('badmin_auth');
+  perform test_assert(
+    (select count(*) from field_options
+      where entity_type = 'product' and field_key = 'product_status'
+        and organization_id = v_org) = 0,
+    'another organization edits its own list and never sees this one'
   );
 end;
 $$;

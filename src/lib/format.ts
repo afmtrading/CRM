@@ -2,10 +2,10 @@
  * Currencies the app offers. One list, so a product and the deal it lands on
  * can never drift onto different menus.
  */
-export const CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP'] as const
+export const CURRENCIES = ['USD', 'CAD', 'EUR', 'GBP'] as const
 
-export function formatCurrency(value: number, currency = 'CAD'): string {
-  return new Intl.NumberFormat('en-CA', {
+export function formatCurrency(value: number, currency = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     maximumFractionDigits: 0,
@@ -20,8 +20,8 @@ export function formatCurrency(value: number, currency = 'CAD'): string {
  * price list becomes the same number. Anywhere the cents are the point, this is
  * the formatter.
  */
-export function formatPrice(value: number, currency = 'CAD'): string {
-  return new Intl.NumberFormat('en-CA', {
+export function formatPrice(value: number, currency = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
@@ -36,7 +36,7 @@ export function formatPrice(value: number, currency = 'CAD'): string {
  * a coloured code standing to the right of the number.
  */
 export function formatAmount(value: number): string {
-  return new Intl.NumberFormat('en-CA', { maximumFractionDigits: 0 }).format(value ?? 0)
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value ?? 0)
 }
 
 /**

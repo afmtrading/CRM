@@ -74,6 +74,9 @@ export type OptionFieldKey =
   | 'priority'
   | 'credibility'
   | 'product_category'
+  | 'product_type'
+  | 'product_condition'
+  | 'product_status'
 
 /** A named link on the Digital card, beyond the known social networks. */
 export type ContactLink = { label: string; url: string }
@@ -448,15 +451,6 @@ export type DealRow = {
   updated_at: string
 }
 
-/*
- * Closed vocabularies, held to by a check constraint rather than by a
- * field_options row. Their labels, colours and the pricing rules that read them
- * live in src/lib/products.ts.
- */
-export type ProductType = 'item' | 'case' | 'pallet' | 'kit' | 'bin'
-export type ProductCondition = 'new' | 'open_box' | 'damaged' | 'refurbished' | 'expired'
-export type ProductStatus = 'active' | 'inactive' | 'discontinued' | 'quarantined' | 'sold'
-
 export type ProductRow = {
   id: string
   organization_id: string
@@ -464,7 +458,7 @@ export type ProductRow = {
   sku: string | null
   /** Drawn from field_options, like every other select field. */
   category: string | null
-  /** kg, MT, container, licence — whatever the line item is counted in. */
+  /** Retired from the form. Kept so old line items still render their measure. */
   unit: string
   /** Unit $: Retail. What a deal line item copies when the product is added. */
   unit_price: number
@@ -490,9 +484,14 @@ export type ProductRow = {
   /** Pieces to a unit. Divides the unit prices into piece prices. */
   case_pack: number | null
   item_notes: string | null
-  product_type: ProductType | null
-  product_condition: ProductCondition | null
-  status: ProductStatus
+  /*
+   * All three are drawn from field_options, like category — an organization
+   * edits them in Settings → Fields, so no union type here could stay true.
+   * Only one value is load-bearing: "Active" is what `active` is derived from.
+   */
+  product_type: string | null
+  product_condition: string | null
+  status: string
 
   /*
    * Prices nobody typed. Null means "derive it" — 70% and 30% of retail for the
