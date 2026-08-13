@@ -584,7 +584,12 @@ export type StockLevelRow = {
   location_id: string
   bin_id: string | null
   quantity: number
-  /** Held back by hand, for a reason that is not a deal yet. */
+  /**
+   * Held back by hand, for a reason that is not a deal yet. Not constrained to
+   * be within `quantity`: a count that falls below what was already reserved is
+   * a real situation, and refusing the correction would leave the wrong number
+   * on the record. The form points it out rather than blocking it.
+   */
   reserved: number
   updated_by: string | null
   created_at: string

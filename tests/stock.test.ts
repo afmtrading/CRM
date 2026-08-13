@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   formatDelta,
+  isOverReserved,
   normaliseEntries,
   placeKey,
   summarise,
@@ -48,16 +49,42 @@ describe('summariseEntries', () => {
   it('totals rows that are still being typed, half-filled ones included', () => {
     const summary = summariseEntries(
       [
-        { location_id: 'a', bin_id: '', quantity: '12' },
-        { location_id: 'b', bin_id: '', quantity: '' },
-        { location_id: 'c', bin_id: '', quantity: '8' },
+        { location_id: 'a', bin_id: '', quantity: '12', reserved: '2' },
+        { location_id: 'b', bin_id: '', quantity: '', reserved: '' },
+        { location_id: 'c', bin_id: '', quantity: '8', reserved: '' },
       ],
       5,
-      2,
     )
 
     expect(summary.onHand).toBe(20)
+    expect(summary.reserved).toBe(2)
     expect(summary.available).toBe(13)
+  })
+
+  it('adds reserved up across the places, the way on hand is added', () => {
+    const summary = summariseEntries([
+      { location_id: 'a', bin_id: '', quantity: '100', reserved: '10' },
+      { location_id: 'b', bin_id: '', quantity: '100', reserved: '5' },
+    ])
+
+    expect(summary.reserved).toBe(15)
+    expect(summary.available).toBe(185)
+  })
+})
+
+describe('isOverReserved', () => {
+  it('spots a place holding back more than it has', () => {
+    expect(isOverReserved('10', '12')).toBe(true)
+  })
+
+  it('is content when the two are equal', () => {
+    // Everything on the shelf being spoken for is a real state, not a mistake.
+    expect(isOverReserved('10', '10')).toBe(false)
+  })
+
+  it('treats an empty box as nothing reserved', () => {
+    expect(isOverReserved('10', '')).toBe(false)
+    expect(isOverReserved('', '')).toBe(false)
   })
 })
 
@@ -75,8 +102,8 @@ describe('placeKey', () => {
 describe('normaliseEntries', () => {
   it('drops rows where nobody picked a location', () => {
     const entries = normaliseEntries([
-      { location_id: '', bin_id: '', quantity: '50' },
-      { location_id: 'a', bin_id: '', quantity: '10' },
+      { location_id: '', bin_id: '', quantity: '50', reserved: '' },
+      { location_id: 'a', bin_id: '', quantity: '10', reserved: '' },
     ])
 
     expect(entries).toHaveLength(1)
@@ -88,17 +115,17 @@ describe('normaliseEntries', () => {
     // for one place would also leave the history claiming a movement that
     // never happened.
     const entries = normaliseEntries([
-      { location_id: 'a', bin_id: '', quantity: '10' },
-      { location_id: 'a', bin_id: '', quantity: '5' },
+      { location_id: 'a', bin_id: '', quantity: '10', reserved: '' },
+      { location_id: 'a', bin_id: '', quantity: '5', reserved: '' },
     ])
 
-    expect(entries).toEqual([{ location_id: 'a', bin_id: '', quantity: '15' }])
+    expect(entries).toEqual([{ location_id: 'a', bin_id: '', quantity: '15', reserved: '0' }])
   })
 
   it('does not fold two different bins in one warehouse', () => {
     const entries = normaliseEntries([
-      { location_id: 'a', bin_id: 'rack', quantity: '10' },
-      { location_id: 'a', bin_id: 'floor', quantity: '5' },
+      { location_id: 'a', bin_id: 'rack', quantity: '10', reserved: '' },
+      { location_id: 'a', bin_id: 'floor', quantity: '5', reserved: '' },
     ])
 
     expect(entries).toHaveLength(2)
@@ -107,8 +134,8 @@ describe('normaliseEntries', () => {
   it('reads a blank quantity as none rather than dropping the row', () => {
     // The row still names a place, and a place that holds zero is a fact worth
     // recording — it is how "we used to stock this here" gets written down.
-    expect(normaliseEntries([{ location_id: 'a', bin_id: '', quantity: '' }])).toEqual([
-      { location_id: 'a', bin_id: '', quantity: '0' },
+    expect(normaliseEntries([{ location_id: 'a', bin_id: '', quantity: '', reserved: '' }])).toEqual([
+      { location_id: 'a', bin_id: '', quantity: '0', reserved: '0' },
     ])
   })
 })
@@ -118,5 +145,27 @@ describe('formatDelta', () => {
     expect(formatDelta(40)).toBe('+40')
     expect(formatDelta(-12)).toBe('-12')
     expect(formatDelta(0)).toBe('0')
+  })
+})
+
+describe('normaliseEntries — reserved', () => {
+  it('adds the reserved figures together when a place is entered twice', () => {
+    // Same reasoning as the quantity: two rows for one shelf mean the total,
+    // and sending two writes would leave the history claiming a movement that
+    // never happened.
+    const entries = normaliseEntries([
+      { location_id: 'a', bin_id: '', quantity: '10', reserved: '2' },
+      { location_id: 'a', bin_id: '', quantity: '5', reserved: '3' },
+    ])
+
+    expect(entries).toEqual([{ location_id: 'a', bin_id: '', quantity: '15', reserved: '5' }])
+  })
+
+  it('keeps a reserved figure on a place holding nothing', () => {
+    // Reserving against an empty shelf is odd but real — stock arriving
+    // tomorrow that is already spoken for — and dropping it would lose it.
+    expect(normaliseEntries([{ location_id: 'a', bin_id: '', quantity: '', reserved: '4' }])).toEqual(
+      [{ location_id: 'a', bin_id: '', quantity: '0', reserved: '4' }],
+    )
   })
 })
