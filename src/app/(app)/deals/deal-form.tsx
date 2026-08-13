@@ -15,6 +15,7 @@ export function DealForm({
   contacts,
   companies,
   owners,
+  lossReasons,
   defaultCurrency,
   defaultContactId,
   submitLabel,
@@ -26,6 +27,8 @@ export function DealForm({
   contacts: { id: string; label: string }[]
   companies: { id: string; name: string }[]
   owners: UserRow[]
+  /** The organization's own vocabulary for why a deal was lost. */
+  lossReasons: string[]
   defaultCurrency: string
   defaultContactId?: string
   submitLabel: string
@@ -35,6 +38,7 @@ export function DealForm({
   const initialStage = stages.find((stage) => stage.id === deal?.stage_id) ?? stages[0]
   const [pipelineId, setPipelineId] = useState(initialStage?.pipeline_id ?? pipelines[0]?.id ?? '')
   const [stageId, setStageId] = useState(initialStage?.id ?? '')
+  const [status, setStatus] = useState(deal?.status ?? 'open')
 
   const pipelineStages = stages.filter((stage) => stage.pipeline_id === pipelineId)
   const selectedStage = stages.find((stage) => stage.id === stageId)
@@ -169,12 +173,54 @@ export function DealForm({
           <label className="label" htmlFor="status">
             Status
           </label>
-          <select id="status" name="status" className="input" defaultValue={deal?.status ?? 'open'}>
+          <select
+            id="status"
+            name="status"
+            className="input"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as typeof status)}
+          >
             <option value="open">Open</option>
             <option value="won">Won</option>
             <option value="lost">Lost</option>
           </select>
+          {status !== 'open' && (
+            <p className="mt-1 text-xs text-slate-400">
+              Moving the deal into a closing stage does this on its own.
+            </p>
+          )}
         </div>
+
+        {/*
+          Only on a lost deal, and only worth asking for at the moment it is
+          marked lost. A "why" collected weeks later is a guess, and a "why" on
+          a won deal is nothing at all.
+        */}
+        {status === 'lost' && (
+          <div>
+            <label className="label" htmlFor="loss_reason">
+              Why was it lost?
+            </label>
+            <input
+              id="loss_reason"
+              name="loss_reason"
+              list="loss-reasons"
+              className="input"
+              maxLength={120}
+              defaultValue={deal?.loss_reason ?? ''}
+              placeholder="Price, timing, lost to a competitor…"
+            />
+            <datalist id="loss-reasons">
+              {lossReasons.map((reason) => (
+                <option key={reason} value={reason} />
+              ))}
+            </datalist>
+            <p className="mt-1 text-xs text-slate-400">
+              Pick one of the organization&rsquo;s reasons or type your own. Admins keep the list in
+              Settings &rarr; Fields.
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="label" htmlFor="expected_close_date">

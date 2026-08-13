@@ -123,8 +123,14 @@ export const OPTION_COLOR_SWATCHES: Record<OptionColor, string> = {
 }
 
 /** Records that can carry organization-defined fields and option lists. */
-export type OptionEntity = 'contact' | 'company' | 'product'
+export type OptionEntity = 'contact' | 'company' | 'product' | 'deal'
 
+/*
+ * A deal is deliberately absent: this list drives the "add a custom field"
+ * picker, and a deal record has nowhere to render one yet. Its one option list —
+ * why a deal was lost — is built in, and appears in the editor through
+ * OPTION_FIELDS below.
+ */
 export const OPTION_ENTITIES: { value: OptionEntity; label: string }[] = [
   { value: 'contact', label: 'Contact' },
   { value: 'company', label: 'Company' },
@@ -155,6 +161,9 @@ export const OPTION_FIELDS: {
   { key: 'product_type', label: 'Product type', card: 'details', multiple: false, entity: 'product' },
   { key: 'product_condition', label: 'Condition', card: 'details', multiple: false, entity: 'product' },
   { key: 'product_status', label: 'Product status', card: 'details', multiple: false, entity: 'product' },
+  // Why a deal was lost. An organization's own words: "Price" and "Timing" are
+  // a starting point, not a taxonomy this app is asserting.
+  { key: 'loss_reason', label: 'Loss reason', card: 'details', multiple: false, entity: 'deal' },
 ]
 
 export const OPTION_FIELD_LABELS = Object.fromEntries(

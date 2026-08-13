@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ALL_CARDS,
+  OPTION_ENTITIES,
   OPTION_FIELDS,
   PRODUCT_CARDS,
   cardLabel,
@@ -215,5 +216,21 @@ describe('option owners', () => {
   it('declares each built-in list against exactly one record type', () => {
     const seen = new Set(OPTION_FIELDS.map((field) => `${field.entity}.${field.key}`))
     expect(seen.size).toBe(OPTION_FIELDS.length)
+  })
+
+  it('offers loss reasons as a deal list an admin can rewrite', () => {
+    const owner = optionOwners([]).find((candidate) => candidate.key === 'loss_reason')
+    expect(owner).toMatchObject({ entity: 'deal', builtIn: true, multiple: false })
+  })
+
+  /*
+   * The list an admin edits and the picker for "add a custom field" are two
+   * different things. A deal belongs in the first and not the second: it has an
+   * option list, but nowhere on the record to render a custom field yet, and
+   * offering one would promise a field that never appears.
+   */
+  it('does not offer a deal as a record type for new custom fields', () => {
+    expect(OPTION_ENTITIES.map((entity) => entity.value)).not.toContain('deal')
+    expect(optionOwners([]).some((owner) => owner.entity === 'deal')).toBe(true)
   })
 })

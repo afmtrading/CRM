@@ -31,7 +31,10 @@ export default async function DashboardPage({
       .select('id', { count: 'exact', head: true })
       .is('duplicate_of_id', null)
       .is('deleted_at', null),
-    scoped(context, 'deals').select('value, currency').eq('status', 'open'),
+    scoped(context, 'deals')
+      .select('value, currency')
+      .eq('status', 'open')
+      .is('deleted_at', null),
     scoped(context, 'activities')
       .select('*')
       .eq('type', 'task')

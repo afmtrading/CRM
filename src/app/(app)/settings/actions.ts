@@ -709,6 +709,20 @@ export async function restoreCompany(formData: FormData) {
   revalidatePath('/companies')
 }
 
+export async function restoreDeal(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await context.supabase.rpc('restore_deal', { p_deal_id: id })
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/deleted')
+  revalidatePath('/deals')
+  // A restored deal commits its line items again, so the catalogue's numbers
+  // change with it.
+  revalidatePath('/products')
+}
+
 export async function restoreProduct(formData: FormData) {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')

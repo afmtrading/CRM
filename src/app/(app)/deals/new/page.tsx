@@ -24,18 +24,29 @@ export default async function NewDealPage({
   const { contact_id: contactId } = await searchParams
   const context = await requireSession()
 
-  const [{ data: pipelines }, { data: stages }, { data: contacts }, { data: companies }, { data: owners }] =
-    await Promise.all([
-      scoped(context, 'pipelines').select('*').order('name'),
-      scoped(context, 'stages').select('*').order('order'),
-      scoped(context, 'contacts')
-        .select('id, first_name, last_name, email')
-        .is('duplicate_of_id', null)
-        .order('last_name')
-        .limit(500),
-      scoped(context, 'companies').select('id, name').order('name').limit(500),
-      scoped(context, 'users').select('*').eq('status', 'active').order('name'),
-    ])
+  const [
+    { data: pipelines },
+    { data: stages },
+    { data: contacts },
+    { data: companies },
+    { data: owners },
+    { data: reasons },
+  ] = await Promise.all([
+    scoped(context, 'pipelines').select('*').order('name'),
+    scoped(context, 'stages').select('*').order('order'),
+    scoped(context, 'contacts')
+      .select('id, first_name, last_name, email')
+      .is('duplicate_of_id', null)
+      .order('last_name')
+      .limit(500),
+    scoped(context, 'companies').select('id, name').order('name').limit(500),
+    scoped(context, 'users').select('*').eq('status', 'active').order('name'),
+    scoped(context, 'field_options')
+      .select('value')
+      .eq('entity_type', 'deal')
+      .eq('field_key', 'loss_reason')
+      .order('order'),
+  ])
 
   return (
     <>
@@ -50,6 +61,7 @@ export default async function NewDealPage({
         }))}
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
+        lossReasons={((reasons ?? []) as { value: string }[]).map((row) => row.value)}
         defaultCurrency={NEW_DEAL_CURRENCY}
         defaultContactId={contactId}
         submitLabel="Create deal"

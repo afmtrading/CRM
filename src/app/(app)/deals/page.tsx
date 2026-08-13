@@ -87,6 +87,10 @@ export default async function DealsPage({
 
   let dealQuery = scoped(context, 'deals')
     .select('*, contacts(id, first_name, last_name), companies(id, name)')
+    // An administrator can see deleted deals — that is what makes the recycle
+    // bin readable — so the board has to exclude them itself, or the one person
+    // able to restore a deal is the one person who sees it twice.
+    .is('deleted_at', null)
     .in('stage_id', stageIds.length > 0 ? stageIds : [NO_SUCH_ID])
     .order('position')
     .order('created_at', { ascending: false })
@@ -263,6 +267,7 @@ export default async function DealsPage({
           deals={dealRows}
           ownerNames={ownerNames}
           productNames={productNames}
+          canDelete={context.canWrite}
         />
       ) : listGroups.length === 0 ? (
         <div className="card py-10 text-center text-sm text-slate-500">
