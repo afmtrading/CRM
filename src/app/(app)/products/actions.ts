@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanManage, requireSession, scoped } from '@/lib/tenancy'
+import { readCustomFields } from '@/lib/custom-fields'
 import type { SessionContext } from '@/lib/tenancy'
 import { PRODUCT_ACTIVE_STATUS } from '@/lib/products'
 import { type StockEntry, normaliseEntries, placeKey } from '@/lib/stock'
@@ -90,19 +91,6 @@ const productSchema = z.object({
 })
 
 export type ProductActionState = { ok?: boolean; error?: string }
-
-/** Custom fields post as `custom.<key>`, the same shape contacts and companies use. */
-function readCustomFields(formData: FormData): Record<string, string | string[]> {
-  const custom: Record<string, string | string[]> = {}
-
-  for (const key of new Set([...formData.keys()].filter((k) => k.startsWith('custom.')))) {
-    const values = formData.getAll(key).map(String).map((v) => v.trim()).filter(Boolean)
-    if (values.length === 0) continue
-    custom[key.slice('custom.'.length)] = values.length > 1 ? values : values[0]
-  }
-
-  return custom
-}
 
 function productColumns(input: z.infer<typeof productSchema>, formData: FormData) {
   return {

@@ -2,7 +2,15 @@ import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
 import { contactName } from '@/lib/format'
-import type { ContactRow, DealRow, PipelineRow, StageRow, UserRow } from '@/lib/database.types'
+import type {
+  ContactRow,
+  CustomFieldDefinitionRow,
+  DealRow,
+  FieldOptionRow,
+  PipelineRow,
+  StageRow,
+  UserRow,
+} from '@/lib/database.types'
 import { PageHeader } from '@/components/ui'
 
 import { updateDeal } from '../../actions'
@@ -24,6 +32,8 @@ export default async function EditDealPage({ params }: { params: Promise<{ id: s
     { data: companies },
     { data: owners },
     { data: reasons },
+    { data: definitions },
+    { data: options },
   ] = await Promise.all([
     scoped(context, 'pipelines').select('*').order('name'),
     scoped(context, 'stages').select('*').order('order'),
@@ -39,6 +49,13 @@ export default async function EditDealPage({ params }: { params: Promise<{ id: s
       .eq('entity_type', 'deal')
       .eq('field_key', 'loss_reason')
       .order('order'),
+    scoped(context, 'custom_field_definitions')
+      .select('*')
+      .eq('entity_type', 'deal')
+      .order('order'),
+    // Every option row, not just the deal ones: a custom select on a deal draws
+    // its values from the same table the built-in lists use.
+    scoped(context, 'field_options').select('*').order('order'),
   ])
 
   return (
@@ -56,6 +73,8 @@ export default async function EditDealPage({ params }: { params: Promise<{ id: s
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
         lossReasons={((reasons ?? []) as { value: string }[]).map((row) => row.value)}
+        customFields={(definitions ?? []) as CustomFieldDefinitionRow[]}
+        fieldOptions={(options ?? []) as FieldOptionRow[]}
         defaultCurrency={context.organization.default_currency}
         submitLabel="Save changes"
       />

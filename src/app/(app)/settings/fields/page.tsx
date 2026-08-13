@@ -66,7 +66,7 @@ export default async function FieldsPage({
     <>
       <PageHeader
         title="Fields"
-        description="Organization-defined fields on contacts, companies and products, and the values behind every field that offers a choice. Both live here — pick a field on the left to edit its options."
+        description="Organization-defined fields on contacts, companies, products and deals, and the values behind every field that offers a choice. Both live here — pick a field on the left to edit its options."
       />
 
       <div className="grid gap-5 lg:grid-cols-3">

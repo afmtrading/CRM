@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanBulk, assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import { readCustomFields } from '@/lib/custom-fields'
 import { safeUrl } from '@/lib/field-options'
 import type { ContactLink, ContactRow, LifecycleStage } from '@/lib/database.types'
 
@@ -152,20 +153,6 @@ async function syncProductInterest(
 }
 
 export type ActionState = { ok?: boolean; error?: string; duplicates?: ContactRow[]; id?: string }
-
-function readCustomFields(formData: FormData): Record<string, string | string[]> {
-  const custom: Record<string, string | string[]> = {}
-
-  for (const key of new Set([...formData.keys()].filter((k) => k.startsWith('custom.')))) {
-    const values = formData.getAll(key).map(String).map((v) => v.trim()).filter(Boolean)
-    if (values.length === 0) continue
-    // A multiselect posts the same key repeatedly; keep it an array so the
-    // stored shape matches how the field is rendered back.
-    custom[key.slice('custom.'.length)] = values.length > 1 ? values : values[0]
-  }
-
-  return custom
-}
 
 /**
  * Duplicate detection on save (acceptance criterion 6.2): a matching email, or

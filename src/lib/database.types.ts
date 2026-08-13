@@ -465,6 +465,8 @@ export type DealRow = {
   closed_at: string | null
   /** Why a lost deal was lost. Offered from field_options (deal / loss_reason). */
   loss_reason: string | null
+  /** Organization-defined values, keyed by custom_field_definitions.key. */
+  custom_fields: Record<string, unknown>
   position: number
   /** Set means the deal is in the recycle bin: only an admin sees it. */
   deleted_at: string | null
