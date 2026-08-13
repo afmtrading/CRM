@@ -8,6 +8,7 @@ import {
   type StockEntry,
   availableTone,
   formatQuantity,
+  isOverReserved,
   summariseEntries,
 } from '@/lib/stock'
 import { PlusIcon } from '@/components/icons'
@@ -29,29 +30,27 @@ function Tile({ label, value, tone }: { label: string; value: string; tone?: str
  * links and addresses editors do — a repeater whose rows are added and removed
  * in the browser has no stable field names to give a server action.
  *
- * The tiles add up as you type. `committed` and `reserved` come from the server
- * because neither is a fact this form has: what open deals have promised is a
- * question about deals, and what is held back was set on the record rather than
- * here.
+ * The tiles add up as you type. Only `committed` comes from the server: what
+ * open deals have promised is a question about deals, which this form has no
+ * business asking. On hand and reserved are both in the rows.
  */
 export function StockEditor({
   locations,
   bins,
   defaultValue,
   committed = 0,
-  reserved = 0,
 }: {
   locations: StockLocationRow[]
   bins: StockBinRow[]
   defaultValue: StockEntry[]
   committed?: number
-  reserved?: number
 }) {
+  const blank = { location_id: '', bin_id: '', quantity: '', reserved: '' }
   const [rows, setRows] = useState<StockEntry[]>(
-    defaultValue.length > 0 ? defaultValue : [{ location_id: '', bin_id: '', quantity: '' }],
+    defaultValue.length > 0 ? defaultValue : [blank],
   )
 
-  const summary = summariseEntries(rows, committed, reserved)
+  const summary = summariseEntries(rows, committed)
 
   const update = (index: number, patch: Partial<StockEntry>) =>
     setRows(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
@@ -90,10 +89,11 @@ export function StockEditor({
       </div>
 
       <div className="space-y-2">
-        <div className="hidden gap-2 px-1 sm:grid sm:grid-cols-[1fr_1fr_8rem_2rem]">
+        <div className="hidden gap-2 px-1 sm:grid sm:grid-cols-[1fr_1fr_7rem_7rem_2rem]">
           <span className="label mb-0">Location</span>
           <span className="label mb-0">Bin</span>
           <span className="label mb-0">Quantity</span>
+          <span className="label mb-0">Reserved</span>
           <span />
         </div>
 
@@ -103,10 +103,12 @@ export function StockEditor({
           // different warehouse, and the database would refuse the save.
           const binsHere = bins.filter((bin) => bin.location_id === row.location_id)
 
+          const over = isOverReserved(row.quantity, row.reserved)
+
           return (
             <div
               key={index}
-              className="grid gap-2 sm:grid-cols-[1fr_1fr_8rem_2rem] sm:items-center"
+              className="grid gap-2 sm:grid-cols-[1fr_1fr_7rem_7rem_2rem] sm:items-center"
             >
               <select
                 className="input"
@@ -152,6 +154,21 @@ export function StockEditor({
                 aria-label={`Quantity for row ${index + 1}`}
               />
 
+              <input
+                type="number"
+                step="0.001"
+                min="0"
+                inputMode="decimal"
+                className={`input ${over ? 'border-red-300 text-red-700' : ''}`}
+                placeholder="0"
+                value={row.reserved}
+                onChange={(event) => update(index, { reserved: event.target.value })}
+                aria-label={`Reserved at row ${index + 1}`}
+                title={
+                  over ? 'More is held back here than the count says is here' : undefined
+                }
+              />
+
               <button
                 type="button"
                 className="justify-self-start rounded-lg px-2 py-1 text-sm text-slate-400 hover:text-red-600 sm:justify-self-center"
@@ -168,15 +185,26 @@ export function StockEditor({
       <button
         type="button"
         className="btn-secondary"
-        onClick={() => setRows([...rows, { location_id: '', bin_id: '', quantity: '' }])}
+        onClick={() => setRows([...rows, blank])}
       >
         <PlusIcon className="h-4 w-4" />
         Add location
       </button>
 
       <p className="text-xs text-slate-400">
-        Edits are recorded as stock adjustments — see the history on the product.
+        Reserved holds stock back for something that is not a deal yet — a quote, a hold, a
+        sample. What open deals have asked for is counted separately, under Committed, and is
+        read off the line items rather than typed here. Edits are recorded as stock adjustments —
+        see the history on the product.
       </p>
+
+      {rows.some((row) => isOverReserved(row.quantity, row.reserved)) && (
+        <p className="text-xs text-red-600">
+          One of these places is holding back more than its count. That is allowed — a count can
+          fall below what was already reserved, and refusing the correction would leave the wrong
+          number on the record — but it is worth a look.
+        </p>
+      )}
     </div>
   )
 }

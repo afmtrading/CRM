@@ -180,7 +180,6 @@ export function ProductForm({
   bins,
   stock,
   committed = 0,
-  reserved = 0,
 }: {
   action: (state: ProductActionState, formData: FormData) => Promise<ProductActionState>
   product?: ProductRow
@@ -192,7 +191,6 @@ export function ProductForm({
   bins: StockBinRow[]
   stock: StockEntry[]
   committed?: number
-  reserved?: number
 }) {
   const [state, formAction, pending] = useActionState(action, {} as ProductActionState)
 
@@ -583,7 +581,6 @@ export function ProductForm({
             bins={bins}
             defaultValue={stock}
             committed={committed}
-            reserved={reserved}
           />
         </div>
       </FormCard>

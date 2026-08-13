@@ -13,6 +13,8 @@ export type StockEntry = {
   /** Empty string rather than null: a `<select>` has no null. */
   bin_id: string
   quantity: string
+  /** Held back by hand, at this place. */
+  reserved: string
 }
 
 export type StockSummary = {
@@ -54,10 +56,30 @@ export function summarise(
   }
 }
 
-/** The same, for rows still being typed into the form. */
-export function summariseEntries(entries: StockEntry[], committed = 0, reserved = 0): StockSummary {
+/**
+ * The same, for rows still being typed into the form.
+ *
+ * Only `committed` is passed in now: what open deals have promised is a
+ * question about deals, which the browser has no business asking. On hand and
+ * reserved are both in front of you, which is what lets all four tiles move as
+ * the rows are typed.
+ */
+export function summariseEntries(entries: StockEntry[], committed = 0): StockSummary {
   const onHand = entries.reduce((total, entry) => total + num(entry.quantity), 0)
+  const reserved = entries.reduce((total, entry) => total + num(entry.reserved), 0)
   return { onHand, committed, reserved, available: onHand - committed - reserved }
+}
+
+/**
+ * Whether a place is holding back more than it has.
+ *
+ * Not refused — the database does not refuse it either, and for good reason: a
+ * stock count that fell below what was already reserved is a real situation,
+ * and blocking the correction would leave the wrong number on the record
+ * instead. It is worth pointing at, though, which is what this is for.
+ */
+export function isOverReserved(quantity: unknown, reserved: unknown): boolean {
+  return num(reserved as never) > num(quantity as never)
 }
 
 /**
@@ -88,8 +110,13 @@ export function normaliseEntries(entries: StockEntry[]): StockEntry[] {
 
     if (existing) {
       existing.quantity = String(num(existing.quantity) + num(entry.quantity))
+      existing.reserved = String(num(existing.reserved) + num(entry.reserved))
     } else {
-      byPlace.set(key, { ...entry, quantity: String(num(entry.quantity)) })
+      byPlace.set(key, {
+        ...entry,
+        quantity: String(num(entry.quantity)),
+        reserved: String(num(entry.reserved)),
+      })
     }
   }
 

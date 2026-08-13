@@ -10,7 +10,6 @@ import type {
   StockLocationRow,
 } from '@/lib/database.types'
 import { PageHeader } from '@/components/ui'
-import { summarise } from '@/lib/stock'
 
 import { updateProduct } from '../../actions'
 import { ProductForm } from '../../product-form'
@@ -62,9 +61,9 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           location_id: level.location_id,
           bin_id: level.bin_id ?? '',
           quantity: String(level.quantity),
+          reserved: String(level.reserved),
         }))}
         committed={Number(totals?.committed ?? 0)}
-        reserved={summarise(stockLevels).reserved}
         submitLabel="Save changes"
       />
     </>

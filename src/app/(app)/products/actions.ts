@@ -180,7 +180,7 @@ async function applyStock(
       p_location_id: entry.location_id,
       p_bin_id: entry.bin_id || null,
       p_quantity: Number(entry.quantity),
-      p_reserved: null,
+      p_reserved: Number(entry.reserved),
       p_reason: 'Edited on the product',
       p_note: null,
     })
