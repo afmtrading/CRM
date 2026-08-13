@@ -526,6 +526,26 @@ function Cell({ row, column }: { row: LedgerRow; column: LedgerColumnKey }) {
     case 'weighted_value':
       return <Money value={Number(row.weighted_value)} currency={row.currency} />
 
+    case 'probability':
+      return <>{formatPercent(Number(row.probability))}</>
+
+    // Revenue and cost carry margin's rule, because margin is made of them: no
+    // line items means unknown, and a zero would read as a fact.
+    case 'revenue':
+    case 'cost':
+      return row[column] === null ? (
+        <span className="text-xs text-slate-400" title="Priced by hand — no line items">
+          unknown
+        </span>
+      ) : (
+        <Money value={Number(row[column])} currency={row.currency} />
+      )
+
+    // A count, so zero is a real answer — this deal was priced by hand — and
+    // printing it is what explains the unknowns in the three columns above.
+    case 'line_count':
+      return <>{formatNumber(row.line_count)}</>
+
     case 'margin':
       // The distinction the whole report turns on: no line items means the
       // margin is unknown, and saying nothing is more honest than saying zero.
