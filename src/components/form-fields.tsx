@@ -16,10 +16,13 @@ import { PlusIcon } from '@/components/icons'
 export function FormCard({
   title,
   description,
+  columns = 2,
   children,
 }: {
   title: string
   description?: string
+  /** Three across suits a price list, where the fields come in matched sets. */
+  columns?: 2 | 3
   children: React.ReactNode
 }) {
   return (
@@ -28,8 +31,23 @@ export function FormCard({
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
         {description && <p className="text-xs text-slate-500">{description}</p>}
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+      <div className={`grid gap-4 ${columns === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+        {children}
+      </div>
     </section>
+  )
+}
+
+/**
+ * A rule with a name on it, for splitting a long form into parts that are more
+ * than one card each. Louder than a card title and quieter than a page heading.
+ */
+export function FormSection({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 pt-3">
+      <h2 className="text-xs font-semibold tracking-widest text-slate-500 uppercase">{children}</h2>
+      <span className="h-px flex-1 bg-slate-200" />
+    </div>
   )
 }
 

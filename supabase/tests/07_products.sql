@@ -533,4 +533,120 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Status is what people set; `active` is what the rest of the app reads.
+--
+-- The two can disagree only if something writes `active` directly, which is
+-- exactly what the trigger exists to prevent — half the app filters on the flag
+-- and would go on offering a quarantined pallet.
+-- =============================================================================
+do $$
+declare
+  v_org  uuid := (select id from fixture where key = 'org');
+  v_shea uuid := (select id from fixture where key = 'shea');
+  v_new  uuid;
+begin
+  raise notice 'Product status:';
+
+  perform sign_in_as('mgr_auth');
+
+  insert into products (organization_id, name)
+  values (v_org, 'Statusless') returning id into v_new;
+
+  perform test_assert(
+    (select status from products where id = v_new) = 'active'
+      and (select active from products where id = v_new),
+    'a product nobody assigned a status to is active and on offer'
+  );
+
+  update products set status = 'quarantined' where id = v_new;
+  perform test_assert(
+    not (select active from products where id = v_new),
+    'quarantining a product takes it off the picker without anybody unticking a box'
+  );
+
+  update products set status = 'sold' where id = v_new;
+  perform test_assert(
+    not (select active from products where id = v_new),
+    'and so does selling out of it'
+  );
+
+  -- The flag is derived, so a write to it is not a second opinion — it is
+  -- discarded. Anything still setting `active` by hand is a bug, and this is
+  -- where it surfaces.
+  update products set active = true where id = v_new;
+  perform test_assert(
+    not (select active from products where id = v_new),
+    'writing the flag directly cannot contradict the status'
+  );
+
+  update products set status = 'active' where id = v_new;
+  perform test_assert(
+    (select active from products where id = v_new),
+    'putting it back on offer restores the flag'
+  );
+
+  perform test_assert(
+    (select status from products where id = v_shea) = 'active',
+    'products that predate the lifecycle inherited it from the flag they carried'
+  );
+end;
+$$;
+
+-- =============================================================================
+-- What the database refuses outright.
+-- =============================================================================
+do $$
+declare
+  v_org uuid := (select id from fixture where key = 'org');
+  v_id  uuid;
+begin
+  raise notice 'Product constraints:';
+
+  perform sign_in_as('mgr_auth');
+  insert into products (organization_id, name, unit_price, case_pack)
+  values (v_org, 'Constrained', 100, 12) returning id into v_id;
+
+  begin
+    update products set case_pack = 0 where id = v_id;
+    perform test_assert(false, 'a case pack of zero should have been refused');
+  exception when check_violation then
+    perform test_assert(true, 'a case pack of zero is refused — every piece price divides by it');
+  end;
+
+  begin
+    update products set status = 'retired' where id = v_id;
+    perform test_assert(false, 'an invented status should have been refused');
+  exception when check_violation then
+    perform test_assert(true, 'a status outside the five is refused');
+  end;
+
+  begin
+    update products set product_condition = 'mint' where id = v_id;
+    perform test_assert(false, 'an invented condition should have been refused');
+  exception when check_violation then
+    perform test_assert(true, 'a condition outside the five is refused');
+  end;
+
+  begin
+    update products set price_showroom = -1 where id = v_id;
+    perform test_assert(false, 'a negative showroom price should have been refused');
+  exception when check_violation then
+    perform test_assert(true, 'a negative price is refused whichever box it was typed into');
+  end;
+
+  -- Null is the working state of these columns, not an error: it is how a
+  -- product says "use the rule".
+  perform test_assert(
+    (select price_showroom is null and piece_price_retail is null from products where id = v_id),
+    'a price nobody typed stays null, so the rule that derives it stays in force'
+  );
+
+  perform test_assert(
+    (select product_type is null and product_condition is null from products where id = v_id),
+    'type and condition are optional — plenty of a catalogue has neither'
+  );
+end;
+$$;
+
 rollback;

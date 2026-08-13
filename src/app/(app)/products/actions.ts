@@ -6,16 +6,72 @@ import { z } from 'zod'
 
 import { assertCanManage, requireSession, scoped } from '@/lib/tenancy'
 
+/**
+ * A price box left empty is not a price of zero.
+ *
+ * Six of the price columns mean "derive me" when null — showroom and wholesale
+ * from retail, the piece prices from the case pack. Coercing an empty string to
+ * 0 the way `z.coerce.number()` does would write a real zero into the column
+ * and switch the rule off, so the product would be listed at nothing for ever.
+ */
+const optionalMoney = z
+  .string()
+  .trim()
+  .transform((value) => (value === '' ? null : Number(value)))
+  .refine((value) => value === null || (Number.isFinite(value) && value >= 0), {
+    message: 'A price has to be a number, and cannot be negative',
+  })
+  .nullable()
+  .default(null)
+
+const text = (max: number) => z.string().trim().max(max).default('')
+
 const productSchema = z.object({
   name: z.string().trim().min(1, 'A product needs a name').max(200),
-  sku: z.string().trim().max(60).default(''),
-  category: z.string().trim().max(120).default(''),
-  unit: z.string().trim().max(40).default(''),
+  sku: text(60),
+  category: text(120),
+  unit: text(40),
   unit_price: z.coerce.number().min(0).default(0),
   unit_cost: z.coerce.number().min(0).default(0),
   currency: z.string().trim().min(3).max(3).default('CAD'),
   description: z.string().max(20_000).default(''),
-  active: z.string().optional(),
+
+  brand: text(120),
+  model: text(120),
+  item_count: text(60),
+  size: text(60),
+  color: text(60),
+  case_pack: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : Math.trunc(Number(value))))
+    .refine((value) => value === null || (Number.isFinite(value) && value > 0), {
+      message: 'A case pack has to be a whole number, at least 1',
+    })
+    .nullable()
+    .default(null),
+  item_notes: text(500),
+  product_type: z.enum(['', 'item', 'case', 'pallet', 'kit', 'bin']).default(''),
+  product_condition: z
+    .enum(['', 'new', 'open_box', 'damaged', 'refurbished', 'expired'])
+    .default(''),
+  status: z
+    .enum(['active', 'inactive', 'discontinued', 'quarantined', 'sold'])
+    .default('active'),
+
+  price_showroom: optionalMoney,
+  price_wholesale: optionalMoney,
+  piece_price_retail: optionalMoney,
+  piece_price_showroom: optionalMoney,
+  piece_price_wholesale: optionalMoney,
+  pallet_price_retail: optionalMoney,
+  pallet_price_wholesale: optionalMoney,
+  piece_cost: optionalMoney,
+  pallet_cost: optionalMoney,
+
+  barcode_url: text(500),
+  comp_1_url: text(500),
+  comp_2_url: text(500),
 })
 
 export type ProductActionState = { ok?: boolean; error?: string }
@@ -43,9 +99,34 @@ function productColumns(input: z.infer<typeof productSchema>, formData: FormData
     unit_cost: input.unit_cost,
     currency: input.currency.toUpperCase(),
     description: input.description.trim() || null,
-    // An unchecked checkbox posts nothing at all, which is the only way a
-    // browser says "false".
-    active: formData.get('active') !== null,
+
+    brand: input.brand || null,
+    model: input.model || null,
+    item_count: input.item_count || null,
+    size: input.size || null,
+    color: input.color || null,
+    case_pack: input.case_pack,
+    item_notes: input.item_notes || null,
+    product_type: input.product_type || null,
+    product_condition: input.product_condition || null,
+    // `active` is deliberately absent: a trigger derives it from the status, so
+    // sending one would be sending a second opinion the database throws away.
+    status: input.status,
+
+    price_showroom: input.price_showroom,
+    price_wholesale: input.price_wholesale,
+    piece_price_retail: input.piece_price_retail,
+    piece_price_showroom: input.piece_price_showroom,
+    piece_price_wholesale: input.piece_price_wholesale,
+    pallet_price_retail: input.pallet_price_retail,
+    pallet_price_wholesale: input.pallet_price_wholesale,
+    piece_cost: input.piece_cost,
+    pallet_cost: input.pallet_cost,
+
+    barcode_url: input.barcode_url || null,
+    comp_1_url: input.comp_1_url || null,
+    comp_2_url: input.comp_2_url || null,
+
     custom_fields: readCustomFields(formData),
   }
 }
@@ -105,8 +186,9 @@ export async function updateProduct(
  *
  * Deleting a product never destroys it: deals that already list it keep their
  * frozen prices, the administrators are notified, and the row can be restored
- * from the recycle bin. Retiring a product with the Active switch is the
- * everyday alternative and leaves nothing to restore.
+ * from the recycle bin. Setting the status to anything but Active is the
+ * everyday alternative — it takes the product off the picker and leaves nothing
+ * to restore.
  */
 export async function deleteProduct(formData: FormData) {
   const context = await requireSession()

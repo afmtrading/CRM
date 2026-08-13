@@ -1,8 +1,9 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatNumber, formatPrice } from '@/lib/format'
 import type { FieldOptionRow, ProductRow } from '@/lib/database.types'
+import { productStatusLabel, productStatusTone } from '@/lib/products'
 import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
 import { CurrencyIcon, LayersIcon, ProductsIcon, SearchIcon, TagIcon } from '@/components/icons'
@@ -19,8 +20,9 @@ export default async function ProductsPage({
 
   const search = (params.q ?? '').trim()
   const category = params.category ?? ''
-  // Retired products are hidden by default: the catalogue people work with is
-  // the one they can still sell from.
+  // Anything not on offer is hidden by default: the catalogue people work with
+  // is the one they can still sell from. `active` is derived from the status, so
+  // this one predicate covers inactive, discontinued, quarantined and sold.
   const showRetired = params.show === 'all'
 
   let query = scoped(context, 'products').select('*').is('deleted_at', null)
@@ -85,7 +87,7 @@ export default async function ProductsPage({
         />
         <StatCard
           label={`Average price (${base})`}
-          value={formatCurrency(averagePrice, base)}
+          value={formatPrice(averagePrice, base)}
           icon={CurrencyIcon}
           tone="blue"
         />
@@ -137,7 +139,7 @@ export default async function ProductsPage({
             defaultChecked={showRetired}
             className="h-4 w-4 rounded border-slate-300"
           />
-          Include retired
+          Include everything not on offer
         </label>
 
         <button type="submit" className="btn-secondary mb-0.5">
@@ -169,7 +171,7 @@ export default async function ProductsPage({
                 <th>Product</th>
                 <th>Category</th>
                 <th>Unit</th>
-                <th className="text-right">Price</th>
+                <th className="text-right">Unit retail</th>
                 <th className="text-right">Cost</th>
                 <th className="text-right">Margin</th>
               </tr>
@@ -195,9 +197,11 @@ export default async function ProductsPage({
                             {product.name}
                           </Link>
                           <p className="text-xs text-slate-500">
-                            {product.sku ?? '—'}
+                            {[product.brand, product.sku].filter(Boolean).join(' · ') || '—'}
                             {!product.active && (
-                              <span className="badge ml-2 bg-slate-100 text-slate-500">retired</span>
+                              <span className={`badge ml-2 ${productStatusTone(product.status)}`}>
+                                {productStatusLabel(product.status)}
+                              </span>
                             )}
                           </p>
                         </div>
@@ -211,17 +215,17 @@ export default async function ProductsPage({
                     </td>
                     <td className="text-slate-600">{product.unit || '—'}</td>
                     <td className="text-right text-slate-800">
-                      {formatCurrency(price, product.currency)}
+                      {formatPrice(price, product.currency)}
                     </td>
                     <td className="text-right text-slate-600">
-                      {formatCurrency(Number(product.unit_cost), product.currency)}
+                      {formatPrice(Number(product.unit_cost), product.currency)}
                     </td>
                     <td
                       className={`text-right font-medium ${
                         margin < 0 ? 'text-red-600' : 'text-slate-800'
                       }`}
                     >
-                      {formatCurrency(margin, product.currency)}
+                      {formatPrice(margin, product.currency)}
                       {pct !== null && <span className="ml-1 text-xs text-slate-400">{pct}%</span>}
                     </td>
                   </tr>

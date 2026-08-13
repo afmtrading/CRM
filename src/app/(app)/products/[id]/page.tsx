@@ -2,18 +2,54 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import { contactName, formatCurrency, formatNumber } from '@/lib/format'
-import { PRODUCT_CARDS, renderMarkdown } from '@/lib/field-options'
+import { contactName, formatCurrency, formatNumber, formatPrice } from '@/lib/format'
+import { PRODUCT_CARDS, renderMarkdown, safeUrl } from '@/lib/field-options'
 import type {
   CustomFieldDefinitionRow,
   DealProductRow,
   FieldOptionRow,
   ProductRow,
 } from '@/lib/database.types'
-import { CustomFieldValues, Empty, Field, OptionBadges } from '@/components/contact-cards'
+import {
+  type DerivedPrice,
+  derivePricing,
+  productConditionLabel,
+  productConditionTone,
+  productStatusLabel,
+  productStatusTone,
+  productTypeLabel,
+  unitMargin,
+} from '@/lib/products'
+import {
+  CustomFieldValues,
+  Empty,
+  ExternalLink,
+  Field,
+  OptionBadges,
+} from '@/components/contact-cards'
 import { DealStatusBadge, EmptyState, PageHeader, Section } from '@/components/ui'
 
 import { deleteProduct } from '../actions'
+
+/**
+ * One price, and whether anybody chose it.
+ *
+ * A worked-out price is shown in grey next to a typed one in black, because a
+ * price list where the two are indistinguishable invites somebody to quote a
+ * number the app invented as though a person had agreed to it.
+ */
+function PriceCell({ price, currency }: { price: DerivedPrice; currency: string }) {
+  if (price.value === null) return <span className="text-slate-300">—</span>
+
+  return (
+    <span
+      className={price.auto ? 'text-slate-500' : 'font-medium text-slate-900'}
+      title={price.auto ? 'Worked out — nobody has set this one' : 'Set by hand'}
+    >
+      {formatPrice(price.value, currency)}
+    </span>
+  )
+}
 
 type LineItem = DealProductRow & {
   deals: {
@@ -79,14 +115,28 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     totals.set(currency, entry)
   }
 
-  const price = Number(product.unit_price)
-  const margin = price - Number(product.unit_cost)
+  // Six of the price columns are null unless somebody typed into them; this is
+  // what turns those holes back into a price list. See src/lib/products.ts.
+  const pricing = derivePricing(product)
+  const margin = unitMargin(product)
+  const currency = product.currency
+
+  const marketLinks = [
+    { label: 'Barcode Lookup', url: safeUrl(product.barcode_url) },
+    { label: 'Comp 1', url: safeUrl(product.comp_1_url) },
+    { label: 'Comp 2', url: safeUrl(product.comp_2_url) },
+  ]
 
   return (
     <>
       <PageHeader
         title={product.name}
-        description={[product.sku, product.category, product.active ? null : 'Retired']
+        description={[
+          product.brand,
+          product.sku,
+          product.category,
+          productStatusLabel(product.status),
+        ]
           .filter(Boolean)
           .join(' · ')}
         actions={
@@ -109,6 +159,112 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       {/* Cards sit to the right on a wide screen and lead on a narrow one. */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
         <div className="order-2 space-y-5 lg:order-1 lg:col-span-2">
+          <Section
+            title="Pricing"
+            actions={
+              <span className="text-xs text-slate-500">
+                {currency}
+                <span className="mx-2 text-slate-300">·</span>
+                margin{' '}
+                <span className={margin.amount < 0 ? 'text-red-600' : undefined}>
+                  {formatPrice(margin.amount, currency)}
+                  {margin.percent !== null && ` (${margin.percent}%)`}
+                </span>
+              </span>
+            }
+          >
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th />
+                    <th className="text-right">Retail</th>
+                    <th className="text-right">Showroom</th>
+                    <th className="text-right">Wholesale</th>
+                    <th className="text-right">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row" className="text-left font-medium text-slate-700">
+                      Unit
+                    </th>
+                    <td className="text-right">
+                      <PriceCell price={pricing.unit.retail} currency={currency} />
+                    </td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.unit.showroom} currency={currency} />
+                    </td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.unit.wholesale} currency={currency} />
+                    </td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.unit.cost} currency={currency} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row" className="text-left font-medium text-slate-700">
+                      Piece
+                    </th>
+                    <td className="text-right">
+                      <PriceCell price={pricing.piece.retail} currency={currency} />
+                    </td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.piece.showroom} currency={currency} />
+                    </td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.piece.wholesale} currency={currency} />
+                    </td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.piece.cost} currency={currency} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row" className="text-left font-medium text-slate-700">
+                      Pallet
+                    </th>
+                    <td className="text-right">
+                      <PriceCell price={pricing.pallet.retail} currency={currency} />
+                    </td>
+                    <td className="text-right text-slate-300">—</td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.pallet.wholesale} currency={currency} />
+                    </td>
+                    <td className="text-right">
+                      <PriceCell price={pricing.pallet.cost} currency={currency} />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-400">
+              Grey prices are worked out rather than agreed: showroom is 70% of retail, wholesale is
+              30%, and a piece is a unit divided by the case pack
+              {pricing.casePack === null
+                ? ' — which is not set, so there are no piece prices yet.'
+                : ` of ${formatNumber(pricing.casePack)}.`}{' '}
+              Type over any of them to fix a price; clear the box to hand it back.
+            </p>
+          </Section>
+
+          <Section title="In the Market">
+            {marketLinks.every((link) => link.url === null) ? (
+              <p className="text-sm text-slate-500">
+                No comparisons saved. Add a barcode lookup or a competitor&rsquo;s listing when
+                editing the product.
+              </p>
+            ) : (
+              <dl className="grid gap-3 sm:grid-cols-3">
+                {marketLinks.map((link) => (
+                  <Field key={link.label} label={link.label}>
+                    <ExternalLink url={link.url} />
+                  </Field>
+                ))}
+              </dl>
+            )}
+          </Section>
+
           <Section
             title="On deals"
             actions={
@@ -222,23 +378,38 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           <Section title={PRODUCT_CARDS[0].label}>
             <dl className="grid gap-3 sm:grid-cols-2">
               <Field label="SKU">{product.sku || <Empty />}</Field>
+              <Field label="Brand">{product.brand || <Empty />}</Field>
+              <Field label="Model">{product.model || <Empty />}</Field>
+              <Field label="Count">{product.item_count || <Empty />}</Field>
+              <Field label="Size">{product.size || <Empty />}</Field>
+              <Field label="Color">{product.color || <Empty />}</Field>
+              <Field label="Case Pack">
+                {product.case_pack === null ? <Empty /> : formatNumber(product.case_pack)}
+              </Field>
               <Field label="Unit">{product.unit || <Empty />}</Field>
+              <Field label="Product Type">{productTypeLabel(product.product_type) ?? <Empty />}</Field>
+              <Field label="Condition">
+                {product.product_condition ? (
+                  <span className={`badge ${productConditionTone(product.product_condition)}`}>
+                    {productConditionLabel(product.product_condition)}
+                  </span>
+                ) : (
+                  <Empty />
+                )}
+              </Field>
+              <Field label="Status">
+                <span className={`badge ${productStatusTone(product.status)}`}>
+                  {productStatusLabel(product.status)}
+                </span>
+              </Field>
               <Field label="Category" wide>
                 <OptionBadges
                   values={product.category ? [product.category] : []}
                   options={options.filter((option) => option.field_key === 'product_category')}
                 />
               </Field>
-              <Field label="Status">
-                <span
-                  className={`badge ${
-                    product.active
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {product.active ? 'Active' : 'Retired'}
-                </span>
+              <Field label="Item Notes" wide>
+                {product.item_notes || <Empty />}
               </Field>
               <CustomFieldValues
                 fields={forCard('details')}
@@ -248,30 +419,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </dl>
           </Section>
 
-          <Section title={PRODUCT_CARDS[1].label}>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Price">{formatCurrency(price, product.currency)}</Field>
-              <Field label="Cost">
-                {formatCurrency(Number(product.unit_cost), product.currency)}
-              </Field>
-              <Field label="Margin">
-                <span className={margin < 0 ? 'text-red-600' : undefined}>
-                  {formatCurrency(margin, product.currency)}
-                  {price > 0 && (
-                    <span className="ml-2 text-xs text-slate-500">
-                      {Math.round((margin / price) * 100)}%
-                    </span>
-                  )}
-                </span>
-              </Field>
-              <Field label="Currency">{product.currency}</Field>
-              <CustomFieldValues
-                fields={forCard('pricing')}
-                values={product.custom_fields}
-                fieldOptions={options}
-              />
-            </dl>
-          </Section>
+          {forCard('pricing').length > 0 && (
+            <Section title={PRODUCT_CARDS[1].label}>
+              <dl className="grid gap-3 sm:grid-cols-2">
+                <CustomFieldValues
+                  fields={forCard('pricing')}
+                  values={product.custom_fields}
+                  fieldOptions={options}
+                />
+              </dl>
+            </Section>
+          )}
 
           <Section title={PRODUCT_CARDS[2].label}>
             <dl className="grid gap-3">
