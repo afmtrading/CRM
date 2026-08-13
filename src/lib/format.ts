@@ -13,6 +13,23 @@ export function formatCurrency(value: number, currency = 'CAD'): string {
 }
 
 /**
+ * The same, to the cent.
+ *
+ * `formatCurrency` rounds to whole units, which is right for a deal worth
+ * $40,000 and wrong for a piece price of $2.45 — rounded to the dollar, half a
+ * price list becomes the same number. Anywhere the cents are the point, this is
+ * the formatter.
+ */
+export function formatPrice(value: number, currency = 'CAD'): string {
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value ?? 0)
+}
+
+/**
  * The amount without its currency, for places that show the code separately.
  *
  * `<Money>` in `src/components/money.tsx` pairs this with a symbol in front and
