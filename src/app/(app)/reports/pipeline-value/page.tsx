@@ -98,9 +98,14 @@ export default async function PipelineValueReport({
         title="Pipeline value"
         description="Open deals only, summed live from the deal records — no cached totals."
         actions={
-          <Link href="/reports/product-mix" className="btn-secondary">
-            Product mix
-          </Link>
+          <>
+            <Link href="/reports/deals" className="btn-secondary">
+              Deal ledger
+            </Link>
+            <Link href="/reports/product-mix" className="btn-secondary">
+              Product mix
+            </Link>
+          </>
         }
       />
 
