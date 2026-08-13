@@ -1,13 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { cookies } from 'next/headers'
 
 import { getSessionContext, scoped, type TenantTable } from '@/lib/tenancy'
 import { applyFilter, filterFromSearchParams } from '@/lib/filters'
 import {
+  DEFAULT_COLUMNS,
+  LEDGER_COLUMNS_COOKIE,
   applyLedgerFilter,
+  exportColumns,
   ledgerCsvRow,
   ledgerFilterFromParams,
+  parseColumns,
   parseSort,
   regionFieldKey,
+  resolveColumns,
   sortLedger,
   type LedgerRow,
 } from '@/lib/ledger'
@@ -95,9 +101,10 @@ export async function GET(request: NextRequest) {
    */
   if (entity === 'deal_ledger') {
     const { data: definitions } = await scoped(context, 'custom_field_definitions').select('*')
+    const regionKey = regionFieldKey((definitions ?? []) as CustomFieldDefinitionRow[])
 
     const { data: ledger, error: ledgerError } = await context.supabase.rpc('deal_ledger', {
-      p_region_key: regionFieldKey((definitions ?? []) as CustomFieldDefinitionRow[]),
+      p_region_key: regionKey,
     })
 
     if (ledgerError) {
@@ -109,9 +116,19 @@ export async function GET(request: NextRequest) {
       parseSort(params.sort),
     )
 
+    /*
+     * The file carries the columns the screen is showing, in the same order.
+     * Resolved the same way the page resolves them — the link carries `cols`,
+     * and the cookie answers for anybody who reached this URL directly.
+     */
+    const jar = await cookies()
+    const chosen =
+      parseColumns(params.cols) ?? parseColumns(jar.get(LEDGER_COLUMNS_COOKIE)?.value) ?? DEFAULT_COLUMNS
+
+    const columns = exportColumns(resolveColumns(chosen, regionKey !== null))
     const date = new Date().toISOString().slice(0, 10)
 
-    return new NextResponse(toCsv(rows.map(ledgerCsvRow)), {
+    return new NextResponse(toCsv(rows.map((row) => ledgerCsvRow(row, columns))), {
       headers: {
         'content-type': 'text/csv; charset=utf-8',
         'content-disposition': `attachment; filename="${context.organization.slug}-deal-ledger-${date}.csv"`,

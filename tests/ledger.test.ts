@@ -6,6 +6,7 @@ import {
   LEDGER_COLUMNS,
   applyLedgerFilter,
   columnsParam,
+  exportColumns,
   hiddenColumns,
   isDefaultColumns,
   moveColumn,
@@ -17,6 +18,7 @@ import {
   groupingOverlaps,
   isFiltered,
   ledgerCsvRow,
+  ledgerCsvValue,
   ledgerFilterFromParams,
   ledgerFilterToParams,
   matchesLedgerFilter,
@@ -25,6 +27,7 @@ import {
   regionFieldKey,
   sortLedger,
   summariseLedger,
+  type LedgerColumnKey,
   type LedgerRow,
 } from '../src/lib/ledger'
 
@@ -377,9 +380,12 @@ describe('totals', () => {
 })
 
 describe('export', () => {
+  const cols = (...keys: LedgerColumnKey[]) => resolveColumns(keys, true)
+
   it('writes one line per deal, with lists joined', () => {
     const row = ledgerCsvRow(
       deal({ products: ['Speaker', 'Cable'], regions: ['Ontario', 'Quebec'] }),
+      cols('products', 'regions', 'created_at'),
     )
     expect(row.Product).toBe('Speaker, Cable')
     expect(row.Region).toBe('Ontario, Quebec')
@@ -387,7 +393,47 @@ describe('export', () => {
   })
 
   it('leaves an unknown margin empty rather than writing a zero', () => {
-    expect(ledgerCsvRow(deal({ margin: null })).Margin).toBeNull()
+    expect(ledgerCsvRow(deal({ margin: null }), cols('margin')).Margin).toBeNull()
+  })
+
+  /*
+   * The file follows the screen. A column somebody hid to make the report
+   * readable should not reappear in the download.
+   */
+  it('writes only the columns it was given, in that order', () => {
+    const row = ledgerCsvRow(deal(), cols('status', 'name'))
+    expect(Object.keys(row)).toEqual(['Status', 'Deal'])
+  })
+
+  it('writes money as a bare number a spreadsheet can total', () => {
+    const row = ledgerCsvRow(deal({ value: 1000 }), cols('value'))
+    expect(row.Value).toBe(1000)
+  })
+
+  /*
+   * A column of amounts with no unit is the same wrong number this app refuses
+   * to print anywhere else, so the currency follows the money out.
+   */
+  it('adds currency to an export carrying money without it', () => {
+    const columns = exportColumns(cols('name', 'value'))
+    expect(columns.map((column) => column.key)).toEqual(['name', 'value', 'currency'])
+  })
+
+  it('does not add currency twice', () => {
+    const columns = exportColumns(cols('value', 'currency'))
+    expect(columns.map((column) => column.key)).toEqual(['value', 'currency'])
+  })
+
+  it('leaves an export with no money alone', () => {
+    const columns = exportColumns(cols('name', 'status'))
+    expect(columns.map((column) => column.key)).toEqual(['name', 'status'])
+  })
+
+  it('reads every column without falling through', () => {
+    const row = deal()
+    for (const column of LEDGER_COLUMNS) {
+      expect(ledgerCsvValue(row, column.key)).not.toBeUndefined()
+    }
   })
 })
 
