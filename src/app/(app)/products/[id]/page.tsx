@@ -213,10 +213,30 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         }
       />
 
-      {/* Cards sit to the right on a wide screen and lead on a narrow one. */}
+      {/*
+        Two stacked columns on a wide screen; one column, in reading order, on a
+        narrow one.
+
+        The wrappers are `display: contents` below lg, which dissolves them so
+        every card becomes a direct flex child of this container and can be
+        ordered individually. Two wrappers that each keep their own order would
+        only ever give "all of the left column, then all of the right"; the
+        order below interleaves them, because on a phone the picture belongs at
+        the top and the contacts at the bottom regardless of which column they
+        live in on a desktop.
+
+        The cards are ordered visually rather than in the markup, so on a narrow
+        screen the tab order still follows the source. Cards are landmarks with
+        headings rather than a sequence to step through, so that trade is
+        acceptable here — but it is the reason not to reach for this pattern by
+        default.
+
+        A card added here without an order class defaults to 0 and lands above
+        the picture. Give every new card one.
+      */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
-        <div className="order-2 space-y-5 lg:order-1 lg:col-span-2">
-          <Section title={PRODUCT_CARDS[0].label}>
+        <div className="contents lg:block lg:space-y-5 lg:order-1 lg:col-span-2">
+          <Section title={PRODUCT_CARDS[0].label} className="order-2">
             <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <Field label="SKU">{product.sku || <Empty />}</Field>
               <Field label="Brand">{product.brand || <Empty />}</Field>
@@ -274,6 +294,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           <Section
             title="Pricing"
+            className="order-3"
             actions={
               <span className="text-xs text-slate-500">
                 {currency}
@@ -369,6 +390,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           <Section
             title="Stock"
+            className="order-5"
             actions={
               context.canManage ? (
                 <Link href={`/products/${id}/edit`} className="text-xs text-brand-700 hover:underline">
@@ -438,6 +460,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           {stockMovements.length > 0 && (
             <Section
               title="Stock history"
+              className="order-6"
               actions={
                 <span className="text-xs text-slate-500">
                   {stockMovements.length} movement{stockMovements.length === 1 ? '' : 's'}
@@ -493,6 +516,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           <Section
             title="On deals"
+            className="order-9"
             actions={
               <span className="text-xs text-slate-500">
                 {lineItems.length} line item{lineItems.length === 1 ? '' : 's'}
@@ -579,11 +603,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </Section>
         </div>
 
-        <div className="order-1 space-y-5 lg:order-2">
+        <div className="contents lg:block lg:space-y-5 lg:order-2">
           {(imageUrl || product.folder_url || product.knowledge_base_url) && (
             /* No heading: a picture announces itself, and the two links under it
                are about where to find more of the same thing. */
-            <section className="card space-y-4 p-5">
+            <section className="card order-1 space-y-4 p-5">
               {imageUrl && (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element -- a
@@ -608,7 +632,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </section>
           )}
 
-          <Section title="In the Market">
+          <Section title="In the Market" className="order-7">
             {marketLinks.every((link) => link.url === null) ? (
               <p className="text-sm text-slate-500">
                 No comparisons saved. Add a barcode lookup or a competitor&rsquo;s listing when
@@ -626,7 +650,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </Section>
 
           {forCard('pricing').length > 0 && (
-            <Section title={PRODUCT_CARDS[1].label}>
+            <Section title={PRODUCT_CARDS[1].label} className="order-4">
               <dl className="grid gap-3 sm:grid-cols-2">
                 <CustomFieldValues
                   fields={forCard('pricing')}
@@ -637,7 +661,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </Section>
           )}
 
-          <Section title={PRODUCT_CARDS[2].label}>
+          <Section title={PRODUCT_CARDS[2].label} className="order-8">
             <dl className="grid gap-3">
               <Field label="Description" wide>
                 {product.description ? (
@@ -660,7 +684,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </dl>
           </Section>
 
-          <Section title="Interested contacts">
+          <Section title="Interested contacts" className="order-10">
             {interestedContacts.length === 0 ? (
               <p className="text-sm text-slate-500">
                 Nobody has been marked as interested. Set it on a contact&rsquo;s Influence card.
