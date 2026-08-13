@@ -7,6 +7,7 @@ import {
   currenciesIn,
   cycleHistogram,
   fraction,
+  funnelSteps,
   monthKeyOf,
   monthLabel,
   monthsBetween,
@@ -14,6 +15,7 @@ import {
   openByStage,
   ownerBars,
   ticks,
+  type StageFunnelRow,
 } from '../src/lib/charts'
 import { periodRange } from '../src/lib/performance'
 import type { LedgerRow } from '../src/lib/ledger'
@@ -297,5 +299,67 @@ describe('compact money', () => {
 
   it('uses the currency’s own symbol', () => {
     expect(compactMoney(1200, 'GBP')).toBe('£1.2k')
+  })
+})
+
+describe('the funnel', () => {
+  const step = (over: Partial<StageFunnelRow>): StageFunnelRow => ({
+    stage_id: 's1',
+    stage_name: 'Quote',
+    stage_order: 0,
+    pipeline_id: 'p1',
+    reached: 0,
+    still_there: 0,
+    won_after: 0,
+    lost_after: 0,
+    median_days: null,
+    ...over,
+  })
+
+  it('orders by stage, whatever order the rows arrived in', () => {
+    const steps = funnelSteps([
+      step({ stage_id: 'c', stage_name: 'Won', stage_order: 2, reached: 3 }),
+      step({ stage_id: 'a', stage_name: 'Quote', stage_order: 0, reached: 10 }),
+      step({ stage_id: 'b', stage_name: 'Proposal', stage_order: 1, reached: 6 }),
+    ])
+    expect(steps.map((s) => s.stage_name)).toEqual(['Quote', 'Proposal', 'Won'])
+  })
+
+  /*
+   * Against the previous stage, not the top of the funnel. "Where do deals
+   * stop" is the question, and a rate against the first stage hides which
+   * single step lost them.
+   */
+  it('measures conversion against the stage above', () => {
+    const steps = funnelSteps([
+      step({ stage_id: 'a', stage_order: 0, reached: 10 }),
+      step({ stage_id: 'b', stage_order: 1, reached: 5 }),
+      step({ stage_id: 'c', stage_order: 2, reached: 4 }),
+    ])
+    expect(steps[0].conversion).toBeNull()
+    expect(steps[1].conversion).toBeCloseTo(0.5)
+    expect(steps[2].conversion).toBeCloseTo(0.8)
+  })
+
+  it('gives no conversion rather than zero when nothing reached the stage above', () => {
+    const steps = funnelSteps([
+      step({ stage_id: 'a', stage_order: 0, reached: 0 }),
+      step({ stage_id: 'b', stage_order: 1, reached: 0 }),
+    ])
+    expect(steps[1].conversion).toBeNull()
+  })
+
+  it('scales every bar against the widest stage', () => {
+    const steps = funnelSteps([
+      step({ stage_id: 'a', stage_order: 0, reached: 8 }),
+      step({ stage_id: 'b', stage_order: 1, reached: 2 }),
+    ])
+    expect(steps[0].share).toBe(1)
+    expect(steps[1].share).toBeCloseTo(0.25)
+  })
+
+  it('survives an empty funnel without dividing by zero', () => {
+    expect(funnelSteps([])).toEqual([])
+    expect(funnelSteps([step({})])[0].share).toBe(0)
   })
 })

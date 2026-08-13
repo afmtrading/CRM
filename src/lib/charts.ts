@@ -246,6 +246,54 @@ export function openByStage(rows: LedgerRow[], currency: string): StageBucket[] 
 }
 
 // -----------------------------------------------------------------------------
+// The funnel
+// -----------------------------------------------------------------------------
+
+/** One row of stage_funnel(), which counts deals that ever arrived in a stage. */
+export interface StageFunnelRow {
+  stage_id: string
+  stage_name: string
+  stage_order: number
+  pipeline_id: string
+  reached: number
+  still_there: number
+  won_after: number
+  lost_after: number
+  median_days: number | null
+}
+
+export interface FunnelStep extends StageFunnelRow {
+  /** Reached here as a share of the widest stage, for the bar. */
+  share: number
+  /** Reached here ÷ reached the stage before. Null at the top — nothing precedes it. */
+  conversion: number | null
+}
+
+/**
+ * Turns arrival counts into a funnel.
+ *
+ * Conversion is measured against the *previous* stage rather than the first,
+ * because the question a funnel answers is "where do deals stop", and a rate
+ * against the top of the funnel hides which step lost them.
+ *
+ * A stage nobody has reached gives no conversion rather than 0% — the same
+ * refusal as a win rate over nothing.
+ */
+export function funnelSteps(rows: StageFunnelRow[]): FunnelStep[] {
+  const ordered = [...rows].sort((a, b) => a.stage_order - b.stage_order)
+  const widest = Math.max(1, ...ordered.map((row) => row.reached))
+
+  return ordered.map((row, index) => {
+    const previous = index === 0 ? null : ordered[index - 1]
+    return {
+      ...row,
+      share: fraction(row.reached, widest),
+      conversion: previous && previous.reached > 0 ? row.reached / previous.reached : null,
+    }
+  })
+}
+
+// -----------------------------------------------------------------------------
 // Owners side by side
 // -----------------------------------------------------------------------------
 
