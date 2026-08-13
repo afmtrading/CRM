@@ -117,8 +117,101 @@ export const LEDGER_COLUMNS: LedgerColumn[] = [
 
 export const GROUPABLE_COLUMNS = LEDGER_COLUMNS.filter((column) => column.groupable)
 
+/** Every column, in the order they were asked for — what a ledger shows by default. */
+export const DEFAULT_COLUMNS: LedgerColumnKey[] = LEDGER_COLUMNS.map((column) => column.key)
+
+/**
+ * Where a chosen layout is remembered.
+ *
+ * A cookie rather than the URL alone, because the nav link to the ledger has no
+ * query on it: without somewhere to remember, a chosen set of columns would be
+ * thrown away every time somebody clicked Reports. The URL still wins when it
+ * carries one, so a link to a particular view is still a link to that view.
+ */
+export const LEDGER_COLUMNS_COOKIE = 'flo.ledger.columns'
+
 export function columnFor(key: string): LedgerColumn | undefined {
   return LEDGER_COLUMNS.find((column) => column.key === key)
+}
+
+/**
+ * Reads a stored column layout.
+ *
+ * Unknown keys and duplicates are dropped rather than rejected: the value comes
+ * from a URL or a cookie that may have been written by an older version of this
+ * page, and a column that has since been renamed should cost the reader one
+ * column, not the whole layout. Null means "nothing usable here" — the caller
+ * then falls back rather than rendering a table with no columns in it.
+ */
+export function parseColumns(raw: string | null | undefined): LedgerColumnKey[] | null {
+  if (!raw) return null
+
+  const seen = new Set<string>()
+  const keys: LedgerColumnKey[] = []
+
+  for (const part of raw.split(',')) {
+    const key = part.trim()
+    if (!key || seen.has(key) || !columnFor(key)) continue
+    seen.add(key)
+    keys.push(key as LedgerColumnKey)
+  }
+
+  return keys.length > 0 ? keys : null
+}
+
+export function columnsParam(keys: LedgerColumnKey[]): string {
+  return keys.join(',')
+}
+
+/** True when this layout is the default one, so the screen can say so. */
+export function isDefaultColumns(keys: LedgerColumnKey[]): boolean {
+  return columnsParam(keys) === columnsParam(DEFAULT_COLUMNS)
+}
+
+/**
+ * The columns to draw, resolved to their definitions.
+ *
+ * Region is dropped when the organization keeps no region field, whatever the
+ * layout says — a column that can only ever be empty is worse than one missing.
+ */
+export function resolveColumns(
+  chosen: LedgerColumnKey[] | null,
+  hasRegionField: boolean,
+): LedgerColumn[] {
+  return (chosen ?? DEFAULT_COLUMNS)
+    .map((key) => columnFor(key))
+    .filter((column): column is LedgerColumn => Boolean(column))
+    .filter((column) => column.key !== 'regions' || hasRegionField)
+}
+
+/** The columns not currently shown, in their natural order, for the picker. */
+export function hiddenColumns(chosen: LedgerColumnKey[]): LedgerColumn[] {
+  const shown = new Set<string>(chosen)
+  return LEDGER_COLUMNS.filter((column) => !shown.has(column.key))
+}
+
+/**
+ * Moves one column a single place, for the picker's arrows.
+ *
+ * Returns the list unchanged at either end rather than wrapping around: an
+ * arrow that silently sends the first column to the bottom is a surprise, and
+ * the button is disabled there anyway.
+ */
+export function moveColumn(
+  keys: LedgerColumnKey[],
+  key: LedgerColumnKey,
+  direction: -1 | 1,
+): LedgerColumnKey[] {
+  const from = keys.indexOf(key)
+  if (from === -1) return keys
+
+  const to = from + direction
+  if (to < 0 || to >= keys.length) return keys
+
+  const next = [...keys]
+  next[from] = next[to]
+  next[to] = key
+  return next
 }
 
 // -----------------------------------------------------------------------------

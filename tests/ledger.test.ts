@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  DEFAULT_COLUMNS,
   GROUPABLE_COLUMNS,
   LEDGER_COLUMNS,
   applyLedgerFilter,
+  columnsParam,
+  hiddenColumns,
+  isDefaultColumns,
+  moveColumn,
+  parseColumns,
+  resolveColumns,
   columnFor,
   groupLedger,
   groupValues,
@@ -412,5 +419,101 @@ describe('finding the region field', () => {
 
   it('will not pick a free-text field it cannot offer as a filter', () => {
     expect(regionFieldKey([field({ field_type: 'text' })])).toBeNull()
+  })
+})
+
+describe('choosing columns', () => {
+  it('defaults to every column, in the order they were specified', () => {
+    expect(DEFAULT_COLUMNS).toEqual(LEDGER_COLUMNS.map((column) => column.key))
+    expect(isDefaultColumns(DEFAULT_COLUMNS)).toBe(true)
+  })
+
+  it('reads a layout from a comma separated list', () => {
+    expect(parseColumns('name,value,status')).toEqual(['name', 'value', 'status'])
+  })
+
+  it('keeps the order asked for rather than the natural one', () => {
+    expect(parseColumns('status,name')).toEqual(['status', 'name'])
+  })
+
+  it('tolerates spacing', () => {
+    expect(parseColumns(' name , value ')).toEqual(['name', 'value'])
+  })
+
+  /*
+   * The value comes from a URL or a cookie that an older version of the page
+   * may have written. One column that no longer exists should cost the reader
+   * that column, not the whole layout.
+   */
+  it('drops keys it does not recognise rather than rejecting the lot', () => {
+    expect(parseColumns('name,invented,value')).toEqual(['name', 'value'])
+  })
+
+  it('drops duplicates, which would render the same column twice', () => {
+    expect(parseColumns('name,name,value')).toEqual(['name', 'value'])
+  })
+
+  it('reports nothing usable rather than an empty table', () => {
+    expect(parseColumns('')).toBeNull()
+    expect(parseColumns(null)).toBeNull()
+    expect(parseColumns('nonsense,rubbish')).toBeNull()
+  })
+
+  it('round-trips through the parameter', () => {
+    const keys = parseColumns('status,name,margin')!
+    expect(parseColumns(columnsParam(keys))).toEqual(keys)
+  })
+
+  it('resolves a layout to column definitions in the chosen order', () => {
+    const resolved = resolveColumns(['value', 'name'], true)
+    expect(resolved.map((column) => column.label)).toEqual(['Value', 'Deal'])
+  })
+
+  it('falls back to the default when nothing was chosen', () => {
+    expect(resolveColumns(null, true).map((c) => c.key)).toEqual(DEFAULT_COLUMNS)
+  })
+
+  /*
+   * A column that can only ever be empty is worse than one that is missing, so
+   * region goes whatever the layout says.
+   */
+  it('drops the region column for an organization that keeps no region field', () => {
+    expect(resolveColumns(['name', 'regions'], false).map((c) => c.key)).toEqual(['name'])
+    expect(resolveColumns(['name', 'regions'], true).map((c) => c.key)).toEqual(['name', 'regions'])
+  })
+
+  it('lists what is hidden, in the natural order', () => {
+    const hidden = hiddenColumns(['name', 'status'])
+    expect(hidden.map((column) => column.key)).not.toContain('name')
+    expect(hidden.map((column) => column.key)).toContain('value')
+    expect(hidden).toHaveLength(LEDGER_COLUMNS.length - 2)
+  })
+})
+
+describe('moving a column', () => {
+  const keys = ['name', 'status', 'value'] as const
+
+  it('swaps with the neighbour above', () => {
+    expect(moveColumn([...keys], 'value', -1)).toEqual(['name', 'value', 'status'])
+  })
+
+  it('swaps with the neighbour below', () => {
+    expect(moveColumn([...keys], 'name', 1)).toEqual(['status', 'name', 'value'])
+  })
+
+  // Wrapping around would send the first column to the bottom on a mis-click.
+  it('stops at either end rather than wrapping', () => {
+    expect(moveColumn([...keys], 'name', -1)).toEqual(['name', 'status', 'value'])
+    expect(moveColumn([...keys], 'value', 1)).toEqual(['name', 'status', 'value'])
+  })
+
+  it('ignores a column that is not in the list', () => {
+    expect(moveColumn([...keys], 'margin', -1)).toEqual(['name', 'status', 'value'])
+  })
+
+  it('does not modify the array it was given', () => {
+    const original = [...keys]
+    moveColumn(original, 'name', 1)
+    expect(original).toEqual(['name', 'status', 'value'])
   })
 })

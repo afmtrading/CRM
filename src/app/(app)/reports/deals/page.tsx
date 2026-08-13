@@ -1,19 +1,24 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatDay, formatNumber, formatPercent } from '@/lib/format'
 import {
+  DEFAULT_COLUMNS,
   GROUPABLE_COLUMNS,
-  LEDGER_COLUMNS,
+  LEDGER_COLUMNS_COOKIE,
   columnFor,
+  columnsParam,
   applyLedgerFilter,
   groupLedger,
   groupingOverlaps,
   isFiltered,
   ledgerFilterFromParams,
   ledgerFilterToParams,
+  parseColumns,
   parseSort,
   regionFieldKey,
+  resolveColumns,
   sortLedger,
   summariseLedger,
   type LedgerColumnKey,
@@ -27,6 +32,8 @@ import type {
 } from '@/lib/database.types'
 import { Money, MoneyTotals } from '@/components/money'
 import { DealStatusBadge, EmptyState, ErrorNote, PageHeader } from '@/components/ui'
+
+import { ColumnPicker } from './column-picker'
 
 export const metadata = { title: 'Deal ledger · FLO CRM' }
 
@@ -73,7 +80,30 @@ export default async function DealLedgerPage({
   })
 
   const allRows = ((ledger ?? []) as LedgerRow[]).slice(0, LEDGER_LIMIT)
-  const rows = sortLedger(applyLedgerFilter(allRows, filter), sort)
+
+  /*
+   * The layout the reader has chosen. The URL wins so a link to a particular
+   * view stays that view; the cookie is what makes the choice survive clicking
+   * Reports in the nav, which carries no query at all.
+   */
+  const jar = await cookies()
+  const chosen =
+    parseColumns(Array.isArray(params.cols) ? params.cols[0] : params.cols) ??
+    parseColumns(jar.get(LEDGER_COLUMNS_COOKIE)?.value) ??
+    DEFAULT_COLUMNS
+
+  const columns = resolveColumns(chosen, regionKey !== null)
+
+  /*
+   * Sorting by a column that is no longer shown leaves the rows in an order
+   * with nothing on screen to explain it — the classic "why is this list like
+   * this" puzzle. Fall back to newest first, which is explainable whether or
+   * not the Initiated column is showing.
+   */
+  const sortIsVisible = columns.some((column) => column.key === sort.key)
+  const effectiveSort = sortIsVisible ? sort : parseSort(undefined)
+
+  const rows = sortLedger(applyLedgerFilter(allRows, filter), effectiveSort)
   const groups = groupLedger(rows, groupBy)
   const summary = summariseLedger(rows)
   const overlaps = groupingOverlaps(groupBy)
@@ -91,16 +121,14 @@ export default async function DealLedgerPage({
     ).entries(),
   ].sort((a, b) => a[1].localeCompare(b[1]))
 
-  const columns = LEDGER_COLUMNS.filter(
-    // No point in a Region column for an organization that does not keep one.
-    (column) => column.key !== 'regions' || regionKey !== null,
-  )
-
   /** A link that keeps every other choice and changes one. */
   const link = (overrides: Record<string, string | undefined>) => {
     const next = ledgerFilterToParams(filter)
     if (groupBy) next.set('group', groupBy)
-    next.set('sort', `${sort.key}:${sort.direction}`)
+    next.set('sort', `${effectiveSort.key}:${effectiveSort.direction}`)
+    if (columnsParam(chosen) !== columnsParam(DEFAULT_COLUMNS)) {
+      next.set('cols', columnsParam(chosen))
+    }
 
     for (const [key, value] of Object.entries(overrides)) {
       if (value === undefined || value === '') next.delete(key)
@@ -113,7 +141,9 @@ export default async function DealLedgerPage({
 
   const sortLink = (key: LedgerColumnKey) =>
     link({
-      sort: `${key}:${sort.key === key && sort.direction === 'desc' ? 'asc' : 'desc'}`,
+      sort: `${key}:${
+        effectiveSort.key === key && effectiveSort.direction === 'desc' ? 'asc' : 'desc'
+      }`,
     })
 
   const exportHref = `/api/export?entity=deal_ledger&${ledgerFilterToParams(filter).toString()}`
@@ -134,6 +164,11 @@ export default async function DealLedgerPage({
             <Link href="/reports/diagnostics" className="btn-secondary">
               Diagnostics
             </Link>
+            <ColumnPicker
+              chosen={chosen}
+              query={link({}).split('?')[1] ?? ''}
+              hasRegionField={regionKey !== null}
+            />
             <a href={exportHref} className="btn-secondary">
               Export CSV
             </a>
@@ -311,7 +346,15 @@ export default async function DealLedgerPage({
           <input id="to" name="to" type="date" className="input" defaultValue={filter.to} />
         </Field>
 
-        <input type="hidden" name="sort" value={`${sort.key}:${sort.direction}`} />
+        <input type="hidden" name="sort" value={`${effectiveSort.key}:${effectiveSort.direction}`} />
+        {/*
+          A GET form posts only its own fields, so without this the column
+          layout would drop out of the URL on every filter. The cookie would
+          still supply it, but the link somebody copied afterwards would not.
+        */}
+        {columnsParam(chosen) !== columnsParam(DEFAULT_COLUMNS) && (
+          <input type="hidden" name="cols" value={columnsParam(chosen)} />
+        )}
 
         <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
           <button type="submit" className="btn-primary">
@@ -391,9 +434,9 @@ export default async function DealLedgerPage({
                               title={`Sort by ${column.label}`}
                             >
                               {column.label}
-                              {sort.key === column.key && (
+                              {effectiveSort.key === column.key && (
                                 <span className="ml-1 text-slate-400">
-                                  {sort.direction === 'asc' ? '↑' : '↓'}
+                                  {effectiveSort.direction === 'asc' ? '↑' : '↓'}
                                 </span>
                               )}
                             </Link>
