@@ -7,7 +7,10 @@ import type {
   CustomFieldDefinitionRow,
   FieldOptionRow,
   ProductRow,
+  StockBinRow,
+  StockLocationRow,
 } from '@/lib/database.types'
+import type { StockEntry } from '@/lib/stock'
 import { CURRENCIES, formatPrice } from '@/lib/format'
 import { PRODUCT_CARDS } from '@/lib/field-options'
 import {
@@ -25,6 +28,7 @@ import {
 } from '@/components/form-fields'
 
 import type { ProductActionState } from './actions'
+import { StockEditor } from './stock-editor'
 
 /** A null column and an untouched box are the same thing to a form. */
 function box(value: number | string | null | undefined): string {
@@ -172,6 +176,11 @@ export function ProductForm({
   fieldOptions,
   defaultCurrency,
   submitLabel,
+  locations,
+  bins,
+  stock,
+  committed = 0,
+  reserved = 0,
 }: {
   action: (state: ProductActionState, formData: FormData) => Promise<ProductActionState>
   product?: ProductRow
@@ -179,6 +188,11 @@ export function ProductForm({
   fieldOptions: FieldOptionRow[]
   defaultCurrency: string
   submitLabel: string
+  locations: StockLocationRow[]
+  bins: StockBinRow[]
+  stock: StockEntry[]
+  committed?: number
+  reserved?: number
 }) {
   const [state, formAction, pending] = useActionState(action, {} as ProductActionState)
 
@@ -556,6 +570,20 @@ export function ProductForm({
             className="input"
             placeholder="https://…"
             defaultValue={product?.comp_2_url ?? ''}
+          />
+        </div>
+      </FormCard>
+
+      <FormSection>Stock</FormSection>
+
+      <FormCard title="Stock" description="How many there are, and where">
+        <div className="sm:col-span-2">
+          <StockEditor
+            locations={locations}
+            bins={bins}
+            defaultValue={stock}
+            committed={committed}
+            reserved={reserved}
           />
         </div>
       </FormCard>

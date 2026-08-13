@@ -260,6 +260,14 @@ export const LayersIcon: IconComponent = (p) => (
   </Svg>
 )
 
+/** A crate — what stock is counted in. */
+export const StockIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z" />
+    <path d="M3 7.5 12 12l9-4.5M12 12v9" />
+  </Svg>
+)
+
 export const CurrencyIcon: IconComponent = (p) => (
   <Svg {...p}>
     <path d="M12 2v20" />
