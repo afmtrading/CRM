@@ -8,6 +8,7 @@ import type {
   CustomFieldDefinitionRow,
   DealProductRow,
   FieldOptionRow,
+  InvoiceStatus,
   ProductRow,
   SalesOrderStatus,
   StockAdjustmentRow,
@@ -31,6 +32,7 @@ import {
 import {
   DealStatusBadge,
   EmptyState,
+  InvoiceStatusBadge,
   PageHeader,
   SalesOrderStatusBadge,
   Section,
@@ -192,6 +194,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     committed: 0,
     committed_deals: 0,
     committed_orders: 0,
+    committed_invoices: 0,
     reserved: 0,
     available: 0,
   }) as {
@@ -199,15 +202,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     committed: number
     committed_deals: number
     committed_orders: number
+    committed_invoices: number
     reserved: number
     available: number
   }
 
   /** The signed orders holding this product. Invoker, so a rep sees their own. */
   const orders = (committedOrders ?? []) as {
-    sales_order_id: string
+    kind: 'order' | 'invoice'
+    document_id: string
     number: string
-    status: SalesOrderStatus
+    status: string
     company_name: string | null
     quantity: number
   }[]
@@ -440,8 +445,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 value={stock.committed}
                 tone="text-amber-600"
                 note={
-                  Number(stock.committed_orders) > 0
-                    ? `${formatQuantity(stock.committed_deals)} on deals · ${formatQuantity(stock.committed_orders)} on orders`
+                  Number(stock.committed_orders) > 0 || Number(stock.committed_invoices) > 0
+                    ? [
+                        `${formatQuantity(stock.committed_deals)} on deals`,
+                        `${formatQuantity(stock.committed_orders)} on orders`,
+                        Number(stock.committed_invoices) > 0
+                          ? `${formatQuantity(stock.committed_invoices)} on invoices`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
                     : undefined
                 }
               />
@@ -708,7 +721,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {orders.length > 0 && (
             <Section
-              title="On sales orders"
+              title="On orders and invoices"
               className="order-9"
               actions={
                 <span className="text-xs text-slate-500">
@@ -721,7 +734,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Order</th>
+                      <th>Document</th>
                       <th>Company</th>
                       <th>Status</th>
                       <th className="text-right">Qty held</th>
@@ -729,10 +742,14 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   </thead>
                   <tbody>
                     {orders.map((order) => (
-                      <tr key={order.sales_order_id}>
+                      <tr key={order.document_id}>
                         <td>
                           <Link
-                            href={`/sales-orders/${order.sales_order_id}`}
+                            href={
+                              order.kind === 'order'
+                                ? `/sales-orders/${order.document_id}`
+                                : `/invoices/${order.document_id}`
+                            }
                             className="font-medium text-slate-900 hover:text-brand-700"
                           >
                             {order.number}
@@ -740,7 +757,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                         </td>
                         <td>{order.company_name ?? <span className="text-slate-300">—</span>}</td>
                         <td>
-                          <SalesOrderStatusBadge status={order.status} />
+                          {order.kind === 'order' ? (
+                            <SalesOrderStatusBadge status={order.status as SalesOrderStatus} />
+                          ) : (
+                            <InvoiceStatusBadge status={order.status as InvoiceStatus} />
+                          )}
                         </td>
                         <td className="text-right font-medium">
                           {formatQuantity(order.quantity)}
@@ -752,9 +773,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               </div>
 
               <p className="mt-3 text-xs text-slate-400">
-                Signed and confirmed orders only. A draft holds nothing, and a fulfilled or
-                cancelled order releases what it held — there is no hold to remember, because the
-                number is read off these lines every time it is asked for.
+                Signed and confirmed orders, and invoices raised on their own that have been issued
+                and not yet settled. A draft holds nothing either way, and an invoice billed from an
+                order is not counted here — the order is already holding it. There is no hold to
+                remember, because the number is read off these lines every time it is asked for.
               </p>
             </Section>
           )}

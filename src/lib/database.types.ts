@@ -1301,6 +1301,36 @@ export interface Database {
       }
       /** Idempotent: returns the existing invoice when the order already has one. */
       convert_sales_order_to_invoice: { Args: { p_sales_order_id: string }; Returns: string }
+      /** An empty draft invoice with no sales order behind it. */
+      create_invoice: {
+        Args: {
+          p_company_id?: string | null
+          p_contact_id?: string | null
+          p_owner_id?: string | null
+          p_currency?: string | null
+        }
+        Returns: string
+      }
+      /**
+       * The only door onto invoice_lines besides the conversion. Refuses
+       * anything that is not a draft raised on its own, and computes the
+       * discount itself — a client never sends one.
+       */
+      add_invoice_line: {
+        Args: {
+          p_invoice_id: string
+          p_product_id?: string | null
+          p_name?: string | null
+          p_quantity?: number
+          p_unit_price?: number
+          p_unit_cost?: number
+          p_rate_type?: RevisedRateType | null
+          p_rate?: number | null
+          p_notes?: string | null
+        }
+        Returns: string
+      }
+      remove_invoice_line: { Args: { p_line_id: string }; Returns: void }
       soft_delete_sales_order: { Args: { p_sales_order_id: string }; Returns: void }
       restore_sales_order: { Args: { p_sales_order_id: string }; Returns: void }
       soft_delete_product: { Args: { p_product_id: string }; Returns: void }
