@@ -9,6 +9,7 @@ import {
   salesOrderFilterFromParams,
   totalsByCurrency,
 } from '@/lib/sales'
+import { likeContains } from '@/lib/sql'
 import type { CompanyRow, SalesOrderRow, UserRow } from '@/lib/database.types'
 import { MoneyTotals } from '@/components/money'
 import { EmptyState, ErrorNote, PageHeader, SalesOrderStatusBadge } from '@/components/ui'
@@ -51,7 +52,7 @@ export default async function SalesOrdersPage({
   if (filter.owner) query = query.eq('owner_id', filter.owner)
   if (filter.from) query = query.gte('order_date', filter.from)
   if (filter.to) query = query.lte('order_date', filter.to)
-  if (filter.search) query = query.ilike('number', `%${filter.search}%`)
+  if (filter.search) query = query.ilike('number', likeContains(filter.search))
 
   const { data, error } = await query
   const orders = (data ?? []) as SalesOrderRow[]

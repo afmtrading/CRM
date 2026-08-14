@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { getSessionContext, scoped, firstRow } from '@/lib/tenancy'
 import { importFieldsFor, mapRow, toContactPayload, type FieldMapping } from '@/lib/csv'
+import { likeLiteral } from '@/lib/sql'
 import type { FilterEntityType } from '@/lib/database.types'
 
 /**
@@ -75,8 +76,19 @@ export async function POST(request: Request) {
     if (!key) return null
     if (companyIds.has(key)) return companyIds.get(key)!
 
+    /*
+     * Literal, and live only. A wildcard in the name would match the wrong
+     * company, and matching a deleted one would file imported contacts against
+     * a company nobody can see — differently depending on whether the importer
+     * is an administrator, since the recycle bin is visible only to them.
+     */
     const existing = await firstRow<{ id: string }>(
-      scoped(context!, 'companies').select('id').ilike('name', name.trim()).limit(1).maybeSingle(),
+      scoped(context!, 'companies')
+        .select('id')
+        .ilike('name', likeLiteral(name.trim()))
+        .is('deleted_at', null)
+        .limit(1)
+        .maybeSingle(),
     )
 
     if (existing) {
@@ -101,7 +113,11 @@ export async function POST(request: Request) {
     if (tagIds.has(key)) return tagIds.get(key)!
 
     const existing = await firstRow<{ id: string }>(
-      scoped(context!, 'tags').select('id').ilike('name', name.trim()).limit(1).maybeSingle(),
+      scoped(context!, 'tags')
+        .select('id')
+        .ilike('name', likeLiteral(name.trim()))
+        .limit(1)
+        .maybeSingle(),
     )
 
     if (existing) {
@@ -149,8 +165,15 @@ export async function POST(request: Request) {
         const existing = await firstRow<{ id: string }>(
           scoped(context, 'contacts')
             .select('id')
-            .ilike('email', payload.email)
+            .ilike('email', likeLiteral(payload.email))
             .is('duplicate_of_id', null)
+            /*
+             * Live contacts only. Without this the same file imports two ways:
+             * an administrator sees the deleted contact and updates it, so the
+             * row lands in the recycle bin and never appears; anybody else does
+             * not see it and creates a second contact with the same address.
+             */
+            .is('deleted_at', null)
             .limit(1)
             .maybeSingle(),
         )
