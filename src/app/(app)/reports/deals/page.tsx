@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 
 import { requireSession, scoped } from '@/lib/tenancy'
+import { timeZoneAbbreviation, timeZoneLabel } from '@/lib/timezone'
 import { formatDay, formatNumber, formatPercent } from '@/lib/format'
 import {
   DEFAULT_COLUMNS,
@@ -351,6 +352,17 @@ export default async function DealLedgerPage({
           <input id="to" name="to" type="date" className="input" defaultValue={filter.to} />
         </Field>
 
+        {/*
+          Which clock these dates are read against. Worth one line: a deal
+          raised at 8pm belongs to that evening, and somebody comparing this
+          report against a bank statement needs to know that without asking.
+        */}
+        <p className="self-end text-xs text-slate-400 sm:col-span-2 lg:col-span-4">
+          Dates are read in {timeZoneLabel(context.organization.timezone)} (
+          {timeZoneAbbreviation(context.organization.timezone)}), the organization&rsquo;s time
+          zone. An administrator can change it under Settings &rsaquo; Users.
+        </p>
+
         <input type="hidden" name="sort" value={`${effectiveSort.key}:${effectiveSort.direction}`} />
         {/*
           A GET form posts only its own fields, so without this the column
@@ -602,8 +614,11 @@ function Cell({ row, column }: { row: LedgerRow; column: LedgerColumnKey }) {
       )
     }
 
-    case 'created_at':
-      return <>{formatDay(row.created_at)}</>
+    // A plain calendar day by the time it gets here, already resolved in the
+    // organization's timezone by deal_ledger — so formatDay, which pins to UTC
+    // and is right for a date, is right for this too.
+    case 'created_day':
+      return <>{formatDay(row.created_day)}</>
 
     case 'expected_close_date':
     case 'actual_close_date':

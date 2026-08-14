@@ -98,7 +98,7 @@ export function closedByMonth(
     if (row.currency.toUpperCase() !== currency.toUpperCase()) continue
     if (!closedInPeriod(row, period)) continue
 
-    const key = monthKeyOf(row.actual_close_date ?? row.closed_at)
+    const key = monthKeyOf(row.actual_close_date ?? row.closed_day)
     if (!key) continue
 
     const bucket = buckets.get(key) ?? {

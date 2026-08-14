@@ -9,14 +9,13 @@ import {
   lossReasons,
   overdueDeals,
   stalledDeals,
-  today,
   withoutCloseDate,
   type StageDurationRow,
 } from '../src/lib/diagnostics'
 import { periodRange } from '../src/lib/performance'
 import type { LedgerRow } from '../src/lib/ledger'
 
-const NOW = new Date('2026-08-13T12:00:00Z')
+const NOW = '2026-08-13'
 const ALL = periodRange('all', NOW)
 
 function deal(overrides: Partial<LedgerRow> = {}): LedgerRow {
@@ -47,9 +46,11 @@ function deal(overrides: Partial<LedgerRow> = {}): LedgerRow {
     line_count: 0,
     costed_lines: 0,
     created_at: '2026-08-01T00:00:00Z',
+    created_day: '2026-08-01',
     expected_close_date: null,
     actual_close_date: null,
     closed_at: null,
+    closed_day: null,
     loss_reason: null,
     cycle_days: null,
     products: [],
@@ -94,8 +95,21 @@ describe('days between', () => {
     expect(daysBetween('not a date', '2026-08-13')).toBe(0)
   })
 
-  it('reads today as a plain date', () => {
-    expect(today(NOW)).toBe('2026-08-13')
+  /*
+   * There is no today() any more. The organization's day is resolved once, in
+   * lib/timezone, and passed in — so this module gives the same answer whatever
+   * zone the server happens to be running in, which is the property that was
+   * missing when it read the clock itself.
+   */
+  it('ages a deal against the day it is given, not the server clock', () => {
+    const rows = [deal({ created_day: '2026-08-01' })]
+    const near = ageingBuckets(rows, '2026-08-13').reduce((n, b) => n + b.deals, 0)
+    const far = ageingBuckets(rows, '2027-08-13').reduce((n, b) => n + b.deals, 0)
+    expect(near).toBe(1)
+    expect(far).toBe(1)
+    // Twelve months later the same deal is in an older bucket, which is only
+    // true if the day passed in is what decides.
+    expect(ageingBuckets(rows, '2026-08-13')).not.toEqual(ageingBuckets(rows, '2027-08-13'))
   })
 })
 

@@ -83,17 +83,19 @@ function quarterRange(year: number, quarter: number): { from: string; to: string
 /**
  * Resolves a period to dates.
  *
- * `today` is a parameter rather than read from the clock so the result is the
- * same in a test as it is in December, and it is read in UTC to match the way
- * every date in this app is rendered.
+ * `today` is the organization's calendar day, passed in rather than read from
+ * the clock — so the result is the same in a test as it is in December, and so
+ * this module never has to know which zone that day was resolved in. Reading
+ * the clock here in UTC used to roll "this year" over at 7pm on 31 December in
+ * Toronto, which is a quarter's figures changing under somebody mid-sentence.
  */
 export function periodRange(
   key: PeriodKey,
-  today: Date = new Date(),
+  today: string,
   custom: { from?: string; to?: string } = {},
 ): Period {
-  const year = today.getUTCFullYear()
-  const quarter = Math.floor(today.getUTCMonth() / 3)
+  const year = Number(today.slice(0, 4))
+  const quarter = Math.floor((Number(today.slice(5, 7)) - 1) / 3)
 
   switch (key) {
     case 'this-quarter': {
@@ -146,7 +148,9 @@ export function parsePeriodKey(raw: string | undefined): PeriodKey {
 export function closedInPeriod(row: LedgerRow, period: Period): boolean {
   if (!period.from && !period.to) return true
 
-  const closed = row.actual_close_date ?? row.closed_at?.slice(0, 10) ?? null
+  // closed_day is already the organization's calendar day; actual_close_date is
+  // the one a person typed and wins when they have corrected it.
+  const closed = row.actual_close_date ?? row.closed_day ?? null
   if (!closed) return false
 
   const day = closed.slice(0, 10)

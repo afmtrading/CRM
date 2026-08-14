@@ -21,7 +21,7 @@ import { periodRange } from '../src/lib/performance'
 import type { LedgerRow } from '../src/lib/ledger'
 import { compactMoney } from '../src/components/charts'
 
-const TODAY = new Date('2026-08-13T12:00:00Z')
+const TODAY = '2026-08-13'
 const ALL = periodRange('all', TODAY)
 
 function deal(overrides: Partial<LedgerRow> = {}): LedgerRow {
@@ -52,9 +52,11 @@ function deal(overrides: Partial<LedgerRow> = {}): LedgerRow {
     line_count: 0,
     costed_lines: 0,
     created_at: '2026-01-10T00:00:00Z',
+    created_day: '2026-01-10',
     expected_close_date: null,
     actual_close_date: null,
     closed_at: null,
+    closed_day: null,
     loss_reason: null,
     cycle_days: null,
     products: [],

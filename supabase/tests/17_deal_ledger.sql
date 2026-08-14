@@ -322,4 +322,64 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Days belong to the organization, not to UTC.
+-- =============================================================================
+do $$
+declare
+  v_org   uuid := (select id from fixture where key = 'org');
+  v_stage uuid := (select id from fixture where key = 'stage');
+  v_rep   uuid := (select id from fixture where key = 'rep');
+  v_late  uuid;
+begin
+  raise notice 'The organization''s clock:';
+
+  -- Changing the organization is an administrator's job, so the setting is
+  -- moved as one and the ledger is read as a manager. Signing in as the manager
+  -- throughout would have let the update fail silently under RLS and left the
+  -- first assertion passing only because it matched the default.
+  perform sign_in_as('admin_auth');
+
+  -- 8pm on 13 August in Toronto. In UTC that is 03:00 on the 14th, which is
+  -- the day every report used to file it under.
+  insert into deals (organization_id, name, stage_id, value, currency, owner_id, created_at)
+  values (v_org, 'Late evening deal', v_stage, 100, 'USD', v_rep, '2026-08-14T03:00:00Z')
+  returning id into v_late;
+
+  update organizations set timezone = 'America/Toronto' where id = v_org;
+  perform test_assert(
+    (select timezone from organizations where id = v_org) = 'America/Toronto',
+    'the administrator can set the organization''s zone'
+  );
+
+  perform test_assert(
+    (select created_day from public.deal_ledger() where deal_id = v_late) = date '2026-08-13',
+    'a deal raised at 8pm in Toronto is initiated on the 13th, not the 14th'
+  );
+
+  update organizations set timezone = 'UTC' where id = v_org;
+
+  perform test_assert(
+    (select created_day from public.deal_ledger() where deal_id = v_late) = date '2026-08-14',
+    'and the same instant is the 14th for an organization keeping UTC'
+  );
+
+  -- The setting is the only thing that moved, so the instant itself must not.
+  perform test_assert(
+    (select created_at from public.deal_ledger() where deal_id = v_late)
+      = timestamptz '2026-08-14T03:00:00Z',
+    'the stored instant is untouched either way'
+  );
+
+  update organizations set timezone = 'America/Toronto' where id = v_org;
+
+  perform test_assert(
+    (select count(*) from public.deal_ledger()
+      where deal_id = v_late and created_day between date '2026-08-13' and date '2026-08-13') = 1,
+    'so a range over the 13th finds it, which is what the filter compares'
+  );
+end;
+$$;
+
+
 rollback;

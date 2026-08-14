@@ -101,6 +101,12 @@ export type OrganizationRow = {
   logo_url: string | null
   primary_color: string
   default_currency: string
+  /**
+   * IANA zone. The one clock this organization's reports are read against —
+   * an instant becomes a calendar day here and nowhere else, so two people in
+   * different cities see the same figure. See lib/timezone.ts.
+   */
+  timezone: string
   created_at: string
 }
 
@@ -948,7 +954,13 @@ export interface Database {
     Tables: {
       organizations: TableDef<
         OrganizationRow,
-        'id' | 'status' | 'logo_url' | 'primary_color' | 'default_currency' | 'created_at'
+        | 'id'
+        | 'status'
+        | 'logo_url'
+        | 'primary_color'
+        | 'default_currency'
+        | 'timezone'
+        | 'created_at'
       >
       users: TableDef<
         UserRow,

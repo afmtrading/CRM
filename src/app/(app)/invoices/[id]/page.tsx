@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
+import { todayIn } from '@/lib/timezone'
 import { formatDate, formatDay, formatNumber, formatPrice } from '@/lib/format'
 import {
   INVOICE_STATUS_LABELS,
@@ -27,7 +28,7 @@ export const dynamic = 'force-dynamic'
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const context = await requireSession()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayIn(context.organization.timezone)
 
   const { data } = await scoped(context, 'invoices').select('*').eq('id', id).maybeSingle()
   if (!data) notFound()
