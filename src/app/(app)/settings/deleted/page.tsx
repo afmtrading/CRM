@@ -3,10 +3,29 @@ import Link from 'next/link'
 import { requireAdmin, scoped } from '@/lib/tenancy'
 import { contactName, formatCurrency, formatDay } from '@/lib/format'
 import { DateTime } from '@/components/date-time'
-import type { CompanyRow, ContactRow, DealRow, ProductRow, UserRow } from '@/lib/database.types'
-import { DealStatusBadge, EmptyState, PageHeader, Section } from '@/components/ui'
+import type {
+  CompanyRow,
+  ContactRow,
+  DealRow,
+  ProductRow,
+  SalesOrderRow,
+  UserRow,
+} from '@/lib/database.types'
+import {
+  DealStatusBadge,
+  EmptyState,
+  PageHeader,
+  SalesOrderStatusBadge,
+  Section,
+} from '@/components/ui'
 
-import { restoreCompany, restoreContact, restoreDeal, restoreProduct } from '../actions'
+import {
+  restoreCompany,
+  restoreContact,
+  restoreDeal,
+  restoreProduct,
+  restoreSalesOrder,
+} from '../actions'
 
 export const metadata = { title: 'Deleted records · FLO CRM' }
 
@@ -20,7 +39,14 @@ export const metadata = { title: 'Deleted records · FLO CRM' }
 export default async function DeletedRecordsPage() {
   const context = await requireAdmin()
 
-  const [{ data: contacts }, { data: companies }, { data: products }, { data: deals }, { data: users }] =
+  const [
+    { data: contacts },
+    { data: companies },
+    { data: products },
+    { data: deals },
+    { data: salesOrders },
+    { data: users },
+  ] =
     await Promise.all([
       scoped(context, 'contacts')
         .select('*')
@@ -42,6 +68,11 @@ export default async function DeletedRecordsPage() {
         .not('deleted_at', 'is', null)
         .order('deleted_at', { ascending: false })
         .limit(200),
+      scoped(context, 'sales_orders')
+        .select('*')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(200),
       scoped(context, 'users').select('*'),
     ])
 
@@ -49,6 +80,7 @@ export default async function DeletedRecordsPage() {
   const companyRows = (companies ?? []) as CompanyRow[]
   const productRows = (products ?? []) as ProductRow[]
   const dealRows = (deals ?? []) as (DealRow & { stages: { name: string } | null })[]
+  const salesOrderRows = (salesOrders ?? []) as SalesOrderRow[]
   const userList = (users ?? []) as UserRow[]
 
   const deleterName = (id: string | null) => {
@@ -58,7 +90,11 @@ export default async function DeletedRecordsPage() {
   }
 
   const total =
-    contactRows.length + companyRows.length + productRows.length + dealRows.length
+    contactRows.length +
+    companyRows.length +
+    productRows.length +
+    dealRows.length +
+    salesOrderRows.length
 
   return (
     <>
@@ -70,7 +106,7 @@ export default async function DeletedRecordsPage() {
       {total === 0 ? (
         <EmptyState
           title="Nothing has been deleted"
-          description="When someone deletes a contact, a company, a product or a deal it lands here, and every administrator is notified."
+          description="When someone deletes a contact, a company, a product, a deal or a sales order it lands here, and every administrator is notified."
         />
       ) : (
         <div className="space-y-5">
@@ -258,6 +294,53 @@ export default async function DeletedRecordsPage() {
                         <td className="text-right">
                           <form action={restoreProduct}>
                             <input type="hidden" name="id" value={product.id} />
+                            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                              Restore
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          )}
+
+          {salesOrderRows.length > 0 && (
+            <Section title={`Sales orders (${salesOrderRows.length})`}>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Number</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th>Deleted by</th>
+                      <th>Deleted</th>
+                      <th className="text-right">Restore</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesOrderRows.map((order) => (
+                      <tr key={order.id}>
+                        <td>
+                          <Link
+                            href={`/sales-orders/${order.id}`}
+                            className="font-medium text-slate-900 hover:text-brand-700"
+                          >
+                            {order.number}
+                          </Link>
+                        </td>
+                        <td>
+                          <SalesOrderStatusBadge status={order.status} />
+                        </td>
+                        <td className="text-slate-600">{formatDay(order.order_date)}</td>
+                        <td className="text-slate-600">{deleterName(order.deleted_by)}</td>
+                        <td className="text-slate-500"><DateTime value={order.deleted_at} /></td>
+                        <td className="text-right">
+                          <form action={restoreSalesOrder}>
+                            <input type="hidden" name="id" value={order.id} />
                             <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
                               Restore
                             </button>

@@ -19,7 +19,9 @@ import {
   MailIcon,
   PipelinesIcon,
   ProductsIcon,
+  InvoiceIcon,
   ReportsIcon,
+  SalesOrderIcon,
   ScoringIcon,
   SearchIcon,
   SendIcon,
@@ -42,6 +44,13 @@ const NAV = [
   { href: '/companies', label: 'Companies', icon: <CompaniesIcon className={ICON} /> },
   { href: '/deals', label: 'Deals', icon: <DealsIcon className={ICON} /> },
   { href: '/products', label: 'Products', icon: <ProductsIcon className={ICON} /> },
+  /*
+   * Top level, and next to Products rather than under Deals. A sales order is
+   * not a stage a deal reaches — the two are separate concepts and an order can
+   * exist for a company that never had a deal. See docs/SALES_ORDERS_INVOICES.md.
+   */
+  { href: '/sales-orders', label: 'Sales orders', icon: <SalesOrderIcon className={ICON} /> },
+  { href: '/invoices', label: 'Invoices', icon: <InvoiceIcon className={ICON} /> },
   { href: '/activities', label: 'Activities', icon: <ActivityIcon className={ICON} /> },
   { href: '/lists', label: 'Lists', icon: <MailIcon className={ICON} /> },
   { href: '/campaigns', label: 'Campaigns', icon: <SendIcon className={ICON} /> },
@@ -82,7 +91,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       {/* Icon rail on narrow screens, full labels from lg up — one nav, not two. */}
-      <aside className="sticky top-0 flex h-screen w-16 shrink-0 flex-col border-r border-slate-200/80 bg-white lg:w-60">
+      <aside className="sticky top-0 flex h-screen w-16 shrink-0 flex-col border-r border-slate-200/80 bg-white lg:w-60 print:hidden">
         <div className="px-3 py-5 lg:px-5">
           <Link href="/" className="flex items-center gap-2.5" title={organization.name}>
             <span
@@ -143,7 +152,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur print:hidden">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             {/* Global search lands on Contacts, which is where a name lookup
                 almost always means to go. */}
@@ -209,7 +218,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1600px] flex-1 p-4 sm:p-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] flex-1 p-4 sm:p-6 print:max-w-none print:p-0">{children}</main>
       </div>
     </div>
   )
