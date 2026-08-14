@@ -8,6 +8,8 @@ import type { CompanyRow, InvoiceRow, InvoiceStatus } from '@/lib/database.types
 import { MoneyTotals } from '@/components/money'
 import { EmptyState, ErrorNote, InvoiceStatusBadge, PageHeader } from '@/components/ui'
 
+import { createInvoice } from './actions'
+
 export const metadata = { title: 'Invoices · FLO CRM' }
 
 export const dynamic = 'force-dynamic'
@@ -63,9 +65,20 @@ export default async function InvoicesPage({
         title="Invoices"
         description="What has been billed, and what is still owed. An invoice is fixed at issue — editing the order behind it does not move it."
         actions={
-          <Link href="/sales-orders" className="btn-secondary">
-            Sales orders
-          </Link>
+          <>
+            <Link href="/sales-orders" className="btn-secondary">
+              Sales orders
+            </Link>
+            {/* An invoice does not need an order behind it. Raising one lands on
+                a draft that can be built up and then issued. */}
+            {context.canWrite && (
+              <form action={createInvoice}>
+                <button type="submit" className="btn-primary">
+                  New invoice
+                </button>
+              </form>
+            )}
+          </>
         }
       />
 
@@ -152,7 +165,7 @@ export default async function InvoicesPage({
       {invoices.length === 0 ? (
         <EmptyState
           title="No invoices"
-          description="An invoice comes from a confirmed sales order. Confirm one and bill it."
+          description="Bill a confirmed sales order, or raise an invoice on its own with New invoice."
         />
       ) : (
         <div className="card overflow-hidden">

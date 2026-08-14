@@ -21,7 +21,15 @@ import type {
 import { Money } from '@/components/money'
 import { InvoiceStatusBadge, PageHeader, Section } from '@/components/ui'
 
-import { deleteInvoice, recordPayment, setInvoiceStatus, updateInvoice } from '../actions'
+import {
+  addInvoiceLine,
+  deleteInvoice,
+  recordPayment,
+  removeInvoiceLine,
+  setInvoiceShipping,
+  setInvoiceStatus,
+  updateInvoice,
+} from '../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +42,14 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   if (!data) notFound()
   const invoice = data as InvoiceRow
 
-  const [{ data: lineRows }, { data: paymentRows }, { data: company }, { data: contact }, { data: order }] =
+  const [
+    { data: lineRows },
+    { data: paymentRows },
+    { data: company },
+    { data: contact },
+    { data: order },
+    { data: products },
+  ] =
     await Promise.all([
       scoped(context, 'invoice_lines').select('*').eq('invoice_id', id).order('position'),
       scoped(context, 'invoice_payments').select('*').eq('invoice_id', id).order('paid_at'),
@@ -47,11 +62,40 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       invoice.sales_order_id
         ? scoped(context, 'sales_orders').select('*').eq('id', invoice.sales_order_id).maybeSingle()
         : Promise.resolve({ data: null }),
+      /*
+       * Only for a draft raised on its own — the one kind of invoice whose
+       * lines can still change. Everything else is a snapshot, so a picker
+       * would be a control that does nothing.
+       */
+      invoice.sales_order_id === null && invoice.status === 'draft'
+        ? scoped(context, 'products')
+            .select('id, name, sku, unit, unit_price, unit_cost')
+            .is('deleted_at', null)
+            .eq('active', true)
+            .order('name')
+            .limit(500)
+        : Promise.resolve({ data: [] }),
     ])
 
   const lines = (lineRows ?? []) as InvoiceLineRow[]
   const payments = (paymentRows ?? []) as InvoicePaymentRow[]
   const salesOrder = order as SalesOrderRow | null
+  /*
+   * The only invoice anybody may still change. An invoice from an order is the
+   * order's word, and one that has been issued is what the customer received —
+   * the database refuses both, and this is the interface agreeing with it.
+   */
+  const composable =
+    invoice.sales_order_id === null && invoice.status === 'draft' && context.canWrite
+  const catalogue = (products ?? []) as {
+    id: string
+    name: string
+    sku: string | null
+    unit: string
+    unit_price: number
+    unit_cost: number
+  }[]
+
   const owed = Number(invoice.total) - Number(invoice.amount_paid)
   const late = daysOverdue(invoice.due_date, today)
 
@@ -119,6 +163,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                     <th className="text-right">Price</th>
                     <th className="text-right">Discount</th>
                     <th className="text-right">Total</th>
+                    {composable && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -147,15 +192,131 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                       <td className="text-right font-medium">
                         {formatPrice(Number(line.line_total), invoice.currency)}
                       </td>
+                      {composable && (
+                        <td className="text-right">
+                          <form action={removeInvoiceLine}>
+                            <input type="hidden" name="id" value={line.id} />
+                            <input type="hidden" name="invoice_id" value={id} />
+                            <button
+                              type="submit"
+                              className="text-xs text-slate-400 hover:text-red-600"
+                            >
+                              Remove
+                            </button>
+                          </form>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
+            {composable && (
+              <form
+                action={addInvoiceLine}
+                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-6"
+              >
+                <input type="hidden" name="invoice_id" value={id} />
+
+                <div className="sm:col-span-2">
+                  <label className="label" htmlFor="product_id">
+                    Product
+                  </label>
+                  <select id="product_id" name="product_id" className="input">
+                    <option value="">A line of my own</option>
+                    {catalogue.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                        {product.sku ? ` · ${product.sku}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="label" htmlFor="name">
+                    Or a description
+                  </label>
+                  <input id="name" name="name" className="input" placeholder="Consultancy" />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="quantity">
+                    Quantity
+                  </label>
+                  <input
+                    id="quantity"
+                    name="quantity"
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    defaultValue="1"
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="unit_price">
+                    Unit price
+                  </label>
+                  <input
+                    id="unit_price"
+                    name="unit_price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue="0"
+                    className="input"
+                  />
+                </div>
+
+                {/* Same pair as a sales order line, and the same rule behind it:
+                    the discount is computed from these, never typed. */}
+                <div>
+                  <label className="label" htmlFor="revised_rate_type">
+                    Revise by
+                  </label>
+                  <select id="revised_rate_type" name="revised_rate_type" className="input">
+                    <option value="">List price</option>
+                    <option value="percent">% off</option>
+                    <option value="fixed">Fixed price</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="revised_rate">
+                    Rate
+                  </label>
+                  <input
+                    id="revised_rate"
+                    name="revised_rate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="input"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="label" htmlFor="notes">
+                    Line note
+                  </label>
+                  <input id="notes" name="notes" className="input" />
+                </div>
+
+                <div className="flex items-end sm:col-span-6">
+                  <button type="submit" className="btn-primary">
+                    Add line
+                  </button>
+                </div>
+              </form>
+            )}
+
             <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
-              These lines are a snapshot taken when the invoice was raised. Renaming a product or
-              editing the order behind it does not change what this document says.
+              {composable
+                ? 'A draft raised on its own can still be built up. The moment it is marked sent these lines freeze, and the only way back is to void it and raise another.'
+                : 'These lines are a snapshot taken when the invoice was raised. Renaming a product or editing the order behind it does not change what this document says.'}
             </p>
           </Section>
 
@@ -239,7 +400,25 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 <Money value={Number(invoice.subtotal)} currency={invoice.currency} />
               </Row>
               <Row label="Shipping">
-                <Money value={Number(invoice.shipping_charge)} currency={invoice.currency} />
+                {composable ? (
+                  <form action={setInvoiceShipping} className="flex items-center gap-1">
+                    <input type="hidden" name="id" value={id} />
+                    <input
+                      name="shipping_charge"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      defaultValue={String(invoice.shipping_charge)}
+                      className="input w-24 py-1 text-right text-sm"
+                      aria-label="Shipping charge"
+                    />
+                    <button type="submit" className="text-xs text-slate-500 hover:text-slate-900">
+                      Save
+                    </button>
+                  </form>
+                ) : (
+                  <Money value={Number(invoice.shipping_charge)} currency={invoice.currency} />
+                )}
               </Row>
               <Row label="Total" strong>
                 <Money value={Number(invoice.total)} currency={invoice.currency} />

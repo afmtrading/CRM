@@ -715,6 +715,179 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- An invoice raised on its own.
+-- =============================================================================
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_amp     uuid := (select id from fixture where key = 'amp');
+  v_invoice uuid;
+  v_line    uuid;
+  v_row     record;
+begin
+  raise notice 'An invoice with no order behind it:';
+
+  perform sign_in_as('mgr_auth');
+
+  v_invoice := public.create_invoice((select id from fixture where key = 'acme'), null, null, 'USD');
+
+  perform test_assert(
+    (select sales_order_id is null from invoices where id = v_invoice),
+    'it stands on its own, with no order behind it'
+  );
+  perform test_assert(
+    (select status from invoices where id = v_invoice) = 'draft',
+    'and starts as a draft'
+  );
+  perform test_assert(
+    (select number from invoices where id = v_invoice) ~ '^INV-\d+$',
+    'taking the next number in the same sequence as a converted one'
+  );
+
+  -- The money rule is the one the sales order lines use: 10% off 200, five of
+  -- them, is 100 off. Nothing sends a discount.
+  v_line := public.add_invoice_line(v_invoice, v_amp, null, 5, 200, 0, 'percent', 10, null);
+
+  perform test_assert(
+    (select discount from invoice_lines where id = v_line) = 100,
+    'a revised rate becomes money off, computed here rather than sent'
+  );
+  perform test_assert(
+    (select line_total from invoice_lines where id = v_line) = 900,
+    'and the line total follows it'
+  );
+  perform test_assert(
+    (select name from invoice_lines where id = v_line) = 'Amplifier',
+    'the product name is snapshotted onto the line'
+  );
+
+  -- Totals are stored, and stored is not the same as typed.
+  perform test_assert(
+    (select subtotal from invoices where id = v_invoice) = 900,
+    'the invoice total follows its lines'
+  );
+
+  update invoices set shipping_charge = 50 where id = v_invoice;
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 950,
+    'and shipping moves the total too'
+  );
+
+  perform public.remove_invoice_line(v_line);
+  perform test_assert(
+    (select subtotal from invoices where id = v_invoice) = 0,
+    'removing the line takes the total back down'
+  );
+
+  -- A line still needs to be something.
+  perform test_assert(
+    refuses(format('select public.add_invoice_line(%L, null, null, 1, 10)', v_invoice)),
+    'a line with neither a product nor a description is refused'
+  );
+
+  insert into fixture values ('standalone', v_invoice);
+end;
+$$;
+
+-- =============================================================================
+-- An issued invoice is frozen, whatever it came from.
+-- =============================================================================
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_amp     uuid := (select id from fixture where key = 'amp');
+  v_invoice uuid := (select id from fixture where key = 'standalone');
+  v_from_so uuid := (select id from fixture where key = 'invoice');
+begin
+  raise notice 'What may still be written to:';
+
+  perform sign_in_as('mgr_auth');
+
+  perform public.add_invoice_line(v_invoice, v_amp, null, 2, 200, 0, null, null, null);
+  update invoices set status = 'sent' where id = v_invoice;
+
+  perform test_assert(
+    refuses(format('select public.add_invoice_line(%L, %L, null, 1, 10)', v_invoice, v_amp)),
+    'an issued invoice takes no more lines'
+  );
+  perform test_assert(
+    refuses(format(
+      'select public.remove_invoice_line(%L)',
+      (select id from invoice_lines where invoice_id = v_invoice limit 1)
+    )),
+    'nor loses the ones it has'
+  );
+
+  -- The rule the original design protects: a converted invoice is the order''s
+  -- word, and is never edited on the invoice.
+  perform test_assert(
+    refuses(format('select public.add_invoice_line(%L, %L, null, 1, 10)', v_from_so, v_amp)),
+    'and an invoice from an order is never editable, draft or not'
+  );
+
+  -- No write policy exists, so there is no statement that reaches the table.
+  perform test_assert(
+    refuses(format(
+      'update invoice_lines set quantity = 99 where invoice_id = %L', v_invoice
+    )),
+    'and no direct write reaches an invoice line at all'
+  );
+end;
+$$;
+
+-- =============================================================================
+-- A standalone invoice holds stock; one from an order does not hold it twice.
+-- =============================================================================
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_amp     uuid := (select id from fixture where key = 'amp');
+  v_invoice uuid := (select id from fixture where key = 'standalone');
+  v_row     record;
+  v_before  numeric;
+begin
+  raise notice 'Stock held by an invoice:';
+
+  perform sign_in_as('mgr_auth');
+
+  select committed_invoices into v_before from public.product_stock_summary(v_amp);
+  perform test_assert(v_before = 2, 'a sent invoice holds the two on its line');
+
+  update invoices set status = 'draft' where id = v_invoice;
+  perform test_assert(
+    (select committed_invoices from public.product_stock_summary(v_amp)) = 0,
+    'a draft holds nothing'
+  );
+
+  update invoices set status = 'partial' where id = v_invoice;
+  perform test_assert(
+    (select committed_invoices from public.product_stock_summary(v_amp)) = 2,
+    'a part-paid one still holds it'
+  );
+
+  -- Paid closes the transaction. Holding stock for every invoice ever settled
+  -- would commit the warehouse a slice at a time.
+  update invoices set status = 'paid' where id = v_invoice;
+  perform test_assert(
+    (select committed_invoices from public.product_stock_summary(v_amp)) = 0,
+    'a paid one releases it'
+  );
+
+  update invoices set status = 'void' where id = v_invoice;
+  perform test_assert(
+    (select committed_invoices from public.product_stock_summary(v_amp)) = 0,
+    'and so does a void one'
+  );
+
+  -- The double-count this rule exists to prevent.
+  perform test_assert(
+    (select count(*) from public.product_stock_summary(v_amp)) = 1,
+    'the summary still answers with one row'
+  );
+end;
+$$;
+
 reset role;
 
 rollback;

@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import { settableInvoiceStatuses } from '@/lib/sales'
-import type { InvoiceStatus } from '@/lib/database.types'
+import type { InvoiceStatus, RevisedRateType } from '@/lib/database.types'
 
 /**
  * Invoices: the header, the payment ledger, and voiding one.
@@ -155,4 +155,136 @@ export async function deleteInvoice(formData: FormData) {
 
   revalidatePath('/invoices')
   redirect('/invoices')
+}
+
+// -----------------------------------------------------------------------------
+// Raising one without a sales order
+//
+// An invoice usually comes from an order, and that path snapshots the order and
+// freezes. This one is composed instead: a draft that can be built up, then
+// issued. The database is what decides which of the two a given invoice is —
+// every write below goes through a function that refuses anything already
+// issued, or anything that came from an order.
+// -----------------------------------------------------------------------------
+
+export async function createInvoice(formData: FormData) {
+  const context = await requireSession()
+  assertCanWrite(context)
+
+  const { data, error } = await context.supabase.rpc('create_invoice', {
+    p_company_id: (formData.get('company_id') as string) || null,
+    p_contact_id: (formData.get('contact_id') as string) || null,
+    p_owner_id: null,
+    p_currency: ((formData.get('currency') as string) || '').trim() || null,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/invoices')
+  redirect(`/invoices/${data}`)
+}
+
+const lineSchema = z
+  .object({
+    product_id: z
+      .string()
+      .trim()
+      .transform((value) => (value === '' ? null : value))
+      .nullable()
+      .default(null),
+    name: text(200),
+    notes: text(500),
+    quantity: z.coerce.number().min(0).default(1),
+    unit_price: z.coerce.number().min(0).default(0),
+    unit_cost: z.coerce.number().min(0).default(0),
+    revised_rate_type: z
+      .string()
+      .trim()
+      .transform((value) => (value === '' ? null : value))
+      .refine((value) => value === null || value === 'percent' || value === 'fixed', {
+        message: 'A revised rate is either a percentage or a fixed price',
+      })
+      .nullable()
+      .default(null),
+    revised_rate: z
+      .string()
+      .trim()
+      .transform((value) => (value === '' ? null : Number(value)))
+      .refine((value) => value === null || (Number.isFinite(value) && value >= 0), {
+        message: 'A revised rate has to be a number, and cannot be negative',
+      })
+      .nullable()
+      .default(null),
+  })
+  .refine((line) => Boolean(line.product_id) || Boolean(line.name), {
+    message: 'Each line needs a product or a description',
+  })
+  .refine((line) => (line.revised_rate_type === null) === (line.revised_rate === null), {
+    message: 'A revised rate needs both a kind and a value',
+  })
+
+export async function addInvoiceLine(formData: FormData) {
+  const context = await requireSession()
+  assertCanWrite(context)
+
+  const invoiceId = formData.get('invoice_id') as string
+  const parsed = lineSchema.safeParse(Object.fromEntries(formData))
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? 'That line is not valid')
+  }
+
+  // No discount is sent. The function computes it from the rate with the same
+  // SQL the sales order lines use, so the two documents cannot price a line
+  // differently.
+  const { error } = await context.supabase.rpc('add_invoice_line', {
+    p_invoice_id: invoiceId,
+    p_product_id: parsed.data.product_id,
+    p_name: parsed.data.name || null,
+    p_quantity: parsed.data.quantity,
+    p_unit_price: parsed.data.unit_price,
+    p_unit_cost: parsed.data.unit_cost,
+    p_rate_type: parsed.data.revised_rate_type as RevisedRateType | null,
+    p_rate: parsed.data.revised_rate,
+    p_notes: parsed.data.notes || null,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/invoices/${invoiceId}`)
+}
+
+export async function removeInvoiceLine(formData: FormData) {
+  const context = await requireSession()
+  assertCanWrite(context)
+
+  const invoiceId = formData.get('invoice_id') as string
+
+  const { error } = await context.supabase.rpc('remove_invoice_line', {
+    p_line_id: formData.get('id') as string,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/invoices/${invoiceId}`)
+}
+
+/** Shipping is a header field, but it moves the total, so it lives with the lines. */
+export async function setInvoiceShipping(formData: FormData) {
+  const context = await requireSession()
+  assertCanWrite(context)
+
+  const id = formData.get('id') as string
+  const shipping = Number(formData.get('shipping_charge') ?? 0)
+
+  if (!Number.isFinite(shipping) || shipping < 0) {
+    throw new Error('Shipping has to be a number, and cannot be negative')
+  }
+
+  const { error } = await scoped(context, 'invoices')
+    .update({ shipping_charge: shipping })
+    .eq('id', id)
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/invoices/${id}`)
 }
