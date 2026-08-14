@@ -1,9 +1,9 @@
 import Link from 'next/link'
 
-import { requireSession, scoped } from '@/lib/tenancy'
+import { requireSession } from '@/lib/tenancy'
 import { todayIn } from '@/lib/timezone'
 import { formatNumber } from '@/lib/format'
-import { regionFieldKey, type LedgerRow } from '@/lib/ledger'
+import type { LedgerRow } from '@/lib/ledger'
 import {
   PERIOD_OPTIONS,
   parsePeriodKey,
@@ -18,7 +18,6 @@ import {
   ownerBars,
   type StageFunnelRow,
 } from '@/lib/charts'
-import type { CustomFieldDefinitionRow } from '@/lib/database.types'
 import {
   CycleHistogram,
   MonthlyColumns,
@@ -52,16 +51,22 @@ export default async function ReportChartsPage({
     to: one('to'),
   })
 
-  const { data: definitions } = await scoped(context, 'custom_field_definitions').select('*')
-
-  // The same ledger the other two reports read, and the same reason it needs no
-  // access rules of its own: invoker, so the rows that arrive are the rows this
-  // person may see.
-  const { data: ledger, error } = await context.supabase.rpc('deal_ledger', {
-    p_region_key: regionFieldKey((definitions ?? []) as CustomFieldDefinitionRow[]),
-  })
-
-  const { data: funnel } = await context.supabase.rpc('stage_funnel', { p_pipeline_id: null })
+  /*
+   * No region key. Nothing on this page reads row.regions, and asking for them
+   * meant first fetching every custom field definition to work out which field
+   * holds them — a whole round trip to answer a question the page never asks.
+   * Only the ledger itself, which has a Region column and a Region filter,
+   * needs that.
+   *
+   * The two calls are independent, so they go together: the funnel used to wait
+   * for the ledger for no reason other than the order the lines were written in.
+   */
+  const [{ data: ledger, error }, { data: funnel }] = await Promise.all([
+    // Invoker, so the rows that arrive are the rows this person may see — the
+    // same reason the other two reports need no access rules of their own.
+    context.supabase.rpc('deal_ledger', { p_region_key: null }),
+    context.supabase.rpc('stage_funnel', { p_pipeline_id: null }),
+  ])
 
   const rows = (ledger ?? []) as LedgerRow[]
   const currencies = currenciesIn(rows)

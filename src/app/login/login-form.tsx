@@ -3,9 +3,20 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-
 type Mode = 'password' | 'magic-link'
+
+/**
+ * The Supabase client, fetched when it is first needed rather than with the page.
+ *
+ * It is 69 kB gzipped and this is the first page anybody sees, on whatever
+ * connection they have, with nothing cached. Nothing on the form needs it until
+ * the button is pressed — so it downloads while the person is typing their
+ * email, and the page is interactive the moment it paints.
+ */
+async function authClient() {
+  const { createSupabaseBrowserClient } = await import('@/lib/supabase/client')
+  return createSupabaseBrowserClient()
+}
 
 export function LoginForm({ next, initialError }: { next?: string; initialError?: string }) {
   const router = useRouter()
@@ -22,7 +33,7 @@ export function LoginForm({ next, initialError }: { next?: string; initialError?
     setError(null)
     setNotice(null)
 
-    const supabase = createSupabaseBrowserClient()
+    const supabase = await authClient()
 
     if (mode === 'magic-link') {
       const { error: linkError } = await supabase.auth.signInWithOtp({

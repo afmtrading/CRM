@@ -206,11 +206,20 @@ export default async function ProductsPage({
                           {imageUrl ? (
                             /* The product's own photo where there is one. A 36px
                                square of a storage URL is not worth next/image,
-                               which would also need a remote pattern for it. */
+                               which would also need a remote pattern for it —
+                               but it is worth the three attributes next/image
+                               would have set: intrinsic size so the browser
+                               reserves the box, and lazy loading so a catalogue
+                               of fifty does not fetch fifty images above the
+                               fold. */
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={imageUrl}
                               alt=""
+                              width={36}
+                              height={36}
+                              loading="lazy"
+                              decoding="async"
                               className="h-full w-full object-cover"
                             />
                           ) : (

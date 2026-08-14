@@ -1,9 +1,9 @@
 import Link from 'next/link'
 
-import { requireSession, scoped } from '@/lib/tenancy'
+import { requireSession } from '@/lib/tenancy'
 import { todayIn } from '@/lib/timezone'
 import { formatDay, formatNumber, formatPercent } from '@/lib/format'
-import { regionFieldKey, type LedgerRow } from '@/lib/ledger'
+import type { LedgerRow } from '@/lib/ledger'
 import { PERIOD_OPTIONS, parsePeriodKey, periodRange } from '@/lib/performance'
 import { funnelSteps, type StageFunnelRow } from '@/lib/charts'
 import {
@@ -16,7 +16,6 @@ import {
   withoutCloseDate,
   type StageDurationRow,
 } from '@/lib/diagnostics'
-import type { CustomFieldDefinitionRow } from '@/lib/database.types'
 import { MoneyTotals } from '@/components/money'
 import { EmptyState, ErrorNote, PageHeader } from '@/components/ui'
 
@@ -47,11 +46,11 @@ export default async function DiagnosticsPage({
     to: one('to'),
   })
 
-  const { data: definitions } = await scoped(context, 'custom_field_definitions').select('*')
-
   const [{ data: ledger, error }, { data: funnel }, { data: durations }] = await Promise.all([
     context.supabase.rpc('deal_ledger', {
-      p_region_key: regionFieldKey((definitions ?? []) as CustomFieldDefinitionRow[]),
+      // Nothing here reads row.regions, so the field-definition lookup that
+      // used to resolve the key is a round trip for an unused column.
+      p_region_key: null,
     }),
     context.supabase.rpc('stage_funnel', { p_pipeline_id: null }),
     context.supabase.rpc('deal_stage_durations', { p_deal_id: null }),
