@@ -162,6 +162,31 @@ export type PermissionSetRow = {
   updated_at: string
 }
 
+/**
+ * How a particular shape of file was read last time.
+ *
+ * Matched by `signature` — the headings, sorted and joined — rather than by the
+ * file's name, because a list arrives called something different every month
+ * while its columns stay put. See 20260239000000.
+ */
+export type ImportProfileRow = {
+  id: string
+  organization_id: string
+  name: string
+  signature: string
+  headers: string[]
+  /** Column heading to target key. */
+  mapping: Record<string, string>
+  /** Per option field, spelling to spelling. A correction table, not a whitelist. */
+  value_merges: Record<string, Record<string, string>>
+  placeholders: string[]
+  times_used: number
+  last_used_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type ContactRow = {
   id: string
   organization_id: string
@@ -1053,6 +1078,19 @@ export interface Database {
         | 'last_login_at'
         | 'created_at'
       >
+      import_profiles: TableDef<
+        ImportProfileRow,
+        | 'id'
+        | 'headers'
+        | 'mapping'
+        | 'value_merges'
+        | 'placeholders'
+        | 'times_used'
+        | 'last_used_at'
+        | 'created_by'
+        | 'created_at'
+        | 'updated_at'
+      >
       permission_sets: TableDef<
         PermissionSetRow,
         | 'id'
@@ -1393,6 +1431,17 @@ export interface Database {
       permission_set_members: {
         Args: Record<string, never>
         Returns: { permission_set_id: string; members: number }[]
+      }
+      save_import_profile: {
+        Args: {
+          p_name: string
+          p_signature: string
+          p_headers: string[]
+          p_mapping: Record<string, string>
+          p_value_merges: Record<string, Record<string, string>>
+          p_placeholders: string[]
+        }
+        Returns: string
       }
       create_permission_set: { Args: { p_name: string }; Returns: string }
       update_permission_set: {

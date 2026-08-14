@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from 'react'
 
-import { detectPlaceholders, readTable, writableChanges } from '@/lib/import-analysis'
+import { detectPlaceholders, headerSignature, readTable, writableChanges } from '@/lib/import-analysis'
 import { IMPORT_TARGETS, suggestTargets, type ImportPlan } from '@/lib/import-plan'
-import { applyImport, planImport, type ApplyResult } from './actions'
+import { runChecks, type Check } from '@/lib/import-checks'
+import { clusterValues, type OptionProposal, type ValueCluster } from '@/lib/import-vocabulary'
+import type { ImportProfileRow } from '@/lib/database.types'
+import { applyImport, findProfile, planImport, saveProfile, type ApplyResult } from './actions'
 
 /**
  * Importing a buyer list.
@@ -30,6 +33,12 @@ export function ImportBuyers() {
   const [placeholders, setPlaceholders] = useState<{ value: string; count: number }[]>([])
   const [ignored, setIgnored] = useState<Set<string>>(new Set())
   const [plan, setPlan] = useState<ImportPlan | null>(null)
+  const [proposals, setProposals] = useState<OptionProposal[]>([])
+  const [checks, setChecks] = useState<Check[]>([])
+  const [profile, setProfile] = useState<ImportProfileRow | null>(null)
+  const [signature, setSignature] = useState('')
+  const [merges, setMerges] = useState<Record<string, Record<string, string>>>({})
+  const [profileName, setProfileName] = useState('')
   const [approved, setApproved] = useState<Set<string>>(new Set())
   const [allowReplace, setAllowReplace] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -54,8 +63,19 @@ export function ImportBuyers() {
       return
     }
 
-    const suggested = suggestTargets(table.headers)
+    /*
+     * A profile for this shape of file wins over the guess. Matched by the
+     * headings rather than the file name, because the file is called something
+     * different every month while the columns stay put.
+     */
+    const shape = headerSignature(table.headers)
+    const saved = await findProfile(shape).catch(() => null)
+    const suggested = saved?.mapping ?? suggestTargets(table.headers)
 
+    setSignature(shape)
+    setProfile(saved)
+    setProfileName(saved?.name ?? file.name.replace(/\.csv$/i, ''))
+    setMerges(saved?.value_merges ?? {})
     setHeaders(table.headers)
     setHeaderRow(table.headerRow)
     setMapping(suggested)
@@ -71,11 +91,17 @@ export function ImportBuyers() {
     // Guessed from whichever column was mapped to the contact's name, so the
     // suggestion follows the mapping rather than a hardcoded column.
     const nameColumn = Object.keys(suggested).find((key) => suggested[key] === 'contact.name')
-    setPlaceholders(
-      nameColumn
-        ? detectPlaceholders(table.rows.map((row) => row[table.headers.indexOf(nameColumn)] ?? ''))
-        : [],
-    )
+    const found = nameColumn
+      ? detectPlaceholders(table.rows.map((row) => row[table.headers.indexOf(nameColumn)] ?? ''))
+      : []
+    setPlaceholders(found)
+
+    // A profile that has seen this file before already knows which of these are
+    // placeholders, so anything it did not list stays unticked.
+    if (saved) {
+      const remembered = new Set(saved.placeholders)
+      setIgnored(new Set(found.filter((p) => !remembered.has(p.value)).map((p) => p.value)))
+    }
 
     setStep('map')
   }
@@ -88,11 +114,14 @@ export function ImportBuyers() {
         rows,
         mapping,
         placeholders: placeholders.filter((p) => !ignored.has(p.value)).map((p) => p.value),
+        valueMerges: merges,
       })
-      setPlan(built)
+      setPlan(built.plan)
+      setProposals(built.proposals)
+      setChecks(runChecks({ rows, headers, mapping }))
       // Everything is approved to begin with. The screen exists to take things
       // out, not to make somebody tick two hundred boxes.
-      setApproved(new Set(built.companies.map((company) => company.key)))
+      setApproved(new Set(built.plan.companies.map((company) => company.key)))
       setStep('review')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'That file could not be read.')
@@ -110,10 +139,23 @@ export function ImportBuyers() {
           rows,
           mapping,
           placeholders: placeholders.filter((p) => !ignored.has(p.value)).map((p) => p.value),
+          valueMerges: merges,
           approved: [...approved],
           allowReplace,
         }),
       )
+
+      // Saved after the import rather than before, so a profile only ever
+      // records decisions somebody actually went through with.
+      await saveProfile({
+        name: profileName,
+        signature,
+        headers,
+        mapping,
+        valueMerges: merges,
+        placeholders: placeholders.filter((p) => !ignored.has(p.value)).map((p) => p.value),
+      }).catch(() => undefined)
+
       setStep('done')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'That import could not be applied.')
@@ -165,6 +207,20 @@ export function ImportBuyers() {
               .
             </p>
           </div>
+
+          {profile && (
+            <div className="card border-emerald-300 bg-emerald-50 p-5">
+              <h3 className="text-sm font-semibold text-emerald-900">
+                Read as “{profile.name}”
+              </h3>
+              <p className="mt-1 text-sm text-emerald-800">
+                These columns have been imported {profile.times_used} time
+                {profile.times_used === 1 ? '' : 's'} before, so the mapping, the merges and the
+                placeholders below are the ones settled last time. Change anything you like — what
+                you leave is what gets remembered.
+              </p>
+            </div>
+          )}
 
           {placeholders.length > 0 && nameHeader && (
             <div className="card border-amber-300 bg-amber-50 p-5">
@@ -264,6 +320,12 @@ export function ImportBuyers() {
       {step === 'review' && plan && (
         <Review
           plan={plan}
+          checks={checks}
+          proposals={proposals}
+          merges={merges}
+          setMerges={setMerges}
+          profileName={profileName}
+          setProfileName={setProfileName}
           approved={approved}
           setApproved={setApproved}
           allowReplace={allowReplace}
@@ -304,6 +366,104 @@ export function ImportBuyers() {
   )
 }
 
+/**
+ * The values a column would add, with the near-duplicates grouped.
+ *
+ * Clustering turns ninety-odd decisions into about a dozen. It is a suggestion
+ * throughout: the survivor is the commonest spelling, and every member can be
+ * unpicked. What is settled here is saved with the profile, so it is settled
+ * once rather than every month.
+ */
+function Vocabulary({
+  proposal,
+  merges,
+  onMerge,
+}: {
+  proposal: OptionProposal
+  merges: Record<string, string>
+  onMerge: (next: Record<string, string>) => void
+}) {
+  const clusters = useMemo<ValueCluster[]>(() => clusterValues(proposal.missing), [proposal.missing])
+  const grouped = clusters.filter((cluster) => cluster.members.length > 1)
+  const singles = clusters.filter((cluster) => cluster.members.length === 1)
+
+  const merge = (cluster: ValueCluster) => {
+    const next = { ...merges }
+    for (const member of cluster.members) {
+      if (member.value !== cluster.keep) next[member.value] = cluster.keep
+    }
+    onMerge(next)
+  }
+
+  const unmerge = (cluster: ValueCluster) => {
+    const next = { ...merges }
+    for (const member of cluster.members) delete next[member.value]
+    onMerge(next)
+  }
+
+  return (
+    <div className="card p-5">
+      <h3 className="text-sm font-semibold text-slate-800">
+        {proposal.label} — {proposal.missing.length} value
+        {proposal.missing.length === 1 ? '' : 's'} you do not have yet
+      </h3>
+      <p className="mt-1 mb-3 text-sm text-slate-500">
+        {proposal.known > 0 && `${proposal.known} cells already match an option you have. `}
+        Anything left here is imported as typed; merging first is how the list stays short.
+      </p>
+
+      {grouped.length > 0 && (
+        <div className="space-y-2">
+          {grouped.map((cluster) => {
+            const merged = cluster.members.every(
+              (member) => member.value === cluster.keep || merges[member.value] === cluster.keep,
+            )
+
+            return (
+              <div key={cluster.keep} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-slate-600">
+                    {cluster.members.length} spellings, {cluster.total} cells — keep
+                  </span>
+                  <span className="font-medium text-slate-800">{cluster.keep}</span>
+                  <button
+                    type="button"
+                    onClick={() => (merged ? unmerge(cluster) : merge(cluster))}
+                    className={
+                      merged
+                        ? 'rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white'
+                        : 'rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50'
+                    }
+                  >
+                    {merged ? 'Merged' : 'Merge these'}
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {cluster.members
+                    .filter((member) => member.value !== cluster.keep)
+                    .map((member) => `${member.value} (${member.count})`)
+                    .join(' · ')}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {singles.length > 0 && (
+        <p className="mt-3 text-sm text-slate-500">
+          <span className="font-medium text-slate-700">On their own: </span>
+          {singles
+            .slice(0, 20)
+            .map((cluster) => `${cluster.keep} (${cluster.total})`)
+            .join(' · ')}
+          {singles.length > 20 && ` and ${singles.length - 20} more`}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function Figure({ label, value }: { label: string; value: number }) {
   return (
     <div>
@@ -315,6 +475,12 @@ function Figure({ label, value }: { label: string; value: number }) {
 
 function Review({
   plan,
+  checks,
+  proposals,
+  merges,
+  setMerges,
+  profileName,
+  setProfileName,
   approved,
   setApproved,
   allowReplace,
@@ -324,6 +490,12 @@ function Review({
   onBack,
 }: {
   plan: ImportPlan
+  checks: Check[]
+  proposals: OptionProposal[]
+  merges: Record<string, Record<string, string>>
+  setMerges: (next: Record<string, Record<string, string>>) => void
+  profileName: string
+  setProfileName: (next: string) => void
   approved: Set<string>
   setApproved: (next: Set<string>) => void
   allowReplace: boolean
@@ -364,6 +536,37 @@ function Review({
           </p>
         )}
       </div>
+
+      {checks.length > 0 && (
+        <div className="card p-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-800">Worth knowing about this file</h3>
+          <ul className="space-y-2.5">
+            {checks.map((check) => (
+              <li key={check.id} className="flex gap-2.5">
+                <span
+                  aria-hidden
+                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                    check.severity === 'warning' ? 'bg-amber-500' : 'bg-slate-300'
+                  }`}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-800">{check.headline}</span>
+                  <span className="block text-sm text-slate-500">{check.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {proposals.map((proposal) => (
+        <Vocabulary
+          key={proposal.field}
+          proposal={proposal}
+          merges={merges[proposal.field] ?? {}}
+          onMerge={(next) => setMerges({ ...merges, [proposal.field]: next })}
+        />
+      ))}
 
       <div className="flex flex-wrap items-center gap-2">
         {(
@@ -504,6 +707,23 @@ function Review({
             </span>
           </span>
         </label>
+
+        <div>
+          <label className="label" htmlFor="profile-name">
+            Remember these columns as
+          </label>
+          <input
+            id="profile-name"
+            value={profileName}
+            onChange={(event) => setProfileName(event.target.value)}
+            maxLength={120}
+            className="input w-72"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            The mapping, the merges and the placeholder decisions are saved against these column
+            headings. The next file with the same columns starts here rather than from scratch.
+          </p>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="btn-primary" disabled={busy || approved.size === 0} onClick={onApply}>

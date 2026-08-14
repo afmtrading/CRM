@@ -97,5 +97,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/23_hidden_recor
 echo "→ geography and territories"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/24_geography.sql"
 
+echo "→ import profiles"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/25_import_profiles.sql"
+
 echo
 echo "All database tests passed."
