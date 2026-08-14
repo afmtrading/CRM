@@ -1,4 +1,5 @@
 import type { OrganizationRow } from '@/lib/database.types'
+import { TIMEZONES, timeZoneAbbreviation, timeZoneLabel } from '@/lib/timezone'
 
 import { updateOrganization } from '../actions'
 
@@ -27,6 +28,34 @@ export function OrganizationForm({ organization }: { organization: OrganizationR
           <option value="EUR">EUR</option>
           <option value="GBP">GBP</option>
         </select>
+      </div>
+
+      {/*
+        One clock for the whole organization, not the reader's.
+        A report is a statement about the business: two people reading the same
+        figure from different cities have to see the same number, and a deal
+        raised at 8pm belongs to the day it was raised on here.
+      */}
+      <div>
+        <label className="label" htmlFor="org-timezone">
+          Time zone
+        </label>
+        <select
+          id="org-timezone"
+          name="timezone"
+          className="input"
+          defaultValue={organization.timezone}
+        >
+          {TIMEZONES.map((zone) => (
+            <option key={zone.value} value={zone.value}>
+              {zone.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-slate-400">
+          Every date on every report is read against this clock — currently{' '}
+          {timeZoneLabel(organization.timezone)} ({timeZoneAbbreviation(organization.timezone)}).
+        </p>
       </div>
 
       <div>

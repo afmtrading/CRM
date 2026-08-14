@@ -13,7 +13,7 @@ import {
 } from '../src/lib/performance'
 import type { LedgerRow } from '../src/lib/ledger'
 
-const TODAY = new Date('2026-08-13T12:00:00Z')
+const TODAY = '2026-08-13'
 
 function deal(overrides: Partial<LedgerRow> = {}): LedgerRow {
   return {
@@ -43,9 +43,11 @@ function deal(overrides: Partial<LedgerRow> = {}): LedgerRow {
     line_count: 0,
     costed_lines: 0,
     created_at: '2026-01-10T00:00:00Z',
+    created_day: '2026-01-10',
     expected_close_date: null,
     actual_close_date: null,
     closed_at: null,
+    closed_day: null,
     loss_reason: null,
     cycle_days: null,
     products: [],
@@ -86,7 +88,7 @@ describe('periods', () => {
   })
 
   it('rolls last quarter back into the previous year in January', () => {
-    expect(periodRange('last-quarter', new Date('2026-01-15T00:00:00Z'))).toMatchObject({
+    expect(periodRange('last-quarter', '2026-01-15')).toMatchObject({
       label: 'Q4 2025',
       from: '2025-10-01',
       to: '2025-12-31',
@@ -94,8 +96,8 @@ describe('periods', () => {
   })
 
   it('handles a leap year in the first quarter', () => {
-    expect(periodRange('this-quarter', new Date('2028-02-10T00:00:00Z')).to).toBe('2028-03-31')
-    expect(periodRange('this-year', new Date('2028-02-10T00:00:00Z'))).toMatchObject({
+    expect(periodRange('this-quarter', '2028-02-10').to).toBe('2028-03-31')
+    expect(periodRange('this-year', '2028-02-10')).toMatchObject({
       from: '2028-01-01',
       to: '2028-12-31',
     })
@@ -152,7 +154,14 @@ describe('what falls inside a period', () => {
   })
 
   it('falls back to the system close stamp when the date was cleared', () => {
-    const row = deal({ status: 'won', actual_close_date: null, closed_at: '2026-08-01T09:00:00Z' })
+    // closed_day, not a slice of closed_at: the stamp is an instant, and the
+    // day it fell on is the organization's to decide.
+    const row = deal({
+      status: 'won',
+      actual_close_date: null,
+      closed_at: '2026-08-01T09:00:00Z',
+      closed_day: '2026-08-01',
+    })
     expect(closedInPeriod(row, period)).toBe(true)
   })
 })

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
+import { todayIn } from '@/lib/timezone'
 import { formatDay, formatNumber } from '@/lib/format'
 import { INVOICE_STATUS_LABELS, daysOverdue, isOverdue, summariseInvoices } from '@/lib/sales'
 import type { CompanyRow, InvoiceRow, InvoiceStatus } from '@/lib/database.types'
@@ -31,7 +32,7 @@ export default async function InvoicesPage({
   const status = (Array.isArray(params.status) ? params.status[0] : params.status) ?? 'all'
   const companyId = (Array.isArray(params.company) ? params.company[0] : params.company) ?? ''
   const overdueOnly = (Array.isArray(params.due) ? params.due[0] : params.due) === 'overdue'
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayIn(context.organization.timezone)
 
   const { data: companies } = await scoped(context, 'companies')
     .select('*')

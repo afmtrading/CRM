@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
+import { todayIn } from '@/lib/timezone'
 import { formatDay, formatNumber, formatPercent } from '@/lib/format'
 import { regionFieldKey, type LedgerRow } from '@/lib/ledger'
 import { PERIOD_OPTIONS, parsePeriodKey, periodRange } from '@/lib/performance'
@@ -33,13 +34,15 @@ export default async function DiagnosticsPage({
 }) {
   const params = await searchParams
   const context = await requireSession()
+  // Every day on this page is the organization's, not the server's.
+  const today = todayIn(context.organization.timezone)
 
   const one = (key: string) => {
     const value = params[key]
     return (Array.isArray(value) ? value[0] : value) ?? ''
   }
 
-  const period = periodRange(parsePeriodKey(one('period')), new Date(), {
+  const period = periodRange(parsePeriodKey(one('period')), today, {
     from: one('from'),
     to: one('to'),
   })
@@ -58,8 +61,8 @@ export default async function DiagnosticsPage({
   const reasons = lossReasons(rows, period)
   const coverage = lossCoverage(reasons)
   const steps = funnelSteps((funnel ?? []) as StageFunnelRow[])
-  const ages = ageingBuckets(rows)
-  const overdue = overdueDeals(rows)
+  const ages = ageingBuckets(rows, today)
+  const overdue = overdueDeals(rows, today)
   const undated = withoutCloseDate(rows)
   const stalled = stalledDeals(rows, (durations ?? []) as StageDurationRow[])
 

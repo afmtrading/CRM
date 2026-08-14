@@ -59,9 +59,11 @@ function deal(overrides: Partial<LedgerRow> = {}): LedgerRow {
     line_count: 0,
     costed_lines: 0,
     created_at: '2026-01-10T00:00:00Z',
+    created_day: '2026-01-10',
     expected_close_date: '2026-03-01',
     actual_close_date: null,
     closed_at: null,
+    closed_day: null,
     loss_reason: null,
     cycle_days: null,
     products: [],
@@ -137,6 +139,7 @@ describe('filtering', () => {
   it('applies a date range to the date that was chosen', () => {
     const row = deal({
       created_at: '2026-01-10T00:00:00Z',
+      created_day: '2026-01-10',
       expected_close_date: '2026-06-01',
     })
 
@@ -153,7 +156,7 @@ describe('filtering', () => {
   })
 
   it('treats both ends of a range as inclusive', () => {
-    const row = deal({ created_at: '2026-01-10T23:59:00Z' })
+    const row = deal({ created_at: '2026-01-10T23:59:00Z', created_day: '2026-01-10' })
     expect(
       matchesLedgerFilter(row, ledgerFilterFromParams({ from: '2026-01-10', to: '2026-01-10' })),
     ).toBe(true)
@@ -204,14 +207,14 @@ describe('filtering', () => {
   it('ignores a status or date field it does not recognise', () => {
     const filter = ledgerFilterFromParams({ status: 'archived', date: 'whenever' })
     expect(filter.status).toBe('all')
-    expect(filter.dateField).toBe('created_at')
+    expect(filter.dateField).toBe('created_day')
   })
 })
 
 describe('sorting', () => {
   it('defaults to the newest deal first', () => {
-    expect(parseSort(undefined)).toEqual({ key: 'created_at', direction: 'desc' })
-    expect(parseSort('nonsense:asc')).toEqual({ key: 'created_at', direction: 'desc' })
+    expect(parseSort(undefined)).toEqual({ key: 'created_day', direction: 'desc' })
+    expect(parseSort('nonsense:asc')).toEqual({ key: 'created_day', direction: 'desc' })
   })
 
   it('sorts numbers as numbers', () => {
@@ -385,7 +388,7 @@ describe('export', () => {
   it('writes one line per deal, with lists joined', () => {
     const row = ledgerCsvRow(
       deal({ products: ['Speaker', 'Cable'], regions: ['Ontario', 'Quebec'] }),
-      cols('products', 'regions', 'created_at'),
+      cols('products', 'regions', 'created_day'),
     )
     expect(row.Product).toBe('Speaker, Cable')
     expect(row.Region).toBe('Ontario, Quebec')
@@ -529,7 +532,7 @@ describe('choosing columns', () => {
       'margin',
       'company_name',
       'contact_name',
-      'created_at',
+      'created_day',
       'expected_close_date',
       'actual_close_date',
       'cycle_days',

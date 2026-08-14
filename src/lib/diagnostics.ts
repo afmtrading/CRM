@@ -35,9 +35,14 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((end - start) / 86_400_000)
 }
 
-export function today(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10)
-}
+/**
+ * Today, as the organization reads it.
+ *
+ * Passed in from the page rather than read here, for the same reason
+ * periodRange takes it: a pure module that calls the clock is a module whose
+ * answer depends on where the server happens to be standing. See
+ * lib/timezone.ts, which is the one place an instant becomes a day.
+ */
 
 // -----------------------------------------------------------------------------
 // Why deals are lost
@@ -125,8 +130,7 @@ export interface AgeBucket {
 }
 
 /** Open deals by how long they have existed. */
-export function ageingBuckets(rows: LedgerRow[], now: Date = new Date()): AgeBucket[] {
-  const day = today(now)
+export function ageingBuckets(rows: LedgerRow[], day: string): AgeBucket[] {
   const buckets: AgeBucket[] = AGE_BOUNDS.map((bound) => ({ ...bound, deals: 0, value: [] }))
   const holding = new Map<string, { value: number; currency: string }[]>()
 
@@ -163,8 +167,7 @@ export interface OverdueDeal {
  * problem with the same cause, and rolling the two together would let one hide
  * inside the other.
  */
-export function overdueDeals(rows: LedgerRow[], now: Date = new Date()): OverdueDeal[] {
-  const day = today(now)
+export function overdueDeals(rows: LedgerRow[], day: string): OverdueDeal[] {
 
   return rows
     .filter((row) => row.status === 'open' && row.expected_close_date)

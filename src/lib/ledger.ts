@@ -42,9 +42,18 @@ export interface LedgerRow {
   /** Lines with a cost actually recorded. Fewer than line_count means the margin is optimistic. */
   costed_lines: number
   created_at: string
+  /**
+   * created_at as a calendar day in the organization's timezone, resolved by
+   * deal_ledger. This is the one to compare, group and print — slicing the
+   * first ten characters off created_at buckets by UTC, which files a deal
+   * raised at 8pm in Toronto under the following day.
+   */
+  created_day: string
   expected_close_date: string | null
   actual_close_date: string | null
   closed_at: string | null
+  /** closed_at, resolved the same way. Null while the deal is open. */
+  closed_day: string | null
   loss_reason: string | null
   /** Days from created to closed. Null while the deal is still open. */
   cycle_days: number | null
@@ -74,7 +83,7 @@ export type LedgerColumnKey =
   | 'line_count'
   | 'products'
   | 'regions'
-  | 'created_at'
+  | 'created_day'
   | 'expected_close_date'
   | 'actual_close_date'
   | 'cycle_days'
@@ -164,7 +173,7 @@ export const LEDGER_COLUMNS: LedgerColumn[] = [
   },
   { key: 'company_name', label: 'Company', kind: 'text', groupable: true },
   { key: 'contact_name', label: 'Contact', kind: 'text', groupable: true },
-  { key: 'created_at', label: 'Initiated', kind: 'date', groupable: false },
+  { key: 'created_day', label: 'Initiated', kind: 'date', groupable: false },
   { key: 'expected_close_date', label: 'Expected close', kind: 'date', groupable: false },
   { key: 'actual_close_date', label: 'Actual close', kind: 'date', groupable: false },
   { key: 'cycle_days', label: 'Days to close', kind: 'number', groupable: false, numeric: true },
@@ -286,10 +295,10 @@ export function moveColumn(
 // -----------------------------------------------------------------------------
 
 /** Which date a range applies to. A ledger holds three, and they mean different things. */
-export type LedgerDateField = 'created_at' | 'expected_close_date' | 'actual_close_date'
+export type LedgerDateField = 'created_day' | 'expected_close_date' | 'actual_close_date'
 
 export const DATE_FIELDS: { key: LedgerDateField; label: string }[] = [
-  { key: 'created_at', label: 'Initiated' },
+  { key: 'created_day', label: 'Initiated' },
   { key: 'expected_close_date', label: 'Expected close' },
   { key: 'actual_close_date', label: 'Actual close' },
 ]
@@ -317,7 +326,7 @@ export const EMPTY_LEDGER_FILTER: LedgerFilter = {
   product: '',
   region: '',
   lossReason: '',
-  dateField: 'created_at',
+  dateField: 'created_day',
   from: '',
   to: '',
   search: '',
@@ -344,9 +353,14 @@ export function ledgerFilterFromParams(params: ParamBag): LedgerFilter {
     product: one(params, 'product'),
     region: one(params, 'region'),
     lossReason: one(params, 'reason'),
+    /*
+     * Anything unrecognised falls back to the initiated day — including the
+     * old 'created_at', so a link shared before days were resolved in the
+     * organization's zone still opens the view it named.
+     */
     dateField: DATE_FIELDS.some((field) => field.key === dateField)
       ? (dateField as LedgerDateField)
-      : 'created_at',
+      : 'created_day',
     from: one(params, 'from'),
     to: one(params, 'to'),
     search: one(params, 'q'),
@@ -363,7 +377,7 @@ export function ledgerFilterToParams(filter: LedgerFilter): URLSearchParams {
   if (filter.product) params.set('product', filter.product)
   if (filter.region) params.set('region', filter.region)
   if (filter.lossReason) params.set('reason', filter.lossReason)
-  if (filter.dateField !== 'created_at') params.set('date', filter.dateField)
+  if (filter.dateField !== 'created_day') params.set('date', filter.dateField)
   if (filter.from) params.set('from', filter.from)
   if (filter.to) params.set('to', filter.to)
   if (filter.search) params.set('q', filter.search)
@@ -385,6 +399,9 @@ function withinRange(value: string | null, from: string, to: string): boolean {
   if (!from && !to) return true
   if (!value) return false
 
+  // Every field a range can apply to is already a calendar day — a date column
+  // straight from the table, or one deal_ledger resolved in the organization's
+  // zone. Nothing here re-derives a day from an instant.
   const day = value.slice(0, 10)
   if (from && day < from) return false
   if (to && day > to) return false
@@ -440,7 +457,7 @@ export function parseSort(raw: string | undefined): LedgerSort {
     return { key: key as LedgerColumnKey, direction: direction === 'asc' ? 'asc' : 'desc' }
   }
   // Newest first: a ledger is read from the top, and the top is what just happened.
-  return { key: 'created_at', direction: 'desc' }
+  return { key: 'created_day', direction: 'desc' }
 }
 
 function sortValue(row: LedgerRow, key: LedgerColumnKey): string | number | null {
@@ -671,8 +688,8 @@ export function ledgerCsvValue(row: LedgerRow, key: LedgerColumnKey): string | n
       return row.margin
     case 'currency':
       return row.currency
-    case 'created_at':
-      return row.created_at.slice(0, 10)
+    case 'created_day':
+      return row.created_day
     case 'expected_close_date':
       return row.expected_close_date ?? ''
     case 'actual_close_date':

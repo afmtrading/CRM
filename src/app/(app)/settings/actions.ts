@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanManage, requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
+import { safeTimeZone } from '@/lib/timezone'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
@@ -578,6 +579,12 @@ export async function updateOrganization(formData: FormData) {
       name: String(formData.get('name') ?? '').trim() || context.organization.name,
       primary_color: String(formData.get('primary_color') ?? context.organization.primary_color),
       default_currency: String(formData.get('default_currency') ?? 'USD').toUpperCase(),
+      /*
+       * Validated here as well as by the database's trigger, so a zone this
+       * Node build cannot format is refused before it reaches a report and
+       * throws mid-render rather than after being saved.
+       */
+      timezone: safeTimeZone(String(formData.get('timezone') ?? '')) ,
       logo_url: String(formData.get('logo_url') ?? '').trim() || null,
     })
     .eq('id', context.organizationId)
