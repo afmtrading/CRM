@@ -576,6 +576,145 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- A signed order holds its stock.
+-- =============================================================================
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_speaker uuid;
+  v_loc     uuid;
+  v_order   uuid;
+  v_row     record;
+begin
+  raise notice 'Stock held by an order:';
+
+  perform sign_in_as('admin_auth');
+
+  -- Its own product. The speaker is already held by the confirmed order the
+  -- invoicing test left behind, and a stock test that depends on what ran
+  -- before it is a test that fails for the wrong reason later.
+  insert into products (organization_id, name, sku, unit, unit_price, unit_cost)
+  values (v_org, 'Amplifier', 'AMP-1', 'unit', 200, 120) returning id into v_speaker;
+
+  select id into v_loc from stock_locations where organization_id = v_org limit 1;
+  perform public.set_stock_level(v_speaker, v_loc, null, 100, 0, 'count', 'opening');
+
+  perform sign_in_as('mgr_auth');
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.on_hand = 100, 'a hundred on the shelf');
+  perform test_assert(v_row.committed_orders = 0, 'and nothing held by an order yet');
+
+  v_order := public.create_sales_order((select id from fixture where key = 'acme'), null, null, 'USD');
+  insert into sales_order_lines (organization_id, sales_order_id, product_id, quantity, unit_price)
+  values (v_org, v_order, v_speaker, 30, 100);
+
+  -- A draft commits to nothing. That is what the status means, and stock is
+  -- where it matters most: a quote somebody is still writing must not make the
+  -- warehouse look emptier than it is.
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.committed_orders = 0, 'a draft order holds nothing');
+  perform test_assert(v_row.available = 100, 'so everything is still available');
+
+  -- Signing it is the moment the stock is spoken for.
+  insert into sales_order_payments (organization_id, sales_order_id, amount)
+  values (v_org, v_order, 500);
+
+  perform test_assert(
+    (select status from sales_orders where id = v_order) = 'reserved',
+    'the deposit signs the order'
+  );
+
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.committed_orders = 30, 'and now the order holds thirty');
+  perform test_assert(v_row.available = 70, 'leaving seventy available');
+  perform test_assert(v_row.on_hand = 100, 'without moving what is on the shelf');
+  perform test_assert(v_row.reserved = 0, 'and without touching the by-hand reserve');
+
+  -- Derived, not copied. Editing the order moves the number with it, which is
+  -- the whole reason this is not a stored hold.
+  update sales_order_lines set quantity = 45 where sales_order_id = v_order;
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.committed_orders = 45, 'editing the line moves the hold');
+
+  update sales_orders set status = 'confirmed' where id = v_order;
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.committed_orders = 45, 'a confirmed order still holds it');
+
+  -- Fulfilled means the goods have gone. Holding stock that is no longer in the
+  -- building would double-count it against whatever movement records it leaving.
+  update sales_orders set status = 'fulfilled' where id = v_order;
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.committed_orders = 0, 'a fulfilled order holds nothing');
+
+  update sales_orders set status = 'confirmed' where id = v_order;
+  update sales_orders set status = 'cancelled' where id = v_order;
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.committed_orders = 0, 'nor does a cancelled one');
+  perform test_assert(v_row.available = 100, 'and the stock comes straight back');
+
+  insert into fixture values ('stock_order', v_order), ('stock_loc', v_loc), ('amp', v_speaker);
+end;
+$$;
+
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_speaker uuid := (select id from fixture where key = 'amp');
+  v_stage   uuid;
+  v_deal    uuid;
+  v_order   uuid;
+  v_row     record;
+begin
+  raise notice 'Deals and orders hold stock side by side:';
+
+  perform sign_in_as('mgr_auth');
+
+  v_order := public.create_sales_order((select id from fixture where key = 'acme'), null, null, 'USD');
+  insert into sales_order_lines (organization_id, sales_order_id, product_id, quantity, unit_price)
+  values (v_org, v_order, v_speaker, 20, 100);
+  update sales_orders set status = 'confirmed' where id = v_order;
+
+  select s.id into v_stage from stages s join pipelines p on p.id = s.pipeline_id
+  where p.organization_id = v_org and s.outcome = 'open' order by s."order" limit 1;
+
+  insert into deals (organization_id, name, stage_id, value, currency, owner_id)
+  values (v_org, 'Also wants speakers', v_stage, 1000, 'USD',
+          (select id from fixture where key = 'mgr'))
+  returning id into v_deal;
+
+  insert into deal_products (organization_id, deal_id, product_id, quantity, unit_price, unit_cost)
+  values (v_org, v_deal, v_speaker, 15, 100, 60);
+
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.committed_deals = 15, 'the open deal holds fifteen');
+  perform test_assert(v_row.committed_orders = 20, 'the signed order holds twenty');
+  perform test_assert(v_row.committed = 35, 'and committed is the two of them together');
+  perform test_assert(v_row.available = 65, 'so sixty-five is left');
+
+  -- The catalogue view has to agree with the record view, or one of the two
+  -- screens is lying and nobody can tell which.
+  perform test_assert(
+    (select committed_orders from public.product_stock_overview() where product_id = v_speaker) = 20,
+    'the overview says the same as the record'
+  );
+  perform test_assert(
+    (select available from public.product_stock_overview() where product_id = v_speaker) = 65,
+    'and agrees on what is available'
+  );
+
+  -- Overselling stays visible rather than being clamped at zero.
+  update sales_order_lines set quantity = 200 where sales_order_id = v_order;
+  select * into v_row from public.product_stock_summary(v_speaker);
+  perform test_assert(v_row.available = -115, 'promising more than exists shows as negative');
+
+  perform test_assert(
+    (select sum(quantity) from public.product_committed_orders(v_speaker)) = 200,
+    'and the orders holding it can be named'
+  );
+end;
+$$;
+
 reset role;
 
 rollback;
