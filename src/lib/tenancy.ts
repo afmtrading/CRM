@@ -49,32 +49,50 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
 
   if (!userRow) return null
 
-  const { data: organization } = await supabase
-    .from('organizations')
-    .select('*')
-    .eq('id', userRow.organization_id)
-    .single()
+  /*
+   * The organization and the caller's capabilities, together: the second is a
+   * round trip that would otherwise be a third one in sequence, and neither
+   * depends on the other.
+   *
+   * current_permissions() is the same function the row-level policies consult,
+   * so the interface and the database are reading one source rather than two
+   * copies of the same rules. They used to be two copies — the booleans below
+   * were derived from the role here and from a hardcoded list in the database,
+   * and would have parted company the first time anybody edited a set.
+   */
+  const [{ data: organization }, { data: permissions }] = await Promise.all([
+    supabase.from('organizations').select('*').eq('id', userRow.organization_id).single(),
+    supabase.rpc('current_permissions'),
+  ])
 
   if (!organization) return null
 
   /*
-   * These mirror can_manage_records() and can_write_records() in the database.
-   * The database is what actually enforces them — these exist so the interface
-   * does not offer a button that RLS will refuse. If the two ever disagree, the
-   * database wins and the user sees a failure rather than a breach.
+   * The fallbacks mirror the ones inside the database helpers, and fire in the
+   * same circumstance: an organization with no permission sets at all, which
+   * the seed and its trigger between them should make impossible. Degrading to
+   * the old role rule beats degrading to nothing, which for an administrator
+   * would mean being locked out of the screen they would need to fix it.
+   *
+   * The database is still what enforces all of this. These exist so the
+   * interface does not offer a button that RLS will refuse; if the two ever
+   * disagree, the database wins and the user sees a failure rather than a
+   * breach.
    */
   return {
     authUserId: authUser.id,
     user: userRow,
     organization,
     organizationId: organization.id,
-    isAdmin: userRow.role === 'admin',
-    canManage: userRow.role === 'admin' || userRow.role === 'manager',
+    isAdmin: permissions?.administer ?? userRow.role === 'admin',
+    canManage:
+      permissions?.manage_records ?? (userRow.role === 'admin' || userRow.role === 'manager'),
     canBulk:
-      userRow.role === 'admin' ||
-      userRow.role === 'manager' ||
-      userRow.role === 'sales_director',
-    canWrite: userRow.role !== 'readonly',
+      permissions?.bulk_records ??
+      (userRow.role === 'admin' ||
+        userRow.role === 'manager' ||
+        userRow.role === 'sales_director'),
+    canWrite: permissions?.write_records ?? userRow.role !== 'readonly',
     supabase,
   }
 })
