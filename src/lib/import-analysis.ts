@@ -562,6 +562,12 @@ export interface MatchCandidate {
   email?: string | null
   name?: string | null
   based_in?: string | null
+  /*
+   * Whatever else the caller selected. A candidate is both the thing matched
+   * against and the "before" side of the diff, and the diff has to reach every
+   * column the import might write — not only the four used for matching.
+   */
+  [field: string]: unknown
 }
 
 /**

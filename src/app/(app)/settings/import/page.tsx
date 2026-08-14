@@ -25,9 +25,20 @@ export default async function ImportPage() {
         title="Import data"
         description="Map your CSV columns, check the preview, then commit. Rows that fail are reported individually — the rest still import."
         actions={
-          <Link href="/api/export?entity=contact" className="btn-secondary" prefetch={false}>
-            Export contacts
-          </Link>
+          <>
+            {/*
+              A buyer list is a different shape from a plain contact CSV — the
+              company repeats down the rows, and the columns need reading rather
+              than mapping. It gets its own screen instead of options bolted
+              onto this one.
+            */}
+            <Link href="/settings/import/companies" className="btn-secondary">
+              Import a buyer list
+            </Link>
+            <Link href="/api/export?entity=contact" className="btn-secondary" prefetch={false}>
+              Export contacts
+            </Link>
+          </>
         }
       />
 
