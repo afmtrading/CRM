@@ -25,6 +25,11 @@ export type UserStatus = 'active' | 'invited' | 'disabled'
 export type LifecycleStage = 'lead' | 'qualified' | 'customer' | 'other'
 export type DealStatus = 'open' | 'won' | 'lost'
 export type DealValueSource = 'manual' | 'products'
+export type SalesOrderStatus = 'draft' | 'reserved' | 'confirmed' | 'fulfilled' | 'cancelled'
+/** Only 'sent' is set by hand — 'partial' and 'paid' follow the payment ledger. */
+export type InvoiceStatus = 'draft' | 'sent' | 'partial' | 'paid' | 'void'
+/** How a line's price was revised: a percentage off, or a replacement unit price. */
+export type RevisedRateType = 'percent' | 'fixed'
 export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'task'
 export type RelatedToType = 'contact' | 'company' | 'deal'
 export type ImportStatus = 'pending' | 'processing' | 'complete' | 'failed'
@@ -582,6 +587,152 @@ export type DealProductRow = {
   updated_at: string
 }
 
+/**
+ * A sales order: what a customer actually bought.
+ *
+ * Deliberately unrelated to a deal — there is no deal_id here and no foreign
+ * key between the two. A deal asks whether we will win the business; this
+ * records that we did and what it consisted of. See
+ * docs/SALES_ORDERS_INVOICES.md.
+ */
+export type SalesOrderRow = {
+  id: string
+  organization_id: string
+  /** SO-Acme-0001. Allocated once at creation and never reissued. */
+  number: string
+  company_id: string | null
+  contact_id: string | null
+  owner_id: string | null
+  location_id: string | null
+  status: SalesOrderStatus
+  currency: string
+  order_date: string
+  payment_terms: string | null
+  shipping_charge: number
+  notes: string | null
+  terms: string | null
+  /** Stamped when the order is first reserved — signed, or a deposit taken. */
+  signed_at: string | null
+  created_by: string | null
+  updated_by: string | null
+  deleted_at: string | null
+  deleted_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * One line of a sales order, at the price it was sold for.
+ *
+ * A line names a product or carries its own description — a one-off does not
+ * need a catalogue entry. discount is written by a database trigger from the
+ * revised rate, and line_total is generated from it, so neither can be sent by
+ * a client.
+ */
+export type SalesOrderLineRow = {
+  id: string
+  organization_id: string
+  sales_order_id: string
+  product_id: string | null
+  description: string | null
+  notes: string | null
+  quantity: number
+  unit_price: number
+  unit_cost: number
+  revised_rate_type: RevisedRateType | null
+  revised_rate: number | null
+  /** Derived in the database — never written by the application. */
+  discount: number
+  line_total: number
+  line_cost: number
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * A deposit on a sales order, or a reversal of one.
+ *
+ * Append-only: positive is money in, negative reverses an earlier row, and
+ * nothing is ever edited or deleted. There is no update policy on the table, so
+ * that is a guarantee rather than a convention.
+ */
+export type SalesOrderPaymentRow = {
+  id: string
+  organization_id: string
+  sales_order_id: string
+  amount: number
+  method: string | null
+  note: string | null
+  paid_at: string
+  created_by: string | null
+  created_at: string
+}
+
+/**
+ * An invoice: a snapshot, not a view.
+ *
+ * Its totals are stored and its lines carry the product's name as text, so
+ * editing the order afterwards does not move it. amount_paid is maintained by
+ * the payment ledger's trigger and by nothing else.
+ */
+export type InvoiceRow = {
+  id: string
+  organization_id: string
+  number: string
+  sales_order_id: string | null
+  company_id: string | null
+  contact_id: string | null
+  owner_id: string | null
+  /** The salesperson's name as it read at issue. */
+  owner_name: string | null
+  status: InvoiceStatus
+  currency: string
+  issue_date: string
+  due_date: string | null
+  subtotal: number
+  shipping_charge: number
+  total: number
+  amount_paid: number
+  payment_terms: string | null
+  notes: string | null
+  terms: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** One line of an invoice, frozen at issue. Written only by the conversion. */
+export type InvoiceLineRow = {
+  id: string
+  organization_id: string
+  invoice_id: string
+  product_id: string | null
+  name: string
+  sku: string | null
+  notes: string | null
+  quantity: number
+  unit_price: number
+  unit_cost: number
+  discount: number
+  line_total: number
+  position: number
+  created_at: string
+}
+
+/** A payment on an invoice, or a reversal. Append-only, like the deposits. */
+export type InvoicePaymentRow = {
+  id: string
+  organization_id: string
+  invoice_id: string
+  amount: number
+  method: string | null
+  note: string | null
+  paid_at: string
+  created_by: string | null
+  created_at: string
+}
+
 /** What a contact has asked about. Intent, not purchase history. */
 /** A warehouse. Org-wide reference data: everyone reads, managers arrange. */
 export type StockLocationRow = {
@@ -951,6 +1102,91 @@ export interface Database {
         | 'updated_at'
       >
       contact_products: TableDef<ContactProductRow, 'organization_id' | 'created_at'>
+      sales_orders: TableDef<
+        SalesOrderRow,
+        | 'id'
+        | 'number'
+        | 'company_id'
+        | 'contact_id'
+        | 'owner_id'
+        | 'location_id'
+        | 'status'
+        | 'currency'
+        | 'order_date'
+        | 'payment_terms'
+        | 'shipping_charge'
+        | 'notes'
+        | 'terms'
+        | 'signed_at'
+        | 'created_by'
+        | 'updated_by'
+        | 'deleted_at'
+        | 'deleted_by'
+        | 'created_at'
+        | 'updated_at'
+      >
+      sales_order_lines: TableDef<
+        SalesOrderLineRow,
+        | 'id'
+        | 'product_id'
+        | 'description'
+        | 'notes'
+        | 'quantity'
+        | 'unit_price'
+        | 'unit_cost'
+        | 'revised_rate_type'
+        | 'revised_rate'
+        // Derived in the database. Present on a read, never sent on a write.
+        | 'discount'
+        | 'line_total'
+        | 'line_cost'
+        | 'position'
+        | 'created_at'
+        | 'updated_at'
+      >
+      sales_order_payments: TableDef<
+        SalesOrderPaymentRow,
+        'id' | 'method' | 'note' | 'paid_at' | 'created_by' | 'created_at'
+      >
+      invoices: TableDef<
+        InvoiceRow,
+        | 'id'
+        | 'number'
+        | 'sales_order_id'
+        | 'company_id'
+        | 'contact_id'
+        | 'owner_id'
+        | 'owner_name'
+        | 'status'
+        | 'currency'
+        | 'issue_date'
+        | 'due_date'
+        | 'subtotal'
+        | 'shipping_charge'
+        | 'total'
+        | 'amount_paid'
+        | 'payment_terms'
+        | 'notes'
+        | 'terms'
+        | 'created_by'
+        | 'created_at'
+        | 'updated_at'
+      >
+      invoice_lines: TableDef<
+        InvoiceLineRow,
+        | 'id'
+        | 'product_id'
+        | 'sku'
+        | 'notes'
+        | 'unit_cost'
+        | 'discount'
+        | 'position'
+        | 'created_at'
+      >
+      invoice_payments: TableDef<
+        InvoicePaymentRow,
+        'id' | 'method' | 'note' | 'paid_at' | 'created_by' | 'created_at'
+      >
       tags: TableDef<TagRow, 'id' | 'color' | 'created_at'>
       contact_tags: TableDef<ContactTagRow, 'organization_id' | 'created_at'>
       saved_filters: TableDef<
@@ -1041,6 +1277,20 @@ export interface Database {
         }
         Returns: number
       }
+      /** Allocates the SO number in the same transaction as the row it goes on. */
+      create_sales_order: {
+        Args: {
+          p_company_id?: string | null
+          p_contact_id?: string | null
+          p_owner_id?: string | null
+          p_currency?: string | null
+        }
+        Returns: string
+      }
+      /** Idempotent: returns the existing invoice when the order already has one. */
+      convert_sales_order_to_invoice: { Args: { p_sales_order_id: string }; Returns: string }
+      soft_delete_sales_order: { Args: { p_sales_order_id: string }; Returns: void }
+      restore_sales_order: { Args: { p_sales_order_id: string }; Returns: void }
       soft_delete_product: { Args: { p_product_id: string }; Returns: void }
       restore_product: { Args: { p_product_id: string }; Returns: void }
       soft_delete_contact: { Args: { p_contact_id: string }; Returns: void }

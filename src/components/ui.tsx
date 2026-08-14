@@ -1,6 +1,16 @@
 import Link from 'next/link'
 
-import type { LifecycleStage, DealStatus } from '@/lib/database.types'
+import type {
+  LifecycleStage,
+  DealStatus,
+  InvoiceStatus,
+  SalesOrderStatus,
+} from '@/lib/database.types'
+import {
+  INVOICE_STATUS_LABELS,
+  SALES_ORDER_STATUS_HINTS,
+  SALES_ORDER_STATUS_LABELS,
+} from '@/lib/sales'
 import { TrendingUpIcon, type IconComponent } from '@/components/icons'
 
 export function PageHeader({
@@ -167,6 +177,49 @@ const DEAL_STATUS_STYLES: Record<DealStatus, string> = {
 
 export function DealStatusBadge({ status }: { status: DealStatus }) {
   return <span className={`badge ${DEAL_STATUS_STYLES[status]}`}>{status}</span>
+}
+
+/*
+ * A sales order's colours run cool to warm as it commits: grey while it is
+ * nothing yet, amber once money has been taken, blue once it is committed,
+ * green when it is done. Cancelled is red because it is the one that means
+ * nothing further will happen.
+ */
+const SALES_ORDER_STATUS_STYLES: Record<SalesOrderStatus, string> = {
+  draft: 'bg-slate-100 text-slate-600',
+  reserved: 'bg-amber-100 text-amber-800',
+  confirmed: 'bg-blue-100 text-blue-700',
+  fulfilled: 'bg-emerald-100 text-emerald-700',
+  cancelled: 'bg-red-100 text-red-700',
+}
+
+export function SalesOrderStatusBadge({ status }: { status: SalesOrderStatus }) {
+  return (
+    <span
+      className={`badge ${SALES_ORDER_STATUS_STYLES[status]}`}
+      title={SALES_ORDER_STATUS_HINTS[status]}
+    >
+      {SALES_ORDER_STATUS_LABELS[status]}
+    </span>
+  )
+}
+
+/* Void is grey rather than red: it is not a failure, it is a document that no
+   longer counts. Part paid is amber because somebody still has to chase it. */
+const INVOICE_STATUS_STYLES: Record<InvoiceStatus, string> = {
+  draft: 'bg-slate-100 text-slate-600',
+  sent: 'bg-blue-100 text-blue-700',
+  partial: 'bg-amber-100 text-amber-800',
+  paid: 'bg-emerald-100 text-emerald-700',
+  void: 'bg-slate-200 text-slate-500 line-through',
+}
+
+export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
+  return (
+    <span className={`badge ${INVOICE_STATUS_STYLES[status]}`}>
+      {INVOICE_STATUS_LABELS[status]}
+    </span>
+  )
 }
 
 export function ErrorNote({ children }: { children: React.ReactNode }) {

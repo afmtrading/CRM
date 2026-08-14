@@ -825,3 +825,20 @@ export async function deleteStockBin(formData: FormData) {
   if (error) throw new Error(error.message)
   revalidatePath('/settings/locations')
 }
+
+/**
+ * Brings a deleted sales order back.
+ *
+ * The order's lines come with it — they were never deleted, only made
+ * unreachable — so a restored order is worth exactly what it was worth.
+ */
+export async function restoreSalesOrder(formData: FormData) {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await context.supabase.rpc('restore_sales_order', { p_sales_order_id: id })
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/deleted')
+  revalidatePath('/sales-orders')
+}

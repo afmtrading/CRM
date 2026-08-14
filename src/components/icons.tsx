@@ -301,3 +301,21 @@ export const SendIcon: IconComponent = (p) => (
     <path d="M22 2 15 22l-4-9-9-4z" />
   </Svg>
 )
+
+/** A clipboard with a line on it — an order somebody has written down. */
+export const SalesOrderIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z" />
+    <path d="M8 5H6.5A1.5 1.5 0 0 0 5 6.5v13A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 17.5 5H16" />
+    <path d="M9 11h6M9 15h4" />
+  </Svg>
+)
+
+/** A document with a currency stroke through it — a bill. */
+export const InvoiceIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <path d="M14 3v5h5" />
+    <path d="M12 11v7M14 12.5h-3a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3h-3" />
+  </Svg>
+)
