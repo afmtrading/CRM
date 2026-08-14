@@ -1,10 +1,12 @@
 import { requireAdmin, scoped } from '@/lib/tenancy'
-import type { UserRow } from '@/lib/database.types'
+import type { PermissionSetRow, UserRow } from '@/lib/database.types'
 import { DateTime } from '@/components/date-time'
 import { USER_ROLES } from '@/lib/field-options'
 import { ErrorNote, PageHeader, Section } from '@/components/ui'
 
-import { deleteUser, updateUser } from '../actions'
+import { ActionForm, SubmitButton } from '@/components/action-form'
+
+import { assignPermissionSet, deleteUser, updateUser } from '../actions'
 import { DeleteUserButton } from './delete-user-button'
 import { InviteUserForm } from './invite-form'
 import { OrganizationForm } from './organization-form'
@@ -42,8 +44,19 @@ export default async function UserSettingsPage({
   const params = await searchParams
   const context = await requireAdmin()
 
-  const { data: users } = await scoped(context, 'users').select('*').order('created_at')
+  const [{ data: users }, { data: sets }] = await Promise.all([
+    scoped(context, 'users').select('*').order('created_at'),
+    scoped(context, 'permission_sets').select('*').order('name'),
+  ])
+
   const userList = (users ?? []) as UserRow[]
+  const setList = (sets ?? []) as PermissionSetRow[]
+
+  // The set somebody's role lands them on, so the "role default" option can
+  // say which one that is rather than leaving them to work it out.
+  const defaultFor = new Map(
+    setList.filter((set) => set.role).map((set) => [set.role as string, set.name]),
+  )
 
   const confirmation = params.saved
     ? `${params.saved} was updated.`
@@ -80,6 +93,7 @@ export default async function UserSettingsPage({
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
+                    <th>Permissions</th>
                     <th>Access</th>
                     <th>Last login</th>
                     <th />
@@ -132,6 +146,43 @@ export default async function UserSettingsPage({
                               </option>
                             ))}
                           </select>
+                        </td>
+
+                        {/*
+                          Assignment is its own form, not part of the row's
+                          save: it goes through assign_permission_set(), which
+                          refuses the change if it would leave the organization
+                          with nobody able to reach Settings or edit
+                          permissions. That refusal has to be readable, and a
+                          message belongs beside the control that caused it.
+                        */}
+                        <td>
+                          <ActionForm action={assignPermissionSet} className="flex items-center gap-1.5">
+                            <input type="hidden" name="user_id" value={user.id} />
+                            <label className="sr-only" htmlFor={`${formId}-set`}>
+                              Permission set for {user.email}
+                            </label>
+                            <select
+                              id={`${formId}-set`}
+                              name="permission_set_id"
+                              defaultValue={user.permission_set_id ?? ''}
+                              className="input w-40 py-1"
+                            >
+                              <option value="">
+                                {defaultFor.get(user.role)
+                                  ? `Role default (${defaultFor.get(user.role)})`
+                                  : 'Role default'}
+                              </option>
+                              {setList.map((set) => (
+                                <option key={set.id} value={set.id}>
+                                  {set.name}
+                                </option>
+                              ))}
+                            </select>
+                            <SubmitButton className="btn-secondary px-2 py-1 text-xs" pendingLabel="…">
+                              Set
+                            </SubmitButton>
+                          </ActionForm>
                         </td>
 
                         <td>

@@ -18,6 +18,14 @@ export interface SessionContext {
   canBulk: boolean
   /** Anyone but a read-only user. */
   canWrite: boolean
+  /**
+   * May edit permission sets and assign people to them.
+   *
+   * Deliberately not implied by isAdmin: without the separation, anybody who
+   * can reach Settings can grant themselves anything, which makes every other
+   * capability advisory.
+   */
+  canManagePermissions: boolean
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>
 }
 
@@ -93,6 +101,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
         userRow.role === 'manager' ||
         userRow.role === 'sales_director'),
     canWrite: permissions?.write_records ?? userRow.role !== 'readonly',
+    canManagePermissions: permissions?.manage_permissions ?? userRow.role === 'admin',
     supabase,
   }
 })
@@ -195,6 +204,7 @@ export type TenantTable =
   | 'custom_field_definitions'
   | 'field_options'
   | 'notifications'
+  | 'permission_sets'
   | 'mailbox_connections'
   | 'sending_domains'
   | 'email_suppressions'

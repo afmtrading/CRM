@@ -147,6 +147,12 @@ export type PermissionSetRow = {
   manage_records: boolean
   bulk_records: boolean
   administer: boolean
+  /**
+   * May edit these sets and assign people to them. Deliberately not implied by
+   * `administer` — otherwise anybody who can reach Settings can grant
+   * themselves anything, and every other column is advisory.
+   */
+  manage_permissions: boolean
   created_at: string
   updated_at: string
 }
@@ -1020,6 +1026,7 @@ export interface Database {
         | 'manage_records'
         | 'bulk_records'
         | 'administer'
+        | 'manage_permissions'
         | 'created_at'
         | 'updated_at'
       >
@@ -1332,6 +1339,29 @@ export interface Database {
        */
       /** The caller's permission set — their own if assigned, otherwise their role's. */
       current_permissions: { Args: Record<string, never>; Returns: PermissionSetRow | null }
+      /** Deals per set, counting people who resolve to it by role as well. */
+      permission_set_members: {
+        Args: Record<string, never>
+        Returns: { permission_set_id: string; members: number }[]
+      }
+      create_permission_set: { Args: { p_name: string }; Returns: string }
+      update_permission_set: {
+        Args: {
+          p_id: string
+          p_name: string
+          p_see_all_records: boolean
+          p_see_unassigned: boolean
+          p_write_records: boolean
+          p_delete_records: boolean
+          p_manage_records: boolean
+          p_bulk_records: boolean
+          p_administer: boolean
+          p_manage_permissions: boolean
+        }
+        Returns: void
+      }
+      delete_permission_set: { Args: { p_id: string }; Returns: void }
+      assign_permission_set: { Args: { p_user_id: string; p_set_id: string | null }; Returns: void }
       remove_pipeline: { Args: { p_pipeline_id: string }; Returns: 'deleted' | 'archived' }
       restore_pipeline: { Args: { p_pipeline_id: string }; Returns: void }
       remove_stage: { Args: { p_stage_id: string }; Returns: 'deleted' | 'archived' }

@@ -10,6 +10,7 @@ import { safeTimeZone } from '@/lib/timezone'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
+import { visibilityColumns } from '@/lib/permissions'
 import { resolveStatus, wouldRemoveLastAdmin, type UserSnapshot } from '@/lib/users'
 import type { OptionColor, StageOutcome } from '@/lib/database.types'
 
@@ -271,6 +272,116 @@ export async function restoreStage(_state: ActionState, formData: FormData): Pro
   revalidatePath('/settings/pipelines')
   revalidatePath('/deals')
   return {}
+}
+
+// -----------------------------------------------------------------------------
+// Permission sets
+//
+// Every write goes through a definer function rather than through the table.
+// The table has no write policy at all, deliberately: a row-level rule can say
+// who may change a row, but it cannot say "and afterwards somebody must still
+// be able to get back in". Both lockouts — nobody who can reach Settings,
+// nobody who can edit permissions — are questions about the organization after
+// the write, which only something that owns the write can ask.
+//
+// So the checks below are about failing early with a readable message. The ones
+// that matter are a layer down, and these actions pass their wording through
+// rather than inventing their own.
+// -----------------------------------------------------------------------------
+
+async function requirePermissionManager() {
+  const context = await requireSession()
+  if (!context.canManagePermissions) {
+    redirect('/?error=permission')
+  }
+  return context
+}
+
+export async function createPermissionSet(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requirePermissionManager()
+  const name = String(formData.get('name') ?? '').trim()
+
+  if (!name) return { error: 'A permission set needs a name' }
+
+  const { error } = await context.supabase.rpc('create_permission_set', { p_name: name })
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/permissions')
+  return { ok: `${name} created. Nothing is ticked on it yet.` }
+}
+
+export async function updatePermissionSet(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requirePermissionManager()
+
+  const id = String(formData.get('id') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  const visibility = visibilityColumns(String(formData.get('visibility') ?? ''))
+  const ticked = (key: string) => formData.get(key) === 'on'
+
+  const { error } = await context.supabase.rpc('update_permission_set', {
+    p_id: id,
+    p_name: name,
+    p_see_all_records: visibility.see_all_records,
+    p_see_unassigned: visibility.see_unassigned,
+    p_write_records: ticked('write_records'),
+    p_delete_records: ticked('delete_records'),
+    p_manage_records: ticked('manage_records'),
+    p_bulk_records: ticked('bulk_records'),
+    p_administer: ticked('administer'),
+    p_manage_permissions: ticked('manage_permissions'),
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/permissions')
+  revalidatePath('/settings/users')
+  return { ok: 'Saved.' }
+}
+
+export async function deletePermissionSet(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requirePermissionManager()
+
+  const { error } = await context.supabase.rpc('delete_permission_set', {
+    p_id: String(formData.get('id') ?? ''),
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/permissions')
+  return {}
+}
+
+/**
+ * Puts somebody on a set, or takes them off it.
+ *
+ * An empty value means "resolve through your role again" — where everybody
+ * starts, and where somebody goes back to when their set is taken away.
+ */
+export async function assignPermissionSet(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requirePermissionManager()
+
+  const { error } = await context.supabase.rpc('assign_permission_set', {
+    p_user_id: String(formData.get('user_id') ?? ''),
+    p_set_id: String(formData.get('permission_set_id') ?? '') || null,
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/users')
+  revalidatePath('/settings/permissions')
+  return { ok: 'Saved.' }
 }
 
 // -----------------------------------------------------------------------------

@@ -88,5 +88,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/20_retire_pipel
 echo "→ permission sets"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/21_permission_sets.sql"
 
+echo "→ editing permission sets"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/22_manage_permission_sets.sql"
+
 echo
 echo "All database tests passed."
