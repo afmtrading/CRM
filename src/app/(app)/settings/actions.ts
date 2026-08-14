@@ -10,7 +10,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
 import { resolveStatus, wouldRemoveLastAdmin, type UserSnapshot } from '@/lib/users'
-import type { OptionColor } from '@/lib/database.types'
+import type { OptionColor, StageOutcome } from '@/lib/database.types'
 
 // -----------------------------------------------------------------------------
 // Pipelines and stages (PRD 6.3)
@@ -156,11 +156,26 @@ export async function updateStage(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   const probability = Number(formData.get('default_probability') ?? 50) / 100
   const position = Number(formData.get('order') ?? 0)
+  const rawOutcome = String(formData.get('outcome') ?? '')
 
   if (!name) throw new Error('A stage needs a name')
 
+  /*
+   * What reaching this stage means. Only ever set from the three the database
+   * knows; anything else leaves it alone rather than writing a value the
+   * deals trigger would not recognise.
+   */
+  const outcome =
+    rawOutcome === 'open' || rawOutcome === 'won' || rawOutcome === 'lost'
+      ? (rawOutcome as StageOutcome)
+      : undefined
+
   const { error } = await scoped(context, 'stages')
-    .update({ name, default_probability: Math.min(1, Math.max(0, probability)) })
+    .update({
+      name,
+      default_probability: Math.min(1, Math.max(0, probability)),
+      ...(outcome ? { outcome } : {}),
+    })
     .eq('id', id)
 
   if (error) throw new Error(error.message)

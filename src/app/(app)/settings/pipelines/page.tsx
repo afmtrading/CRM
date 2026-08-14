@@ -69,7 +69,7 @@ export default async function PipelineSettingsPage() {
     <>
       <PageHeader
         title="Pipelines & stages"
-        description="Each pipeline has its own ordered stages. A stage's default probability is what deals inherit when they land in it."
+        description="Each pipeline has its own ordered stages. A stage's default probability is what deals inherit when they land in it, and its outcome is what reaching it means — a stage that closes a deal as won stamps the close date, credits the owner and releases the stock the deal was holding."
       />
 
       <form action={createPipeline} className="card mb-5 flex flex-wrap items-end gap-2 p-4">
@@ -230,6 +230,30 @@ export default async function PipelineSettingsPage() {
                                 />
                                 <span className="text-sm text-slate-500">%</span>
                               </div>
+
+                              {/*
+                                What landing here means. Dragging a deal into a
+                                stage marked won closes it as won — stamps the
+                                close date, credits the owner, releases the
+                                stock it was holding.
+
+                                Here because the migration that added it said
+                                the guessed values would be "visible and can be
+                                corrected in Settings", and until now they were
+                                neither. A stage called "Closed — Won", or one
+                                written in French, has always needed somebody to
+                                say so.
+                              */}
+                              <select
+                                name="outcome"
+                                defaultValue={stage.outcome}
+                                className="input w-32"
+                                aria-label={`What reaching ${stage.name} means`}
+                              >
+                                <option value="open">Still open</option>
+                                <option value="won">Closes as won</option>
+                                <option value="lost">Closes as lost</option>
+                              </select>
                               <button type="submit" className="btn-secondary">
                                 Save
                               </button>

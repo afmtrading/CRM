@@ -305,4 +305,60 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- What a stage means is settable, and is what closes a deal.
+-- =============================================================================
+do $$
+declare
+  v_org   uuid := (select id from fixture where key = 'org');
+  v_stage uuid;
+  v_deal  uuid;
+begin
+  raise notice 'Stage outcome:';
+
+  perform sign_in_as('admin_auth');
+
+  -- A seeded pipeline knows what its own stages mean. This is the regression
+  -- that mattered: the migration adding the column backfilled existing stages
+  -- and left the seed alone, so every organization created afterwards got a
+  -- Won stage that closed nothing.
+  perform test_assert(
+    (select s.outcome from stages s join pipelines p on p.id = s.pipeline_id
+     where p.organization_id = v_org and p.name = 'Sales Pipeline' and s.name = 'Won') = 'won',
+    'a seeded Won stage closes deals as won'
+  );
+  perform test_assert(
+    (select s.outcome from stages s join pipelines p on p.id = s.pipeline_id
+     where p.organization_id = v_org and p.name = 'Sales Pipeline' and s.name = 'Lost') = 'lost',
+    'and a seeded Lost stage closes them as lost'
+  );
+  perform test_assert(
+    (select s.outcome from stages s join pipelines p on p.id = s.pipeline_id
+     where p.organization_id = v_org and p.name = 'Sales Pipeline' and s.name = 'New') = 'open',
+    'while the rest leave them open'
+  );
+
+  -- An administrator can say what a renamed stage means, which is what the
+  -- Settings screen now writes.
+  select s.id into v_stage from stages s join pipelines p on p.id = s.pipeline_id
+  where p.organization_id = v_org and p.name = 'Sales Pipeline' and s.name = 'Negotiation';
+
+  update stages set name = 'Closed — Won', outcome = 'won' where id = v_stage;
+
+  insert into deals (organization_id, name, stage_id, value, currency, owner_id)
+  values (v_org, 'Lands in the renamed stage', v_stage, 500, 'USD',
+          (select id from fixture where key = 'admin'))
+  returning id into v_deal;
+
+  perform test_assert(
+    (select status from deals where id = v_deal) = 'won',
+    'a deal landing in a stage marked won is won, whatever the stage is called'
+  );
+  perform test_assert(
+    (select closed_at is not null from deals where id = v_deal),
+    'and it is stamped closed'
+  );
+end;
+$$;
+
 rollback;
