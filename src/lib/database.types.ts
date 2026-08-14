@@ -423,6 +423,11 @@ export type PipelineRow = {
   is_default: boolean
   /** Position in the pipeline bar. Contiguous from 0; see reorder_pipeline(). */
   order: number
+  /**
+   * Retired. Hidden from the board, the pipeline bar and every picker, with its
+   * stage history intact — see 20260234000000. Null means live.
+   */
+  archived_at: string | null
   created_at: string
 }
 
@@ -441,6 +446,8 @@ export type StageRow = {
    * working stage and says nothing.
    */
   outcome: StageOutcome
+  /** Retired, exactly as on a pipeline. Null means live. */
+  archived_at: string | null
   created_at: string
 }
 
@@ -1044,10 +1051,10 @@ export interface Database {
         | 'updated_at'
       >
       company_tags: TableDef<CompanyTagRow, 'organization_id' | 'created_at'>
-      pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'order' | 'created_at'>
+      pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'order' | 'archived_at' | 'created_at'>
       stages: TableDef<
         StageRow,
-        'id' | 'organization_id' | 'order' | 'default_probability' | 'created_at'
+        'id' | 'organization_id' | 'order' | 'default_probability' | 'archived_at' | 'created_at'
       >
       deals: TableDef<
         DealRow,
@@ -1269,6 +1276,19 @@ export interface Database {
       move_stage: { Args: { p_stage_id: string; p_delta: number }; Returns: void }
       reorder_pipeline: { Args: { p_pipeline_id: string; p_position: number }; Returns: void }
       move_pipeline: { Args: { p_pipeline_id: string; p_delta: number }; Returns: void }
+      /**
+       * Deletes a pipeline nothing refers to, archives one something does, and
+       * says which — see 20260234000000.
+       */
+      remove_pipeline: { Args: { p_pipeline_id: string }; Returns: 'deleted' | 'archived' }
+      restore_pipeline: { Args: { p_pipeline_id: string }; Returns: void }
+      remove_stage: { Args: { p_stage_id: string }; Returns: 'deleted' | 'archived' }
+      restore_stage: { Args: { p_stage_id: string }; Returns: void }
+      /** Deals per pipeline: open, closed, and in the recycle bin. */
+      pipeline_usage: {
+        Args: Record<string, never>
+        Returns: { pipeline_id: string; open_deals: number; closed: number; binned: number }[]
+      }
       bulk_set_consent: {
         Args: { p_ids: string[]; p_consent: string; p_source: string; p_at?: string }
         Returns: number

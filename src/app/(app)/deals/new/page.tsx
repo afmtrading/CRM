@@ -41,8 +41,9 @@ export default async function NewDealPage({
     { data: definitions },
     { data: options },
   ] = await Promise.all([
-    scoped(context, 'pipelines').select('*').order('name'),
-    scoped(context, 'stages').select('*').order('order'),
+    // Retired pipelines and stages are not somewhere a new deal can go.
+    scoped(context, 'pipelines').select('*').is('archived_at', null).order('name'),
+    scoped(context, 'stages').select('*').is('archived_at', null).order('order'),
     scoped(context, 'contacts')
       .select('id, first_name, last_name, email')
       .is('duplicate_of_id', null)

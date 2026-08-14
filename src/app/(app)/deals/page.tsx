@@ -40,8 +40,10 @@ export default async function DealsPage({
   const [{ data: pipelines }, { data: users }, { data: products }, { data: savedViews }] =
     await Promise.all([
       // The bar above the board runs in the order an admin arranged, not
-      // alphabetically — see settings/pipelines.
-      scoped(context, 'pipelines').select('*').order('order'),
+      // alphabetically — see settings/pipelines. Archived ones are off it:
+      // a retired pipeline has no deals on the board by construction, so its
+      // tab would only ever open an empty column.
+      scoped(context, 'pipelines').select('*').is('archived_at', null).order('order'),
       scoped(context, 'users').select('*').order('name'),
       scoped(context, 'products').select('id, name').is('deleted_at', null).order('name'),
       /*
@@ -80,6 +82,7 @@ export default async function DealsPage({
   const { data: stages } = await scoped(context, 'stages')
     .select('*')
     .eq('pipeline_id', activePipeline.id)
+    .is('archived_at', null)
     .order('order')
 
   const stageList = (stages ?? []) as StageRow[]

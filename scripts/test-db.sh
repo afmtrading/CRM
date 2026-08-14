@@ -82,5 +82,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/18_stage_histor
 echo "→ sales order and invoice tests"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/19_sales_orders.sql"
 
+echo "→ retiring pipelines and stages"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/20_retire_pipelines.sql"
+
 echo
 echo "All database tests passed."
