@@ -9,6 +9,7 @@ import type {
   DealProductRow,
   FieldOptionRow,
   ProductRow,
+  SalesOrderStatus,
   StockAdjustmentRow,
   StockLevelRow,
 } from '@/lib/database.types'
@@ -27,7 +28,13 @@ import {
   Field,
   OptionBadges,
 } from '@/components/contact-cards'
-import { DealStatusBadge, EmptyState, PageHeader, Section } from '@/components/ui'
+import {
+  DealStatusBadge,
+  EmptyState,
+  PageHeader,
+  SalesOrderStatusBadge,
+  Section,
+} from '@/components/ui'
 import { DateTime } from '@/components/date-time'
 
 import { deleteProduct } from '../actions'
@@ -57,10 +64,13 @@ function StockTile({
   label,
   value,
   tone,
+  /** What the number is made of, where it is made of more than one thing. */
+  note,
 }: {
   label: string
   value: number | string
   tone?: string
+  note?: string
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
@@ -68,6 +78,7 @@ function StockTile({
       <p className={`mt-1 text-lg font-semibold ${tone ?? 'text-slate-900'}`}>
         {formatQuantity(value)}
       </p>
+      {note && <p className="mt-0.5 text-[11px] leading-tight text-slate-400">{note}</p>}
     </div>
   )
 }
@@ -101,6 +112,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     { data: levels },
     { data: movements },
     { data: stockSummary },
+    { data: committedOrders },
   ] = await Promise.all([
       scoped(context, 'deal_products')
         .select('*, deals(id, name, status, currency, probability, companies(id, name))')
@@ -125,6 +137,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         .order('created_at', { ascending: false })
         .limit(50),
       context.supabase.rpc('product_stock_summary', { p_product_id: id }),
+      context.supabase.rpc('product_committed_orders', { p_product_id: id }),
     ])
 
   const lineItems = ((lines ?? []) as LineItem[]).filter((line) => line.deals !== null)
@@ -177,9 +190,27 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const stock = ((stockSummary ?? [])[0] ?? {
     on_hand: 0,
     committed: 0,
+    committed_deals: 0,
+    committed_orders: 0,
     reserved: 0,
     available: 0,
-  }) as { on_hand: number; committed: number; reserved: number; available: number }
+  }) as {
+    on_hand: number
+    committed: number
+    committed_deals: number
+    committed_orders: number
+    reserved: number
+    available: number
+  }
+
+  /** The signed orders holding this product. Invoker, so a rep sees their own. */
+  const orders = (committedOrders ?? []) as {
+    sales_order_id: string
+    number: string
+    status: SalesOrderStatus
+    company_name: string | null
+    quantity: number
+  }[]
 
   const imageUrl = productImageUrl(product.image_path)
 
@@ -401,7 +432,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           >
             <div className="mb-4 grid gap-3 sm:grid-cols-4">
               <StockTile label="On Hand" value={stock.on_hand} />
-              <StockTile label="Committed" value={stock.committed} tone="text-amber-600" />
+              {/* One tile, because committed is one number in the arithmetic
+                  below it — but it now has two sources, and a total nobody can
+                  break down is a total nobody trusts. */}
+              <StockTile
+                label="Committed"
+                value={stock.committed}
+                tone="text-amber-600"
+                note={
+                  Number(stock.committed_orders) > 0
+                    ? `${formatQuantity(stock.committed_deals)} on deals · ${formatQuantity(stock.committed_orders)} on orders`
+                    : undefined
+                }
+              />
               <StockTile label="Reserved" value={stock.reserved} tone="text-amber-600" />
               <StockTile
                 label="Available"
@@ -451,9 +494,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             )}
 
             <p className="mt-3 text-xs text-slate-400">
-              Committed is what open deals have already asked for — it follows the line items rather
-              than being entered here. Available can go negative, which means more has been promised
-              than exists.
+              Committed is what open deals and signed sales orders have already asked for. It
+              follows their line items rather than being entered here, so cancelling an order or
+              winning a deal releases it with nothing to remember. Reserved is the separate number
+              you set by hand, for stock held back for a reason that is not a document yet.
+              Available can go negative, which means more has been promised than exists.
             </p>
           </Section>
 
@@ -658,6 +703,59 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   fieldOptions={options}
                 />
               </dl>
+            </Section>
+          )}
+
+          {orders.length > 0 && (
+            <Section
+              title="On sales orders"
+              className="order-9"
+              actions={
+                <span className="text-xs text-slate-500">
+                  {formatQuantity(orders.reduce((total, order) => total + Number(order.quantity), 0))}{' '}
+                  held
+                </span>
+              }
+            >
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Order</th>
+                      <th>Company</th>
+                      <th>Status</th>
+                      <th className="text-right">Qty held</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((order) => (
+                      <tr key={order.sales_order_id}>
+                        <td>
+                          <Link
+                            href={`/sales-orders/${order.sales_order_id}`}
+                            className="font-medium text-slate-900 hover:text-brand-700"
+                          >
+                            {order.number}
+                          </Link>
+                        </td>
+                        <td>{order.company_name ?? <span className="text-slate-300">—</span>}</td>
+                        <td>
+                          <SalesOrderStatusBadge status={order.status} />
+                        </td>
+                        <td className="text-right font-medium">
+                          {formatQuantity(order.quantity)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="mt-3 text-xs text-slate-400">
+                Signed and confirmed orders only. A draft holds nothing, and a fulfilled or
+                cancelled order releases what it held — there is no hold to remember, because the
+                number is read off these lines every time it is asked for.
+              </p>
             </Section>
           )}
 
