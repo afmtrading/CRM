@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 /** Short enough not to be theatre, long enough to be worth having. */
 const MINIMUM = 8
@@ -36,6 +35,7 @@ export function SetPasswordForm({ next }: { next: string }) {
     }
 
     setPending(true)
+    const { createSupabaseBrowserClient } = await import('@/lib/supabase/client')
     const supabase = createSupabaseBrowserClient()
     const { error: updateError } = await supabase.auth.updateUser({ password })
     setPending(false)

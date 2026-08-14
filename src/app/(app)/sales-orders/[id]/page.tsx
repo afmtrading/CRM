@@ -17,16 +17,18 @@ import {
   revisionLabel,
 } from '@/lib/sales'
 import type {
-  CompanyRow,
-  ContactRow,
   InvoiceRow,
-  ProductRow,
   SalesOrderLineRow,
   SalesOrderPaymentRow,
   SalesOrderRow,
-  StockLocationRow,
-  UserRow,
 } from '@/lib/database.types'
+
+/* What each picker actually reads, so the query can ask for exactly that. */
+type PickerCompany = { id: string; name: string }
+type PickerContact = { id: string; first_name: string; last_name: string; email: string | null }
+type PickerUser = { id: string; name: string; email: string }
+type PickerLocation = { id: string; name: string }
+type PickerProduct = { id: string; name: string; sku: string | null; unit: string }
 import { Money } from '@/components/money'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
 
@@ -41,6 +43,15 @@ import {
 } from '../actions'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * How many options a picker will hold.
+ *
+ * Bounded because the alternative is unbounded: a growing catalogue quietly
+ * turns one page load into a full-table read, and nobody scrolls past the first
+ * few hundred entries of a dropdown anyway.
+ */
+const PICKER_LIMIT = 500
 
 export default async function SalesOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -73,18 +84,38 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       .select('*')
       .eq('sales_order_id', id)
       .order('paid_at'),
-    scoped(context, 'companies').select('*').is('deleted_at', null).order('name'),
-    scoped(context, 'contacts').select('*').is('deleted_at', null).order('last_name').limit(500),
-    scoped(context, 'users').select('*').order('name'),
-    scoped(context, 'stock_locations').select('*').eq('active', true).order('name'),
-    scoped(context, 'products').select('*').is('deleted_at', null).eq('active', true).order('name'),
+    /*
+     * The five pickers. Each fetches the columns its <option> needs and no
+     * more, and each is bounded — a select element with ten thousand options in
+     * it has already failed the person using it, and pulling every column of
+     * every company to render a name is a page's worth of transfer for two
+     * fields.
+     */
+    scoped(context, 'companies')
+      .select('id, name')
+      .is('deleted_at', null)
+      .order('name')
+      .limit(PICKER_LIMIT),
+    scoped(context, 'contacts')
+      .select('id, first_name, last_name, email')
+      .is('deleted_at', null)
+      .order('last_name')
+      .limit(PICKER_LIMIT),
+    scoped(context, 'users').select('id, name, email').eq('status', 'active').order('name'),
+    scoped(context, 'stock_locations').select('id, name').eq('active', true).order('name'),
+    scoped(context, 'products')
+      .select('id, name, sku, unit')
+      .is('deleted_at', null)
+      .eq('active', true)
+      .order('name')
+      .limit(PICKER_LIMIT),
     scoped(context, 'invoices').select('*').eq('sales_order_id', id).maybeSingle(),
   ])
 
   const lines = (lineRows ?? []) as SalesOrderLineRow[]
   const payments = (paymentRows ?? []) as SalesOrderPaymentRow[]
   const invoice = invoiceRow as InvoiceRow | null
-  const catalogue = (products ?? []) as ProductRow[]
+  const catalogue = (products ?? []) as PickerProduct[]
   const productById = new Map(catalogue.map((product) => [product.id, product]))
 
   const deposits = ledgerBalance(payments)
@@ -93,8 +124,8 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
   const editable = isEditable(salesOrder.status) && context.canWrite
   const blocked = invoiceBlockedReason(salesOrder.status)
 
-  const company = ((companies ?? []) as CompanyRow[]).find((c) => c.id === salesOrder.company_id)
-  const owner = ((users ?? []) as UserRow[]).find((u) => u.id === salesOrder.owner_id)
+  const company = ((companies ?? []) as PickerCompany[]).find((c) => c.id === salesOrder.company_id)
+  const owner = ((users ?? []) as PickerUser[]).find((u) => u.id === salesOrder.owner_id)
 
   return (
     <>
@@ -489,7 +520,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   defaultValue={salesOrder.company_id ?? ''}
                 >
                   <option value="">No company</option>
-                  {((companies ?? []) as CompanyRow[]).map((c) => (
+                  {((companies ?? []) as PickerCompany[]).map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -508,7 +539,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   defaultValue={salesOrder.contact_id ?? ''}
                 >
                   <option value="">No contact</option>
-                  {((contacts ?? []) as ContactRow[]).map((c) => (
+                  {((contacts ?? []) as PickerContact[]).map((c) => (
                     <option key={c.id} value={c.id}>
                       {[c.first_name, c.last_name].filter(Boolean).join(' ') || c.email}
                     </option>
@@ -527,7 +558,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   defaultValue={salesOrder.owner_id ?? ''}
                 >
                   <option value="">Unassigned</option>
-                  {((users ?? []) as UserRow[]).map((user) => (
+                  {((users ?? []) as PickerUser[]).map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.name || user.email}
                     </option>
@@ -546,7 +577,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   defaultValue={salesOrder.location_id ?? ''}
                 >
                   <option value="">Not set</option>
-                  {((locations ?? []) as StockLocationRow[]).map((location) => (
+                  {((locations ?? []) as PickerLocation[]).map((location) => (
                     <option key={location.id} value={location.id}>
                       {location.name}
                     </option>
