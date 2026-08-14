@@ -6,6 +6,7 @@ import type { FieldOptionRow, ProductRow } from '@/lib/database.types'
 import { derivePricing } from '@/lib/products'
 import { availableTone, formatQuantity } from '@/lib/stock'
 import { productImageUrl } from '@/lib/product-image'
+import { likeContains } from '@/lib/sql'
 import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
 import { CurrencyIcon, LayersIcon, ProductsIcon, SearchIcon, TagIcon } from '@/components/icons'
@@ -28,7 +29,7 @@ export default async function ProductsPage({
   const showRetired = params.show === 'all'
 
   let query = scoped(context, 'products').select('*').is('deleted_at', null)
-  if (search) query = query.ilike('name', `%${search}%`)
+  if (search) query = query.ilike('name', likeContains(search))
   if (category) query = query.eq('category', category)
   if (!showRetired) query = query.eq('active', true)
 

@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { assertCanBulk, assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import { readCustomFields } from '@/lib/custom-fields'
 import { safeUrl } from '@/lib/field-options'
+import { likeLiteral } from '@/lib/sql'
 import type { ContactLink, ContactRow, LifecycleStage } from '@/lib/database.types'
 
 const lifecycleStages = ['lead', 'qualified', 'customer', 'other'] as const
@@ -84,7 +85,8 @@ async function resolveCompanyId(
 
   const { data: existing } = await scoped(context, 'companies')
     .select('id')
-    .ilike('name', name)
+    .ilike('name', likeLiteral(name))
+    .is('deleted_at', null)
     .limit(1)
 
   const match = ((existing ?? []) as { id: string }[])[0]
