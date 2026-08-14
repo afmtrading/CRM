@@ -23,6 +23,7 @@ function set(overrides: Partial<PermissionSetRow> = {}): PermissionSetRow {
     bulk_records: false,
     administer: false,
     manage_permissions: false,
+    see_hidden: false,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     ...overrides,
@@ -84,8 +85,8 @@ describe('the capability list', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it('puts the two that hand over the building last', () => {
+  it('puts the ones that hand over the building last', () => {
     const keys = CAPABILITIES.map((capability) => capability.key)
-    expect(keys.slice(-2)).toEqual(['administer', 'manage_permissions'])
+    expect(keys.slice(-3)).toEqual(['administer', 'see_hidden', 'manage_permissions'])
   })
 })

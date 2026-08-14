@@ -153,6 +153,8 @@ export type PermissionSetRow = {
    * themselves anything, and every other column is advisory.
    */
   manage_permissions: boolean
+  /** Sees hidden contacts and companies, and may hide or unhide them. */
+  see_hidden: boolean
   created_at: string
   updated_at: string
 }
@@ -204,6 +206,14 @@ export type ContactRow = {
   /** Soft delete. Only an administrator sees a stamped record. */
   deleted_at: string | null
   deleted_by: string | null
+  /**
+   * Out of sight for everybody without see_hidden — including the record's own
+   * owner. Not a delete: the record is whole, and its deals and activities stay
+   * visible with the record behind them unreadable. See 20260237000000.
+   */
+  hidden: boolean
+  hidden_at: string | null
+  hidden_by: string | null
   created_at: string
   updated_at: string
 }
@@ -400,6 +410,14 @@ export type CompanyRow = {
   updated_by: string | null
   deleted_at: string | null
   deleted_by: string | null
+  /**
+   * Out of sight for everybody without see_hidden — including the record's own
+   * owner. Not a delete: the record is whole, and its deals and activities stay
+   * visible with the record behind them unreadable. See 20260237000000.
+   */
+  hidden: boolean
+  hidden_at: string | null
+  hidden_by: string | null
   created_at: string
   updated_at: string
 }
@@ -1027,6 +1045,7 @@ export interface Database {
         | 'bulk_records'
         | 'administer'
         | 'manage_permissions'
+        | 'see_hidden'
         | 'created_at'
         | 'updated_at'
       >
@@ -1060,6 +1079,9 @@ export interface Database {
         | 'links'
         | 'created_by'
         | 'updated_by'
+        | 'hidden'
+        | 'hidden_at'
+        | 'hidden_by'
         | 'deleted_at'
         | 'deleted_by'
         | 'created_at'
@@ -1086,6 +1108,9 @@ export interface Database {
         | 'addresses'
         | 'created_by'
         | 'updated_by'
+        | 'hidden'
+        | 'hidden_at'
+        | 'hidden_by'
         | 'deleted_at'
         | 'deleted_by'
         | 'created_at'
@@ -1357,6 +1382,7 @@ export interface Database {
           p_bulk_records: boolean
           p_administer: boolean
           p_manage_permissions: boolean
+          p_see_hidden: boolean
         }
         Returns: void
       }

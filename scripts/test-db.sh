@@ -91,5 +91,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/21_permission_s
 echo "→ editing permission sets"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/22_manage_permission_sets.sql"
 
+echo "→ hidden contacts and companies"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/23_hidden_records.sql"
+
 echo
 echo "All database tests passed."

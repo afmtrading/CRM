@@ -45,7 +45,9 @@ import {
   OptionBadges,
 } from "@/components/contact-cards";
 
-import { deleteCompany, setCompanyTags } from "../actions";
+import { ActionForm, SubmitButton } from "@/components/action-form";
+
+import { deleteCompany, setCompanyHidden, setCompanyTags } from "../actions";
 
 export default async function CompanyDetailPage({
   params,
@@ -199,9 +201,31 @@ export default async function CompanyDetailPage({
                 </button>
               </form>
             )}
+            {context.canSeeHidden && (
+              <ActionForm action={setCompanyHidden}>
+                <input type="hidden" name="id" value={id} />
+                <input
+                  type="hidden"
+                  name="hidden"
+                  value={company.hidden ? "false" : "true"}
+                />
+                <SubmitButton className="btn-secondary" pendingLabel="Working…">
+                  {company.hidden ? "Unhide" : "Hide"}
+                </SubmitButton>
+              </ActionForm>
+            )}
           </>
         }
       />
+
+      {company.hidden && (
+        <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+          <strong className="font-semibold">Hidden.</strong> Nobody without
+          &ldquo;See hidden records&rdquo; can find this company. Its contacts
+          are not hidden with it &mdash; hide those separately if they should
+          be.
+        </p>
+      )}
 
       {/*
         Three regions rather than two columns: the record, the sidebar beside

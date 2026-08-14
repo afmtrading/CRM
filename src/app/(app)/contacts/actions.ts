@@ -5,6 +5,9 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanBulk, assertCanManage, assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+// Aliased: this file already has an ActionState of its own, for the record
+// forms, whose shape is different.
+import type { ActionState as ButtonState } from '@/components/action-form'
 import { readCustomFields } from '@/lib/custom-fields'
 import { safeUrl } from '@/lib/field-options'
 import { likeLiteral } from '@/lib/sql'
@@ -407,4 +410,28 @@ export async function setMailableOverride(formData: FormData) {
   revalidatePath(`/contacts/${id}`)
   revalidatePath('/contacts')
   redirect(`/contacts/${id}`)
+}
+
+/**
+ * Takes a contact out of everybody's sight, or puts it back.
+ *
+ * The permission is not checked here. A trigger on the table refuses the change
+ * for anybody without see_hidden, and it is the trigger's message that comes
+ * back — checking twice would mean two wordings to keep in step, and only one
+ * of them is the one that actually holds.
+ */
+export async function setContactHidden(
+  _state: ButtonState,
+  formData: FormData,
+): Promise<ButtonState> {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+  const hidden = formData.get('hidden') === 'true'
+
+  const { error } = await scoped(context, 'contacts').update({ hidden }).eq('id', id)
+  if (error) return { error: error.message }
+
+  revalidatePath('/contacts')
+  revalidatePath(`/contacts/${id}`)
+  return {}
 }

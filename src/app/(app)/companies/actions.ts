@@ -5,6 +5,9 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+// Aliased: this file already has an ActionState of its own, for the record
+// forms, whose shape is different.
+import type { ActionState as ButtonState } from '@/components/action-form'
 import { readCustomFields } from '@/lib/custom-fields'
 import { safeUrl } from '@/lib/field-options'
 import type { CompanyAddress, ContactLink } from '@/lib/database.types'
@@ -173,4 +176,21 @@ export async function setCompanyTags(formData: FormData) {
   }
 
   revalidatePath(`/companies/${companyId}`)
+}
+
+/** The same as setContactHidden, one table over. */
+export async function setCompanyHidden(
+  _state: ButtonState,
+  formData: FormData,
+): Promise<ButtonState> {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+  const hidden = formData.get('hidden') === 'true'
+
+  const { error } = await scoped(context, 'companies').update({ hidden }).eq('id', id)
+  if (error) return { error: error.message }
+
+  revalidatePath('/companies')
+  revalidatePath(`/companies/${id}`)
+  return {}
 }

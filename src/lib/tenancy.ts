@@ -26,6 +26,15 @@ export interface SessionContext {
    * capability advisory.
    */
   canManagePermissions: boolean
+  /**
+   * Sees hidden contacts and companies, and may hide or unhide them.
+   *
+   * No fallback to a role, unlike the others: before this existed nothing could
+   * be hidden, so the honest answer when no set resolves is false. Falling back
+   * to "administrator" would show hidden records to every admin the moment a
+   * seed went missing.
+   */
+  canSeeHidden: boolean
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>
 }
 
@@ -102,6 +111,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
         userRow.role === 'sales_director'),
     canWrite: permissions?.write_records ?? userRow.role !== 'readonly',
     canManagePermissions: permissions?.manage_permissions ?? userRow.role === 'admin',
+    canSeeHidden: permissions?.see_hidden ?? false,
     supabase,
   }
 })
