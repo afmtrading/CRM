@@ -118,8 +118,37 @@ export type UserRow = {
   role: UserRole
   auth_provider_id: string | null
   status: UserStatus
+  /**
+   * The permission set this person is on. Null resolves through their role
+   * instead — see current_permissions() in 20260235000000.
+   */
+  permission_set_id: string | null
   last_login_at: string | null
   created_at: string
+}
+
+/**
+ * A named bundle of capabilities belonging to an organization.
+ *
+ * These columns are what the row-level policies actually consult, through the
+ * eight `can_…` and `is_org_admin` helpers. Five are seeded per organization,
+ * one per role, matching what each role could do before they existed.
+ */
+export type PermissionSetRow = {
+  id: string
+  organization_id: string
+  name: string
+  /** Which role resolves here for a user with no set of their own. */
+  role: UserRole | null
+  see_all_records: boolean
+  see_unassigned: boolean
+  write_records: boolean
+  delete_records: boolean
+  manage_records: boolean
+  bulk_records: boolean
+  administer: boolean
+  created_at: string
+  updated_at: string
 }
 
 export type ContactRow = {
@@ -971,7 +1000,28 @@ export interface Database {
       >
       users: TableDef<
         UserRow,
-        'id' | 'name' | 'role' | 'auth_provider_id' | 'status' | 'last_login_at' | 'created_at'
+        | 'id'
+        | 'name'
+        | 'role'
+        | 'auth_provider_id'
+        | 'status'
+        | 'permission_set_id'
+        | 'last_login_at'
+        | 'created_at'
+      >
+      permission_sets: TableDef<
+        PermissionSetRow,
+        | 'id'
+        | 'role'
+        | 'see_all_records'
+        | 'see_unassigned'
+        | 'write_records'
+        | 'delete_records'
+        | 'manage_records'
+        | 'bulk_records'
+        | 'administer'
+        | 'created_at'
+        | 'updated_at'
       >
       contacts: TableDef<
         ContactRow,
@@ -1280,6 +1330,8 @@ export interface Database {
        * Deletes a pipeline nothing refers to, archives one something does, and
        * says which — see 20260234000000.
        */
+      /** The caller's permission set — their own if assigned, otherwise their role's. */
+      current_permissions: { Args: Record<string, never>; Returns: PermissionSetRow | null }
       remove_pipeline: { Args: { p_pipeline_id: string }; Returns: 'deleted' | 'archived' }
       restore_pipeline: { Args: { p_pipeline_id: string }; Returns: void }
       remove_stage: { Args: { p_stage_id: string }; Returns: 'deleted' | 'archived' }
