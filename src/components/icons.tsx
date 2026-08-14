@@ -105,6 +105,14 @@ export const ScoringIcon: IconComponent = (p) => (
   </Svg>
 )
 
+/** Permission sets: a shield, with the tick that says what is allowed through. */
+export const ShieldIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <path d="M12 3l7 3v5.5c0 4.2-2.9 7.6-7 8.5-4.1-.9-7-4.3-7-8.5V6l7-3z" />
+    <path d="M9.2 11.8l2 2 3.6-3.8" />
+  </Svg>
+)
+
 export const AssignmentIcon: IconComponent = (p) => (
   <Svg {...p}>
     <circle cx="6" cy="19" r="3" />

@@ -24,6 +24,7 @@ import {
   ReportsIcon,
   SalesOrderIcon,
   ScoringIcon,
+  ShieldIcon,
   SearchIcon,
   SendIcon,
   SignOutIcon,
@@ -96,6 +97,16 @@ const ADMIN_NAV: NavItem[] = [
 ]
 
 /**
+ * Permissions has its own condition rather than sitting in ADMIN_NAV, because
+ * the two capabilities come apart on purpose. Someone can hold Manage
+ * permissions without Settings — which is the point of separating them — and an
+ * administrator can be given Settings without the rulebook.
+ */
+const PERMISSIONS_NAV: NavItem[] = [
+  { href: '/settings/permissions', label: 'Permissions', icon: <ShieldIcon className={ICON} /> },
+]
+
+/**
  * Import is in Settings with the rest, but it is not an administrator's alone —
  * a manager who can bulk-edit can also bring records in. So it is kept apart
  * from ADMIN_NAV and added to the group under its own condition, which is how a
@@ -119,7 +130,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Empty for a regular user, one row for a manager who can import, the lot for
   // an administrator — and an empty group is not drawn at all.
-  const settingsItems = [...(isAdmin ? ADMIN_NAV : []), ...(isAdmin || canBulk ? MANAGER_NAV : [])]
+  const settingsItems = [
+    ...(isAdmin ? ADMIN_NAV : []),
+    ...(context.canManagePermissions ? PERMISSIONS_NAV : []),
+    ...(isAdmin || canBulk ? MANAGER_NAV : []),
+  ]
 
   // Unread count for the bell. Cheap: a partial index covers exactly this.
   const { count: unread } = await scoped(context, 'notifications')
