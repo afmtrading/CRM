@@ -20,6 +20,22 @@ export type FilterOperator =
   | 'lt'
   | 'lte'
   | 'in'
+  /*
+   * Set operations on an array column — territories, above all.
+   *
+   *   has_all     sells in Canada AND the USA, whatever else
+   *   has_any     sells in Canada OR the USA
+   *   has_none    sells in neither
+   *   is_exactly  sells in Canada and the USA and nowhere else
+   *
+   * is_exactly is an equality test on an array, which only means what it says
+   * because the database sorts and de-duplicates these columns on write. See
+   * normalise_territory() in 20260238000000.
+   */
+  | 'has_all'
+  | 'has_any'
+  | 'has_none'
+  | 'is_exactly'
 
 export interface FilterCondition {
   field: string
@@ -47,7 +63,7 @@ export const EMPTY_FILTER: FilterConfig = {
 export interface FieldDef {
   key: string
   label: string
-  type: 'text' | 'number' | 'date' | 'boolean' | 'enum' | 'uuid'
+  type: 'text' | 'number' | 'date' | 'boolean' | 'enum' | 'uuid' | 'array'
   /** Options for enum fields, and for reference fields resolved by the caller. */
   options?: { value: string; label: string }[]
   groupable?: boolean
@@ -85,6 +101,21 @@ export const COMPANY_FIELDS: FieldDef[] = [
   { key: 'domain', label: 'Domain', type: 'text', sortable: true },
   { key: 'industry', label: 'Industry', type: 'text', groupable: true, sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
+  /*
+   * Where they are and where they trade, as three separate questions.
+   *
+   * based_in groups usefully — "how many of our buyers are in Canada" is a
+   * sensible column heading. The territories do not: a company selling in six
+   * countries belongs to six groups at once, and a grouped list would either
+   * repeat it or pick one arbitrarily.
+   */
+  { key: 'based_in', label: 'Based in', type: 'enum', groupable: true, sortable: true },
+  { key: 'based_in_region', label: 'Region', type: 'enum', groupable: true, sortable: true },
+  { key: 'sells_in', label: 'Sells in', type: 'array' },
+  { key: 'sources_in', label: 'Sources from', type: 'array' },
+  { key: 'specialty_market', label: 'Merchandise', type: 'array' },
+  { key: 'stock_type', label: 'Stock type', type: 'array' },
+  { key: 'customer_type', label: 'Company type', type: 'array' },
   { key: 'created_at', label: 'Created', type: 'date', sortable: true },
 ]
 
@@ -168,6 +199,10 @@ export const OPERATOR_LABELS: Record<FilterOperator, string> = {
   lt: 'less than',
   lte: 'at most',
   in: 'is any of',
+  has_all: 'includes all of',
+  has_any: 'includes any of',
+  has_none: 'includes none of',
+  is_exactly: 'is exactly',
 }
 
 export function operatorsFor(type: FieldDef['type']): FilterOperator[] {
@@ -178,6 +213,8 @@ export function operatorsFor(type: FieldDef['type']): FilterOperator[] {
     case 'enum':
     case 'uuid':
       return ['eq', 'neq', 'in', 'is_empty', 'is_not_empty']
+    case 'array':
+      return ['has_all', 'has_any', 'has_none', 'is_exactly', 'is_empty', 'is_not_empty']
     case 'boolean':
       return ['eq']
     default:
@@ -205,6 +242,16 @@ export function escapeValue(value: unknown): string {
   return raw
 }
 
+/** A comma-separated string or an array, either way a list of trimmed values. */
+function toList(value: unknown): string[] {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value ?? '')
+        .split(',')
+        .map((item) => item.trim())
+  return raw.map((item) => String(item).trim()).filter(Boolean)
+}
+
 export interface Predicate {
   /** PostgREST filter string, e.g. `lead_score.gte.10`. */
   expression: string
@@ -225,6 +272,31 @@ export function conditionToPredicate(condition: FilterCondition): Predicate | nu
     case 'starts_with':
       if (value === undefined || value === null || value === '') return null
       return { expression: `${column}.ilike.${escapeValue(`${value}%`)}` }
+    /*
+     * PostgREST spells array containment `cs`, overlap `ov`, and takes the list
+     * in braces. An empty list is not a filter — it would either match
+     * everything or nothing depending on the operator, and neither is what
+     * somebody who has not finished typing meant.
+     */
+    case 'has_all':
+    case 'has_any':
+    case 'has_none':
+    case 'is_exactly': {
+      const list = toList(value)
+      if (list.length === 0) return null
+      const braced = `{${list.map((item) => `"${String(item).replace(/"/g, '\\"')}"`).join(',')}}`
+
+      if (operator === 'has_all') return { expression: `${column}.cs.${braced}` }
+      if (operator === 'has_any') return { expression: `${column}.ov.${braced}` }
+      if (operator === 'has_none') return { expression: `${column}.not.ov.${braced}` }
+
+      /*
+       * Exactly these and no others. Sound only because the column is stored
+       * sorted and de-duplicated — otherwise {CA,US} and {US,CA} would be
+       * different territories, which is not a distinction anybody means.
+       */
+      return { expression: `${column}.eq.${braced}` }
+    }
     case 'in': {
       const list = Array.isArray(value)
         ? value

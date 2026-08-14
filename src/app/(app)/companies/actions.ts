@@ -26,6 +26,20 @@ const companySchema = z.object({
   instagram: z.string().trim().max(300).default(''),
   tiktok: z.string().trim().max(300).default(''),
   x_twitter: z.string().trim().max(300).default(''),
+  // Shape only — that it looks like a country code, not that it is one. The
+  // trigger decides whether XX exists, and says so by name.
+  based_in: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^([A-Z]{2})?$/, 'A country is a two-letter code, like CA or US')
+    .default(''),
+  based_in_region: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^([A-Z]{2}-[A-Z0-9]{1,3})?$/, 'A region looks like CA-QC or US-NY')
+    .default(''),
 })
 
 export type CompanyActionState = { ok?: boolean; error?: string }
@@ -85,7 +99,19 @@ function companyColumns(input: z.infer<typeof companySchema>, formData: FormData
     email: input.email || null,
     notes: input.notes.trim() || null,
     specialty_market: readList(formData, 'specialty_market'),
+    stock_type: readList(formData, 'stock_type'),
     customer_type: readList(formData, 'customer_type'),
+    /*
+     * Geography goes to the database as typed. Validation is the trigger's job:
+     * it upper-cases, sorts, de-duplicates and refuses anything that is not an
+     * ISO 3166 country, and its message names the offending value. Repeating
+     * any of that here would be a second rulebook to keep in step with the
+     * first, and only one of them is the one that actually holds.
+     */
+    based_in: input.based_in || null,
+    based_in_region: input.based_in_region || null,
+    sells_in: readList(formData, 'sells_in'),
+    sources_in: readList(formData, 'sources_in'),
     linkedin: input.linkedin || null,
     facebook: input.facebook || null,
     instagram: input.instagram || null,
