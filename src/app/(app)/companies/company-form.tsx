@@ -31,6 +31,8 @@ export function CompanyForm({
   owners,
   customFields,
   fieldOptions,
+  countries,
+  subdivisions,
   submitLabel,
 }: {
   action: (state: CompanyActionState, formData: FormData) => Promise<CompanyActionState>
@@ -38,6 +40,9 @@ export function CompanyForm({
   owners: UserRow[]
   customFields: CustomFieldDefinitionRow[]
   fieldOptions: FieldOptionRow[]
+  /** ISO 3166, from the database rather than a second copy in the bundle. */
+  countries: { code: string; name: string }[]
+  subdivisions: { code: string; country_code: string; name: string }[]
   submitLabel: string
 }) {
   const [state, formAction, pending] = useActionState(action, {} as CompanyActionState)
@@ -116,13 +121,118 @@ export function CompanyForm({
       {/* Second, so the form reads in the order the record does. */}
       <FormCard title={COMPANY_CARDS[3].label} description={COMPANY_CARDS[3].description}>
         <div className="sm:col-span-2">
-          <span className="label">Market</span>
+          <span className="label">Merchandise</span>
           <ChipGroup
             name="specialty_market"
             options={optionsFor('specialty_market')}
             selected={company?.specialty_market ?? []}
           />
         </div>
+        {/*
+          What category of goods, and what condition they arrive in, are two
+          questions. A buyer of medical overstock and a buyer of medical
+          customer returns are not the same call.
+        */}
+        <div className="sm:col-span-2">
+          <span className="label">Stock type</span>
+          <ChipGroup
+            name="stock_type"
+            options={optionsFor('stock_type')}
+            selected={company?.stock_type ?? []}
+          />
+        </div>
+        {/*
+          Where they are, and where they trade — three separate questions, and
+          the last two are the ones worth filtering on. "In Ontario" and
+          "selling across North America" are different facts about the same
+          company, and until these existed both lived in one free-text line.
+
+          Plain multiple-selects rather than chips: there are 249 countries, and
+          a chip for each is a wall. The browser's own control handles a long
+          list, filters as you type, and needs no client bundle.
+        */}
+        <div>
+          <label className="label" htmlFor="company-based-in">
+            Based in
+          </label>
+          <select
+            id="company-based-in"
+            name="based_in"
+            defaultValue={company?.based_in ?? ''}
+            className="input"
+          >
+            <option value="">Not known</option>
+            {countries.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="company-region">
+            Region
+          </label>
+          <select
+            id="company-region"
+            name="based_in_region"
+            defaultValue={company?.based_in_region ?? ''}
+            className="input"
+          >
+            <option value="">Not known</option>
+            {subdivisions.map((subdivision) => (
+              <option key={subdivision.code} value={subdivision.code}>
+                {subdivision.name} ({subdivision.country_code})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="company-sells-in">
+            Sells in
+          </label>
+          <select
+            id="company-sells-in"
+            name="sells_in"
+            multiple
+            size={7}
+            defaultValue={company?.sells_in ?? []}
+            className="input h-auto"
+          >
+            {countries.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Every country they sell into. Hold Ctrl or Cmd to pick more than one.
+          </p>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="company-sources-in">
+            Sources from
+          </label>
+          <select
+            id="company-sources-in"
+            name="sources_in"
+            multiple
+            size={7}
+            defaultValue={company?.sources_in ?? []}
+            className="input h-auto"
+          >
+            {countries.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">Where they buy or manufacture.</p>
+        </div>
+
         <div className="sm:col-span-2">
           <span className="label">Company type</span>
           <ChipGroup

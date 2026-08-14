@@ -506,11 +506,31 @@ export default async function CompanyDetailPage({
           */}
           <Section title={COMPANY_CARDS[3].label} className="order-2">
             <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Market" wide>
+              <Field label="Merchandise" wide>
                 <OptionBadges
                   values={company.specialty_market}
                   options={optionsFor("specialty_market")}
                 />
+              </Field>
+              <Field label="Stock type" wide>
+                <OptionBadges
+                  values={company.stock_type}
+                  options={optionsFor("stock_type")}
+                />
+              </Field>
+              {/*
+                Codes rather than names, deliberately. "CA · US · MX" reads at a
+                glance on a card and is what the filters take; the full names
+                would wrap to three lines and say no more.
+              */}
+              <Field label="Based in">
+                {company.based_in_region ?? company.based_in ?? <Empty />}
+              </Field>
+              <Field label="Sells in">
+                {company.sells_in.length > 0 ? company.sells_in.join(" · ") : <Empty />}
+              </Field>
+              <Field label="Sources from" wide>
+                {company.sources_in.length > 0 ? company.sources_in.join(" · ") : <Empty />}
               </Field>
               <Field label="Company type" wide>
                 <OptionBadges

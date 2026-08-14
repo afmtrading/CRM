@@ -158,7 +158,14 @@ export const OPTION_FIELDS: {
   // These two describe the business, not the person, so they live on the
   // company record and are shared by every contact who works there.
   // The column keeps its original name; only what people read changed.
-  { key: 'specialty_market', label: 'Market', card: 'rating', multiple: true, entity: 'company' },
+  { key: 'specialty_market', label: 'Merchandise', card: 'rating', multiple: true, entity: 'company' },
+  /*
+   * What condition the goods arrive in, which is a different question from what
+   * category they are. A buyer of medical overstock and a buyer of medical
+   * customer returns are not the same call, and one list holding both values
+   * cannot tell them apart.
+   */
+  { key: 'stock_type', label: 'Stock type', card: 'rating', multiple: true, entity: 'company' },
   { key: 'customer_type', label: 'Company type', card: 'rating', multiple: true, entity: 'company' },
   { key: 'role_type', label: 'Role type', card: 'influence', multiple: true, entity: 'contact' },
   { key: 'priority', label: 'Priority', card: 'influence', multiple: false, entity: 'contact' },

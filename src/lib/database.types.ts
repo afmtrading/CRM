@@ -73,7 +73,10 @@ export type OptionColor =
 
 /** The built-in option lists an organization configures for its records. */
 export type OptionFieldKey =
+  /** Labelled "Merchandise" on screen — what category of goods they deal in. */
   | 'specialty_market'
+  /** What condition the goods arrive in: overstock, customer returns, shelf pulls. */
+  | 'stock_type'
   | 'customer_type'
   | 'role_type'
   | 'priority'
@@ -398,6 +401,23 @@ export type CompanyRow = {
   /** Markdown, rendered through renderMarkdown() — never raw HTML. */
   notes: string | null
   specialty_market: string[]
+  /** What condition of goods they deal in. See stock_type in field-options.ts. */
+  stock_type: string[]
+  /**
+   * Where the company is, and where it trades — three separate facts.
+   *
+   * ISO 3166: `based_in` is alpha-2, `based_in_region` is a subdivision like
+   * CA-QC, and the two territories are lists of alpha-2 codes. Deliberately not
+   * an organization-editable option list, because a list somebody can edit ends
+   * up holding "USA", "U.S.A." and "United States" as three separate countries.
+   *
+   * The territories are always stored sorted and de-duplicated, which is what
+   * makes `sells_in = ['CA','US']` mean "exactly these two".
+   */
+  based_in: string | null
+  based_in_region: string | null
+  sells_in: string[]
+  sources_in: string[]
   customer_type: string[]
   linkedin: string | null
   facebook: string | null
@@ -1098,6 +1118,11 @@ export interface Database {
         | 'email'
         | 'notes'
         | 'specialty_market'
+        | 'stock_type'
+        | 'based_in'
+        | 'based_in_region'
+        | 'sells_in'
+        | 'sources_in'
         | 'customer_type'
         | 'linkedin'
         | 'facebook'
