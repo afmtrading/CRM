@@ -135,7 +135,7 @@ begin
       (see_all_records or write_records or administer or manage_permissions)),
     'and grants nothing at all until somebody ticks a box');
 
-  perform public.update_permission_set(v_id, 'Ops', true, true, true, false, false, false, false, false);
+  perform public.update_permission_set(v_id, 'Ops', true, true, true, false, false, false, false, false, false);
   perform test_assert(
     (select see_all_records and write_records and not delete_records from permission_sets where id = v_id),
     'ticking boxes sticks — including leaving Delete unticked beside Create and edit');
@@ -220,7 +220,7 @@ begin
     -- resolve to it.
     perform public.update_permission_set(
       set_id('Administrator'), 'Administrator',
-      true, true, true, true, true, true, true, false);
+      true, true, true, true, true, true, true, false, false);
     perform test_assert(false, 'unticking the last Manage permissions is refused');
   exception when others then
     v_message := sqlerrm;
@@ -245,7 +245,7 @@ begin
   begin
     perform public.update_permission_set(
       set_id('Administrator'), 'Administrator',
-      true, true, true, true, true, true, false, true);
+      true, true, true, true, true, true, false, true, false);
     perform test_assert(false, 'unticking the last Settings is refused');
   exception when others then
     v_message := sqlerrm;
@@ -269,12 +269,12 @@ begin
 
   v_keys := public.create_permission_set('Keyholder');
   perform public.update_permission_set(v_keys, 'Keyholder',
-    true, true, true, true, true, true, true, true);
+    true, true, true, true, true, true, true, true, false);
   perform public.assign_permission_set((select id from fixture where key = 'admin2'), v_keys);
 
   perform public.update_permission_set(
     set_id('Administrator'), 'Administrator',
-    true, true, true, true, true, true, true, false);
+    true, true, true, true, true, true, true, false, false);
 
   perform test_assert(
     not (select manage_permissions from permission_sets where id = set_id('Administrator')),
@@ -290,7 +290,7 @@ begin
   -- Put it back for the tests below.
   perform public.update_permission_set(
     set_id('Administrator'), 'Administrator',
-    true, true, true, true, true, true, true, true);
+    true, true, true, true, true, true, true, true, false);
 end;
 $$;
 
@@ -312,7 +312,7 @@ begin
 
   begin
     perform public.update_permission_set(set_id('Sales rep'), 'Sales rep',
-      true, true, true, true, true, true, true, true);
+      true, true, true, true, true, true, true, true, false);
     perform test_assert(false, 'nor edit one');
   exception when others then
     v_message := sqlerrm;
@@ -341,7 +341,7 @@ begin
 
   begin
     perform public.update_permission_set(set_id('Administrator'), 'Theirs',
-      true, true, true, true, true, true, true, true);
+      true, true, true, true, true, true, true, true, false);
     perform test_assert(false, 'another organization''s set is out of reach');
   exception when others then
     v_message := sqlerrm;

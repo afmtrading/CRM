@@ -55,8 +55,11 @@ import {
   optionColor,
 } from "@/components/contact-cards";
 
+import { ActionForm, SubmitButton } from "@/components/action-form";
+
 import {
   deleteContact,
+  setContactHidden,
   mergeContactsAction,
   setContactTags,
   setMailableOverride,
@@ -241,9 +244,34 @@ export default async function ContactDetailPage({
                 </button>
               </form>
             )}
+            {/* Only offered to somebody who can see hidden records, which is
+                the same group that may hide them — see 20260237000000 for why
+                those are one capability rather than two. */}
+            {context.canSeeHidden && (
+              <ActionForm action={setContactHidden}>
+                <input type="hidden" name="id" value={id} />
+                <input
+                  type="hidden"
+                  name="hidden"
+                  value={contact.hidden ? "false" : "true"}
+                />
+                <SubmitButton className="btn-secondary" pendingLabel="Working…">
+                  {contact.hidden ? "Unhide" : "Hide"}
+                </SubmitButton>
+              </ActionForm>
+            )}
           </>
         }
       />
+
+      {contact.hidden && (
+        <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+          <strong className="font-semibold">Hidden.</strong> Nobody without
+          &ldquo;See hidden records&rdquo; can find this contact, including
+          whoever owns it. Its deals and activities stay visible with the
+          contact behind them unreadable.
+        </p>
+      )}
 
       {merged && (
         <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">

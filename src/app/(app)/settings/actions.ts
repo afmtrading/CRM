@@ -335,6 +335,7 @@ export async function updatePermissionSet(
     p_bulk_records: ticked('bulk_records'),
     p_administer: ticked('administer'),
     p_manage_permissions: ticked('manage_permissions'),
+    p_see_hidden: ticked('see_hidden'),
   })
 
   if (error) return { error: error.message }

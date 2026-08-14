@@ -97,6 +97,11 @@ export const CAPABILITIES = [
     help: 'Pipelines, users, fields, mailboxes, and restoring deleted records.',
   },
   {
+    key: 'see_hidden',
+    label: 'See hidden records',
+    help: 'Contacts and companies somebody has hidden. Also the ability to hide and unhide them — one box rather than two, because whoever can hide something has to be able to find it again.',
+  },
+  {
     key: 'manage_permissions',
     label: 'Manage permissions',
     help: 'Edit these sets and decide who is on them. Deliberately separate from Settings — without it, somebody can run the system without being able to rewrite the rules of it.',
