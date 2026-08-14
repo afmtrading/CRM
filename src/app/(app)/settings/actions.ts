@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanManage, requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
+import type { ActionState } from '@/components/action-form'
 import { safeTimeZone } from '@/lib/timezone'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
@@ -97,20 +98,52 @@ export async function setDefaultPipeline(formData: FormData) {
   revalidatePath('/settings/pipelines')
 }
 
-export async function deletePipeline(formData: FormData) {
+/**
+ * Retires a pipeline: deleted if nothing refers to it, archived if something
+ * does, refused while deals are still on the board.
+ *
+ * The database decides which of the three, because it is the only thing that
+ * knows — a pipeline is undeletable the moment any deal has ever entered one of
+ * its stages, since the stage history keeps pointing at it long after the deal
+ * has moved on. This used to throw the resulting foreign key error, which
+ * reached the browser as a digest and nothing else, and offered advice ("move
+ * the deals first") that could not work.
+ */
+export async function retirePipeline(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+  const name = String(formData.get('name') ?? 'That pipeline')
+
+  const { data, error } = await context.supabase.rpc('remove_pipeline', { p_pipeline_id: id })
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/pipelines')
+  revalidatePath('/deals')
+
+  return {
+    ok:
+      data === 'deleted'
+        ? `${name} deleted.`
+        : `${name} has deals in its history, so it has been archived rather than deleted. It is off the board and out of the pickers, and can be restored.`,
+  }
+}
+
+export async function restorePipeline(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
 
-  const { error } = await scoped(context, 'pipelines').delete().eq('id', id)
-  if (error) {
-    throw new Error(
-      error.message.includes('violates foreign key')
-        ? 'This pipeline still has deals in it. Move them first.'
-        : error.message,
-    )
-  }
+  const { error } = await context.supabase.rpc('restore_pipeline', { p_pipeline_id: id })
+  if (error) return { error: error.message }
 
   revalidatePath('/settings/pipelines')
+  revalidatePath('/deals')
+  return {}
 }
 
 export async function createStage(formData: FormData) {
@@ -209,20 +242,35 @@ export async function moveStage(formData: FormData) {
   revalidatePath('/deals')
 }
 
-export async function deleteStage(formData: FormData) {
+/** The same three outcomes as a pipeline, one level down. */
+export async function retireStage(_state: ActionState, formData: FormData): Promise<ActionState> {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
 
-  const { error } = await scoped(context, 'stages').delete().eq('id', id)
-  if (error) {
-    throw new Error(
-      error.message.includes('violates foreign key')
-        ? 'This stage still holds deals. Move them to another stage first.'
-        : error.message,
-    )
-  }
+  const { data, error } = await context.supabase.rpc('remove_stage', { p_stage_id: id })
+  if (error) return { error: error.message }
 
   revalidatePath('/settings/pipelines')
+  revalidatePath('/deals')
+
+  return {
+    ok:
+      data === 'deleted'
+        ? 'Stage deleted.'
+        : 'That stage has deals in its history, so it has been archived rather than deleted. It can be restored.',
+  }
+}
+
+export async function restoreStage(_state: ActionState, formData: FormData): Promise<ActionState> {
+  const context = await requireAdmin()
+  const id = String(formData.get('id') ?? '')
+
+  const { error } = await context.supabase.rpc('restore_stage', { p_stage_id: id })
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/pipelines')
+  revalidatePath('/deals')
+  return {}
 }
 
 // -----------------------------------------------------------------------------

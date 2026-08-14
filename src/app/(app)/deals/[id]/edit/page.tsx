@@ -35,8 +35,14 @@ export default async function EditDealPage({ params }: { params: Promise<{ id: s
     { data: definitions },
     { data: options },
   ] = await Promise.all([
-    scoped(context, 'pipelines').select('*').order('name'),
-    scoped(context, 'stages').select('*').order('order'),
+    /*
+     * Retired ones are not offered. Safe to filter without losing the deal's
+     * own stage: a pipeline cannot be retired while any deal is on the board in
+     * it, and a deal restored from the recycle bin brings its stage back out
+     * with it — see remove_pipeline() and restore_deal().
+     */
+    scoped(context, 'pipelines').select('*').is('archived_at', null).order('name'),
+    scoped(context, 'stages').select('*').is('archived_at', null).order('order'),
     scoped(context, 'contacts')
       .select('id, first_name, last_name, email')
       .is('duplicate_of_id', null)

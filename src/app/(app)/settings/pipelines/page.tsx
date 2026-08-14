@@ -1,15 +1,18 @@
 import { requireAdmin, scoped } from '@/lib/tenancy'
 import type { PipelineRow, StageRow } from '@/lib/database.types'
 import { PageHeader, Section } from '@/components/ui'
+import { ActionForm, SubmitButton } from '@/components/action-form'
 
 import {
   createPipeline,
   createStage,
-  deletePipeline,
-  deleteStage,
   movePipeline,
   moveStage,
   renamePipeline,
+  restorePipeline,
+  restoreStage,
+  retirePipeline,
+  retireStage,
   setDefaultPipeline,
   updateStage,
 } from '../actions'
@@ -57,13 +60,25 @@ function MoveButton({
 export default async function PipelineSettingsPage() {
   const context = await requireAdmin()
 
-  const [{ data: pipelines }, { data: stages }] = await Promise.all([
+  const [{ data: pipelines }, { data: stages }, { data: usage }] = await Promise.all([
     scoped(context, 'pipelines').select('*').order('order'),
     scoped(context, 'stages').select('*').order('order'),
+    context.supabase.rpc('pipeline_usage'),
   ])
 
-  const pipelineList = (pipelines ?? []) as PipelineRow[]
+  const allPipelines = (pipelines ?? []) as PipelineRow[]
   const stageList = (stages ?? []) as StageRow[]
+
+  const pipelineList = allPipelines.filter((pipeline) => pipeline.archived_at === null)
+  const archivedPipelines = allPipelines.filter((pipeline) => pipeline.archived_at !== null)
+
+  type Usage = { pipeline_id: string; open_deals: number; closed: number; binned: number }
+
+  // A pipeline with no stages at all gets no row back, so read through a map
+  // rather than assuming one is there.
+  const deals = new Map<string, Usage>(
+    ((usage ?? []) as Usage[]).map((row) => [row.pipeline_id, row]),
+  )
 
   return (
     <>
@@ -86,7 +101,10 @@ export default async function PipelineSettingsPage() {
 
       <div className="space-y-5">
         {pipelineList.map((pipeline, pipelineIndex) => {
-          const pipelineStages = stageList.filter((stage) => stage.pipeline_id === pipeline.id)
+          const allStages = stageList.filter((stage) => stage.pipeline_id === pipeline.id)
+          const pipelineStages = allStages.filter((stage) => stage.archived_at === null)
+          const archivedStages = allStages.filter((stage) => stage.archived_at !== null)
+          const counts = deals.get(pipeline.id)
 
           return (
             <Section
@@ -151,12 +169,30 @@ export default async function PipelineSettingsPage() {
                       </button>
                     </form>
                   )}
-                  <form action={deletePipeline}>
+
+                  {/*
+                    What is in it, said before anybody presses Delete rather
+                    than after. Deals on the board are what stops it going;
+                    deals in the recycle bin are what turn Delete into Archive.
+                  */}
+                  {counts && (counts.open_deals > 0 || counts.closed > 0) && (
+                    <span className="text-xs text-slate-500">
+                      {counts.open_deals > 0 && `${counts.open_deals} open`}
+                      {counts.open_deals > 0 && counts.closed > 0 && ' · '}
+                      {counts.closed > 0 && `${counts.closed} closed`}
+                    </span>
+                  )}
+
+                  <ActionForm action={retirePipeline}>
                     <input type="hidden" name="id" value={pipeline.id} />
-                    <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
+                    <input type="hidden" name="name" value={pipeline.name} />
+                    <SubmitButton
+                      className="text-xs text-slate-400 hover:text-red-600 disabled:text-slate-300"
+                      pendingLabel="…"
+                    >
                       Delete
-                    </button>
-                  </form>
+                    </SubmitButton>
+                  </ActionForm>
                 </div>
               }
             >
@@ -288,7 +324,7 @@ export default async function PipelineSettingsPage() {
                 </form>
 
                 {pipelineStages.length > 0 && (
-                  <form action={deleteStage} className="flex items-end gap-2">
+                  <ActionForm action={retireStage} className="flex items-end gap-2">
                     <select name="id" className="input w-52" aria-label="Stage to delete">
                       {pipelineStages.map((stage) => (
                         <option key={stage.id} value={stage.id}>
@@ -296,16 +332,85 @@ export default async function PipelineSettingsPage() {
                         </option>
                       ))}
                     </select>
-                    <button type="submit" className="btn-danger">
+                    <SubmitButton className="btn-danger" pendingLabel="Working…">
                       Delete stage
-                    </button>
-                  </form>
+                    </SubmitButton>
+                  </ActionForm>
                 )}
               </div>
+
+              {/*
+                Stages that had to be archived rather than deleted, because
+                deals passed through them and that record is worth more than a
+                tidy list. They draw no column and appear in no picker.
+              */}
+              {archivedStages.length > 0 && (
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <p className="mb-2 text-xs font-medium text-slate-500">Archived stages</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {archivedStages.map((stage) => (
+                      <ActionForm
+                        key={stage.id}
+                        action={restoreStage}
+                        className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1"
+                      >
+                        <input type="hidden" name="id" value={stage.id} />
+                        <span className="text-xs text-slate-500">{stage.name}</span>
+                        <SubmitButton className="text-xs text-brand-700 hover:underline">
+                          Restore
+                        </SubmitButton>
+                      </ActionForm>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Section>
           )
         })}
       </div>
+
+      {/*
+        Archived pipelines, kept for their history rather than their use. No
+        stage editor: there is nothing to arrange in a pipeline nobody can put a
+        deal into. Restore it and it comes back with the stages that went down
+        with it.
+      */}
+      {archivedPipelines.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-1 text-sm font-semibold text-slate-700">Archived pipelines</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Off the board and out of every picker. They keep the stage history of the deals that
+            passed through them, which is why they were archived instead of deleted.
+          </p>
+          <div className="space-y-2">
+            {archivedPipelines.map((pipeline) => {
+              const counts = deals.get(pipeline.id)
+
+              return (
+                <div
+                  key={pipeline.id}
+                  className="card flex flex-wrap items-center justify-between gap-2 px-4 py-2"
+                >
+                  <div>
+                    <span className="text-sm text-slate-600">{pipeline.name}</span>
+                    {counts && counts.binned > 0 && (
+                      <span className="ml-2 text-xs text-slate-400">
+                        {counts.binned} in the recycle bin
+                      </span>
+                    )}
+                  </div>
+                  <ActionForm action={restorePipeline}>
+                    <input type="hidden" name="id" value={pipeline.id} />
+                    <SubmitButton className="btn-secondary px-2.5 py-1 text-xs">
+                      Restore
+                    </SubmitButton>
+                  </ActionForm>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </>
   )
 }
