@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { requireSession, scoped } from '@/lib/tenancy'
 import { USER_ROLE_LABELS } from '@/lib/field-options'
 
+import { NavGroup } from '@/components/nav-group'
 import { NavLink } from '@/components/nav-link'
 import {
   ActivityIcon,
@@ -38,28 +39,49 @@ import {
  */
 const ICON = 'h-[18px] w-[18px]'
 
-const NAV = [
+type NavItem = { href: string; label: string; icon: React.ReactNode; exact?: boolean }
+
+/**
+ * The three that belong to nobody.
+ *
+ * Dashboard is where you land, Activities is what you owe people today, and
+ * Reports is what happened. None of them is a kind of record, so none of them
+ * sits under a heading — they are the things you open without first deciding
+ * what you are working on.
+ */
+const NAV: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: <DashboardIcon className={ICON} />, exact: true },
-  { href: '/contacts', label: 'Contacts', icon: <ContactsIcon className={ICON} /> },
-  { href: '/companies', label: 'Companies', icon: <CompaniesIcon className={ICON} /> },
-  { href: '/deals', label: 'Deals', icon: <DealsIcon className={ICON} /> },
-  { href: '/products', label: 'Products', icon: <ProductsIcon className={ICON} /> },
-  /*
-   * Top level, and next to Products rather than under Deals. A sales order is
-   * not a stage a deal reaches — the two are separate concepts and an order can
-   * exist for a company that never had a deal. See docs/SALES_ORDERS_INVOICES.md.
-   */
-  { href: '/sales-orders', label: 'Sales orders', icon: <SalesOrderIcon className={ICON} /> },
-  { href: '/invoices', label: 'Invoices', icon: <InvoiceIcon className={ICON} /> },
   { href: '/activities', label: 'Activities', icon: <ActivityIcon className={ICON} /> },
-  { href: '/lists', label: 'Lists', icon: <MailIcon className={ICON} /> },
-  { href: '/campaigns', label: 'Campaigns', icon: <SendIcon className={ICON} /> },
   // The ledger is where Reports starts: it is the only screen that answers
   // "what happened", and the others are slices of it.
   { href: '/reports/deals', label: 'Reports', icon: <ReportsIcon className={ICON} /> },
 ]
 
-const ADMIN_NAV = [
+/** Who and what you sell to, and what you sell. The nouns. */
+const DATABASE_NAV: NavItem[] = [
+  { href: '/contacts', label: 'Contacts', icon: <ContactsIcon className={ICON} /> },
+  { href: '/companies', label: 'Companies', icon: <CompaniesIcon className={ICON} /> },
+  { href: '/products', label: 'Products', icon: <ProductsIcon className={ICON} /> },
+]
+
+/*
+ * Deals, orders and invoices are siblings here, not a chain. An order is not a
+ * stage a deal reaches and an invoice does not need an order behind it — the
+ * three are separate documents that happen to share a customer. See
+ * docs/SALES_ORDERS_INVOICES.md.
+ */
+const SALES_NAV: NavItem[] = [
+  { href: '/deals', label: 'Deals', icon: <DealsIcon className={ICON} /> },
+  { href: '/sales-orders', label: 'Sales orders', icon: <SalesOrderIcon className={ICON} /> },
+  { href: '/invoices', label: 'Invoices', icon: <InvoiceIcon className={ICON} /> },
+]
+
+const MARKETING_NAV: NavItem[] = [
+  { href: '/lists', label: 'Lists', icon: <MailIcon className={ICON} /> },
+  { href: '/campaigns', label: 'Campaigns', icon: <SendIcon className={ICON} /> },
+]
+
+const ADMIN_NAV: NavItem[] = [
   { href: '/settings/pipelines', label: 'Pipelines', icon: <PipelinesIcon className={ICON} /> },
   { href: '/settings/users', label: 'Users', icon: <UsersIcon className={ICON} /> },
   { href: '/settings/lead-scoring', label: 'Lead scoring', icon: <ScoringIcon className={ICON} /> },
@@ -73,15 +95,31 @@ const ADMIN_NAV = [
   { href: '/settings/email', label: 'Email sending', icon: <MailIcon className={ICON} /> },
 ]
 
-/** Bulk tools sit with managers rather than with configuration. */
-const MANAGER_NAV = [
+/**
+ * Import is in Settings with the rest, but it is not an administrator's alone —
+ * a manager who can bulk-edit can also bring records in. So it is kept apart
+ * from ADMIN_NAV and added to the group under its own condition, which is how a
+ * manager gets a Settings section containing exactly this one row.
+ */
+const MANAGER_NAV: NavItem[] = [
   { href: '/settings/import', label: 'Import', icon: <ImportIcon className={ICON} /> },
+]
+
+/** The groups everybody sees, in order. Settings is built per role below. */
+const GROUPS: { label: string; items: NavItem[] }[] = [
+  { label: 'Database', items: DATABASE_NAV },
+  { label: 'Sales', items: SALES_NAV },
+  { label: 'Marketing', items: MARKETING_NAV },
 ]
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const context = await requireSession()
   const { user, organization, isAdmin, canBulk } = context
   const displayName = user.name || user.email
+
+  // Empty for a regular user, one row for a manager who can import, the lot for
+  // an administrator — and an empty group is not drawn at all.
+  const settingsItems = [...(isAdmin ? ADMIN_NAV : []), ...(isAdmin || canBulk ? MANAGER_NAV : [])]
 
   // Unread count for the bell. Cheap: a partial index covers exactly this.
   const { count: unread } = await scoped(context, 'notifications')
@@ -106,36 +144,37 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Link>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4 lg:px-3">
-          {NAV.map((item) => (
-            <NavLink key={item.href} href={item.href} icon={item.icon} exact={item.exact}>
-              {item.label}
-            </NavLink>
+        <nav className="flex-1 overflow-y-auto px-2 pb-4 lg:px-3">
+          <div className="space-y-1">
+            {NAV.map((item) => (
+              <NavLink key={item.href} href={item.href} icon={item.icon} exact={item.exact}>
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+
+          {GROUPS.map((group) => (
+            <NavGroup
+              key={group.label}
+              label={group.label}
+              hrefs={group.items.map((item) => item.href)}
+            >
+              {group.items.map((item) => (
+                <NavLink key={item.href} href={item.href} icon={item.icon}>
+                  {item.label}
+                </NavLink>
+              ))}
+            </NavGroup>
           ))}
 
-          {canBulk && !isAdmin && (
-            <>
-              <hr className="mt-6 mb-2 border-slate-200" />
-              {MANAGER_NAV.map((item) => (
+          {settingsItems.length > 0 && (
+            <NavGroup label="Settings" hrefs={settingsItems.map((item) => item.href)}>
+              {settingsItems.map((item) => (
                 <NavLink key={item.href} href={item.href} icon={item.icon}>
                   {item.label}
                 </NavLink>
               ))}
-            </>
-          )}
-
-          {isAdmin && (
-            <>
-              <p className="mt-6 mb-2 hidden px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase lg:block">
-                Settings
-              </p>
-              <hr className="mt-6 mb-2 border-slate-200 lg:hidden" />
-              {[...ADMIN_NAV, ...MANAGER_NAV].map((item) => (
-                <NavLink key={item.href} href={item.href} icon={item.icon}>
-                  {item.label}
-                </NavLink>
-              ))}
-            </>
+            </NavGroup>
           )}
         </nav>
 
