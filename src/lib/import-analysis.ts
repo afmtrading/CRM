@@ -675,3 +675,24 @@ export function groupByCompany(
 
   return [...groups.values()]
 }
+
+// -----------------------------------------------------------------------------
+// Recognising a file
+// -----------------------------------------------------------------------------
+
+/**
+ * A file's shape, as a string that can be compared.
+ *
+ * The headings, lower-cased, trimmed, sorted and joined. Sorted so a column
+ * moving left or right does not look like a different file; lower-cased so a
+ * changed capital does not either. The file's *name* is deliberately not part
+ * of it — a list arrives called something different every month while its
+ * columns stay put, which is exactly the thing worth matching on.
+ */
+export function headerSignature(headers: string[]): string {
+  return [
+    ...new Set(headers.map((header) => header.trim().toLowerCase()).filter(Boolean)),
+  ]
+    .sort()
+    .join('|')
+}

@@ -209,6 +209,7 @@ export type TenantTable =
   | 'company_tags'
   | 'saved_filters'
   | 'import_jobs'
+  | 'import_profiles'
   | 'lead_score_rules'
   | 'assignment_rules'
   | 'custom_field_definitions'
