@@ -70,7 +70,7 @@ export function NavGroup({
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        className="hidden w-full items-center gap-1 rounded-lg px-3 py-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase transition-colors hover:text-slate-600 lg:flex"
+        className="hidden w-full items-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold tracking-wider text-slate-900 uppercase transition-colors hover:text-slate-500 lg:flex"
       >
         <ChevronDownIcon
           className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
