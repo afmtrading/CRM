@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { applyFilter, fieldsFor, filterFromSearchParams, groupRows, parseFilterConfig } from '@/lib/filters'
+import { applyFilter, fieldsFor, filterFromSearchParams, groupRowsNested, parseFilterConfig } from '@/lib/filters'
 import type {
   CompanyRow,
   CustomFieldDefinitionRow,
@@ -13,7 +13,7 @@ import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
 import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
 import { FilterBar } from '@/components/filter-bar'
-import { EmptyState, PageHeader } from '@/components/ui'
+import { EmptyState, PageHeader, SubGroupRow } from '@/components/ui'
 import { OptionBadges } from '@/components/contact-cards'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
@@ -88,11 +88,53 @@ export default async function CompaniesPage({
     customFields: definitions,
     fieldOptions: allOptions,
   })
-  const groups = groupRows(rows, config.groupBy, (value) => {
+  // The field is passed in because two of them can be grouped on at once, and
+  // only one of them holds user ids.
+  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) => {
     if (value === null) return 'None'
-    if (config.groupBy === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
+    if (field === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
     return value
   })
+
+  const COLUMNS = 7
+
+  const companyRow = (company: (typeof rows)[number]) => (
+    <tr key={company.id} className="transition-colors hover:bg-slate-50/70">
+      <td>
+        <SelectRow id={company.id} label={`Select ${company.name}`} />
+      </td>
+      <td>
+        <div className="min-w-0">
+          <Link
+            href={`/companies/${company.id}`}
+            className="block truncate font-medium text-slate-900 hover:text-brand-700"
+          >
+            {company.name}
+          </Link>
+          <div className="mt-1">
+            {company.customer_type?.length ? (
+              <OptionBadges values={company.customer_type} options={typeOptions} />
+            ) : (
+              <span className="text-xs text-slate-400">No company type</span>
+            )}
+          </div>
+        </div>
+      </td>
+      <td>
+        <OptionBadges values={company.specialty_market} options={marketOptions} />
+      </td>
+      <td className="text-slate-600">
+        {company.owner_id ? (ownerNames.get(company.owner_id) ?? '—') : '—'}
+      </td>
+      <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
+      <td>
+        <OptionBadges values={companyFieldValues(company, sizeField)} options={sizeOptions} />
+      </td>
+      <td>
+        <OptionBadges values={companyFieldValues(company, regionField)} options={regionOptions} />
+      </td>
+    </tr>
+  )
 
   return (
     <>
@@ -129,7 +171,7 @@ export default async function CompaniesPage({
           }
         />
       ) : (
-        <BulkEdit entity="company" fields={bulkFields}>
+        <BulkEdit entity="company" fields={bulkFields} canDelete={context.canDelete}>
           <div className="space-y-6">
             {groups.map((group) => (
             <div key={group.key ?? 'all'} className="card overflow-hidden">
@@ -160,52 +202,21 @@ export default async function CompaniesPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {group.rows.map((company) => (
-                    <tr key={company.id} className="transition-colors hover:bg-slate-50/70">
-                      <td>
-                        <SelectRow id={company.id} label={`Select ${company.name}`} />
-                      </td>
-                      <td>
-                        <div className="min-w-0">
-                          <Link
-                            href={`/companies/${company.id}`}
-                            className="block truncate font-medium text-slate-900 hover:text-brand-700"
-                          >
-                            {company.name}
-                          </Link>
-                          <div className="mt-1">
-                            {company.customer_type?.length ? (
-                              <OptionBadges
-                                values={company.customer_type}
-                                options={typeOptions}
-                              />
-                            ) : (
-                              <span className="text-xs text-slate-400">No company type</span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <OptionBadges values={company.specialty_market} options={marketOptions} />
-                      </td>
-                      <td className="text-slate-600">
-                        {company.owner_id ? (ownerNames.get(company.owner_id) ?? '—') : '—'}
-                      </td>
-                      <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
-                      <td>
-                        <OptionBadges
-                          values={companyFieldValues(company, sizeField)}
-                          options={sizeOptions}
-                        />
-                      </td>
-                      <td>
-                        <OptionBadges
-                          values={companyFieldValues(company, regionField)}
-                          options={regionOptions}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {(group.subGroups ?? [{ key: null, label: '', rows: group.rows }]).flatMap(
+                    (sub) => [
+                      ...(group.subGroups
+                        ? [
+                            <SubGroupRow
+                              key={`sub-${sub.key ?? 'none'}`}
+                              label={sub.label}
+                              count={sub.rows.length}
+                              columns={COLUMNS}
+                            />,
+                          ]
+                        : []),
+                      ...sub.rows.map(companyRow),
+                    ],
+                  )}
                 </tbody>
               </table>
             </div>

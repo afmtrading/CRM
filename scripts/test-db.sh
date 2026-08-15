@@ -100,5 +100,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/24_geography.sq
 echo "→ import profiles"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/25_import_profiles.sql"
 
+echo "→ bulk delete"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/26_bulk_delete.sql"
+
 echo
 echo "All database tests passed."

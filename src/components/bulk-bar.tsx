@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from 'react'
 
 import { BULK_MODE_LABELS, type BulkField, type BulkMode } from '@/lib/bulk-edit'
-import { bulkUpdate, type BulkState } from '@/app/(app)/bulk-actions'
+import { bulkDelete, bulkUpdate, type BulkState } from '@/app/(app)/bulk-actions'
 
 /**
  * Select rows, change one field on all of them.
@@ -77,17 +77,32 @@ export function SelectRow({ id, label }: { id: string; label: string }) {
 export function BulkEdit({
   entity,
   fields,
+  canDelete = false,
   children,
 }: {
   entity: 'contact' | 'company'
   fields: BulkField[]
+  /** Whether to offer the delete button. The database refuses either way. */
+  canDelete?: boolean
   children: React.ReactNode
 }) {
   const [state, formAction, pending] = useActionState(bulkUpdate, {} as BulkState)
+  /*
+   * Its own action and its own state. A button's formAction overrides the
+   * form's, so both live on one form and the checkboxes are collected once —
+   * two forms would mean two sets of checkboxes over one table.
+   */
+  const [deleteState, deleteAction, deleting] = useActionState(bulkDelete, {} as BulkState)
+  const [confirming, setConfirming] = useState(false)
   const [selected, setSelected] = useState(0)
   const [fieldKey, setFieldKey] = useState(fields[0]?.key ?? '')
   const [mode, setMode] = useState<BulkMode>('set')
+  // Which button was pressed, so the banner shows that answer and not the one
+  // left over from the other action.
+  const [last, setLast] = useState<'edit' | 'delete'>('edit')
   const formRef = useRef<HTMLFormElement>(null)
+
+  const message = last === 'delete' ? deleteState : state
 
   const field = fields.find((candidate) => candidate.key === fieldKey)
 
@@ -96,8 +111,13 @@ export function BulkEdit({
     const form = formRef.current
     if (!form) return
 
-    const count = () =>
+    const count = () => {
       setSelected(form.querySelectorAll<HTMLInputElement>('input[name="ids"]:checked').length)
+      // Changing the selection retracts the confirmation. Otherwise a primed
+      // "Delete 3?" would still be sitting there after somebody ticked thirty
+      // more, and the next click would take all thirty-three.
+      setConfirming(false)
+    }
 
     count()
     form.addEventListener('change', count)
@@ -116,16 +136,16 @@ export function BulkEdit({
     <form ref={formRef} action={formAction}>
       <input type="hidden" name="entity" value={entity} />
 
-      {(state.ok || state.error) && (
+      {(message.ok || message.error) && (
         <p
           role="status"
           className={`mb-3 rounded-xl border px-3.5 py-2.5 text-sm ${
-            state.error
+            message.error
               ? 'border-red-200 bg-red-50 text-red-700'
               : 'border-emerald-200 bg-emerald-50 text-emerald-700'
           }`}
         >
-          {state.error ?? state.ok}
+          {message.error ?? message.ok}
         </p>
       )}
 
@@ -212,9 +232,65 @@ export function BulkEdit({
               />
             ))}
 
-          <button type="submit" className="btn-primary px-3 py-1.5 text-sm" disabled={pending}>
+          <button
+            type="submit"
+            className="btn-primary px-3 py-1.5 text-sm"
+            disabled={pending || deleting}
+            onClick={() => setLast('edit')}
+          >
             {pending ? 'Applying…' : `Apply to ${selected}`}
           </button>
+
+          {/*
+            Two clicks, not a dialog. The first arms it and says the number out
+            loud; the second does it. A native confirm() is easy to dismiss
+            without reading, and this keeps the count in front of the person
+            while they decide — which is the fact that actually matters.
+          */}
+          {canDelete && (
+            <span className="ml-auto flex items-center gap-2">
+              {confirming ? (
+                <>
+                  <button
+                    type="submit"
+                    formAction={deleteAction}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                    disabled={deleting || pending}
+                    onClick={() => {
+                      setLast('delete')
+                      setConfirming(false)
+                    }}
+                  >
+                    {deleting
+                      ? 'Deleting…'
+                      : `Yes, delete ${selected} ${selected === 1 ? noun : plural}`}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-sm text-slate-500 hover:text-slate-800"
+                    onClick={() => setConfirming(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50"
+                  onClick={() => setConfirming(true)}
+                >
+                  Delete
+                </button>
+              )}
+            </span>
+          )}
+
+          {confirming && (
+            <p className="w-full text-xs text-slate-500">
+              Deleted {plural} move to the recycle bin — an administrator can restore them from
+              Settings → Deleted records.
+            </p>
+          )}
 
           {field?.options?.length === 0 && (
             <span className="text-xs text-amber-700">

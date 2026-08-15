@@ -95,3 +95,68 @@ export async function bulkUpdate(_prev: BulkState, formData: FormData): Promise<
   revalidatePath(listPath)
   return { ok: bulkResultMessage(Number(data ?? 0), ids.length, entity) }
 }
+
+/**
+ * Sends a selection of contacts or companies to the recycle bin.
+ *
+ * Shares the selection form with bulkUpdate — the checkboxes are the same
+ * checkboxes — and shares its shape of answer, so the bar above the list can
+ * report either the same way.
+ *
+ * Everything that decides whether a particular record goes is in
+ * `bulk_delete_records`. What is here is the capability gate, so the button is
+ * not offered to somebody the database would refuse, and the sentence that
+ * comes back.
+ */
+export async function bulkDelete(_prev: BulkState, formData: FormData): Promise<BulkState> {
+  const context = await requireSession()
+
+  const entity = formData.get('entity') === 'company' ? 'company' : 'contact'
+  const listPath = entity === 'company' ? '/companies' : '/contacts'
+
+  if (!context.canDelete) {
+    return { error: 'Your role does not allow deleting records.' }
+  }
+
+  const ids = formData.getAll('ids').map(String).filter(Boolean)
+  if (ids.length === 0) {
+    return { error: 'Select some records first.' }
+  }
+
+  const { data, error } = await context.supabase.rpc('bulk_delete_records', {
+    p_entity: entity,
+    p_ids: ids,
+  })
+
+  if (error) return { error: error.message }
+
+  const deleted = Number(data ?? 0)
+  const noun = (count: number) =>
+    entity === 'contact'
+      ? count === 1
+        ? 'contact'
+        : 'contacts'
+      : count === 1
+        ? 'company'
+        : 'companies'
+
+  revalidatePath(listPath)
+  revalidatePath('/settings/deleted')
+
+  /*
+   * The shortfall is reported rather than hidden. A rep who selects forty and
+   * deletes thirty-one needs to know the other nine are still there — silence
+   * would read as "all done" and the nine would be found again next week.
+   */
+  if (deleted === 0) {
+    return { error: `Nothing was deleted — none of those ${noun(2)} were yours to delete.` }
+  }
+
+  if (deleted < ids.length) {
+    return {
+      ok: `${deleted} of ${ids.length} ${noun(ids.length)} deleted. The rest were not yours to delete.`,
+    }
+  }
+
+  return { ok: `${deleted} ${noun(deleted)} moved to the recycle bin.` }
+}
