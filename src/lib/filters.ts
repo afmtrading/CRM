@@ -49,6 +49,8 @@ export interface FilterConfig {
   conditions: FilterCondition[]
   search?: string
   groupBy?: string | null
+  /** A second level inside each group. Ignored unless groupBy is set. */
+  subGroupBy?: string | null
   sort?: { field: string; direction: 'asc' | 'desc' } | null
 }
 
@@ -57,6 +59,7 @@ export const EMPTY_FILTER: FilterConfig = {
   conditions: [],
   search: '',
   groupBy: null,
+  subGroupBy: null,
   sort: null,
 }
 
@@ -392,24 +395,43 @@ export function applyFilter<T extends QueryLike>(
   return result
 }
 
-/** Groups already-fetched rows for the grouped list view. */
+export interface RowGroup<T> {
+  key: string | null
+  label: string
+  rows: T[]
+  /** Present only when a second level was asked for. */
+  subGroups?: RowGroup<T>[]
+}
+
+/** One row's value for a group field, custom fields included. */
+function groupValue(row: Record<string, unknown>, field: string): string | null {
+  const raw = field.startsWith('custom_fields.')
+    ? ((row.custom_fields as Record<string, unknown> | undefined)?.[
+        field.slice('custom_fields.'.length)
+      ] ?? null)
+    : (row[field] ?? null)
+
+  return raw === null || raw === undefined || raw === '' ? null : String(raw)
+}
+
+/**
+ * Buckets rows by one field.
+ *
+ * Alphabetical, with the empty bucket last: "None" is a bucket of things that
+ * need attention rather than a name, and it belongs at the bottom of the page
+ * rather than sorted under N.
+ */
 export function groupRows<T extends Record<string, unknown>>(
   rows: T[],
   groupBy: string | null | undefined,
   labelFor: (value: string | null) => string = (v) => v ?? '—',
-): { key: string | null; label: string; rows: T[] }[] {
+): RowGroup<T>[] {
   if (!groupBy) return [{ key: null, label: 'All', rows }]
 
   const buckets = new Map<string | null, T[]>()
 
   for (const row of rows) {
-    const raw = groupBy.startsWith('custom_fields.')
-      ? ((row.custom_fields as Record<string, unknown> | undefined)?.[
-          groupBy.slice('custom_fields.'.length)
-        ] ?? null)
-      : (row[groupBy] ?? null)
-
-    const key = raw === null || raw === undefined || raw === '' ? null : String(raw)
+    const key = groupValue(row, groupBy)
     const bucket = buckets.get(key)
     if (bucket) bucket.push(row)
     else buckets.set(key, [row])
@@ -422,6 +444,34 @@ export function groupRows<T extends Record<string, unknown>>(
       if (b.key === null) return -1
       return a.label.localeCompare(b.label)
     })
+}
+
+/**
+ * The same, twice: owner, then priority inside each owner.
+ *
+ * Two levels rather than n. Three would be a tree, and a tree of a list is a
+ * report — at that point the answer is a saved view per branch, not more
+ * nesting on a screen somebody is trying to scan.
+ *
+ * `labelFor` takes the field as well as the value, because the two levels are
+ * different fields and an owner id and a stage id both look like a uuid.
+ * Grouping by the same field twice is treated as one level: the sub-groups
+ * would each hold exactly the group above them, which is furniture.
+ */
+export function groupRowsNested<T extends Record<string, unknown>>(
+  rows: T[],
+  groupBy: string | null | undefined,
+  subGroupBy: string | null | undefined,
+  labelFor: (field: string, value: string | null) => string = (_f, v) => v ?? '—',
+): RowGroup<T>[] {
+  const top = groupRows(rows, groupBy, (value) => labelFor(groupBy ?? '', value))
+
+  if (!groupBy || !subGroupBy || subGroupBy === groupBy) return top
+
+  return top.map((group) => ({
+    ...group,
+    subGroups: groupRows(group.rows, subGroupBy, (value) => labelFor(subGroupBy, value)),
+  }))
 }
 
 export function parseFilterConfig(value: unknown): FilterConfig {
@@ -437,6 +487,7 @@ export function parseFilterConfig(value: unknown): FilterConfig {
       : [],
     search: typeof raw.search === 'string' ? raw.search : '',
     groupBy: typeof raw.groupBy === 'string' ? raw.groupBy : null,
+    subGroupBy: typeof raw.subGroupBy === 'string' ? raw.subGroupBy : null,
     sort:
       raw.sort && typeof raw.sort.field === 'string'
         ? { field: raw.sort.field, direction: raw.sort.direction === 'asc' ? 'asc' : 'desc' }
@@ -449,6 +500,10 @@ export function filterToSearchParams(config: FilterConfig): URLSearchParams {
   const params = new URLSearchParams()
   if (config.search) params.set('q', config.search)
   if (config.groupBy) params.set('group', config.groupBy)
+  // Only alongside a group. A subgroup on its own has nothing to sit inside,
+  // and a stale one in a bookmarked URL would reappear the moment somebody
+  // picked a group again.
+  if (config.groupBy && config.subGroupBy) params.set('subgroup', config.subGroupBy)
   if (config.sort) params.set('sort', `${config.sort.field}:${config.sort.direction}`)
   if (config.match === 'any') params.set('match', 'any')
   if (config.conditions.length > 0) params.set('f', JSON.stringify(config.conditions))
@@ -482,6 +537,7 @@ export function filterFromSearchParams(
     conditions,
     search: get('q') ?? '',
     groupBy: get('group') ?? null,
+    subGroupBy: get('group') ? (get('subgroup') ?? null) : null,
     sort: sortField ? { field: sortField, direction: sortDirection === 'asc' ? 'asc' : 'desc' } : null,
   }
 }

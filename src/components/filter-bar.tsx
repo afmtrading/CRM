@@ -99,7 +99,19 @@ export function FilterBar({
         <select
           className="input max-w-40"
           value={config.groupBy ?? ''}
-          onChange={(event) => apply({ ...config, groupBy: event.target.value || null })}
+          onChange={(event) =>
+            apply({
+              ...config,
+              groupBy: event.target.value || null,
+              // Dropping the group drops what was nested inside it, and
+              // choosing the same field for both is one level, so the second
+              // is cleared rather than left to be silently ignored.
+              subGroupBy:
+                !event.target.value || event.target.value === config.subGroupBy
+                  ? null
+                  : config.subGroupBy,
+            })
+          }
         >
           <option value="">No grouping</option>
           {groupable.map((field) => (
@@ -108,6 +120,25 @@ export function FilterBar({
             </option>
           ))}
         </select>
+
+        {/* Only once there is something to nest inside. */}
+        {config.groupBy && (
+          <select
+            className="input max-w-40"
+            value={config.subGroupBy ?? ''}
+            aria-label="Then group by"
+            onChange={(event) => apply({ ...config, subGroupBy: event.target.value || null })}
+          >
+            <option value="">No sub-group</option>
+            {groupable
+              .filter((field) => field.key !== config.groupBy)
+              .map((field) => (
+                <option key={field.key} value={field.key}>
+                  Then by {field.label.toLowerCase()}
+                </option>
+              ))}
+          </select>
+        )}
 
         <select
           className="input max-w-44"

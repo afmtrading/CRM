@@ -252,3 +252,31 @@ export function Section({
     </section>
   )
 }
+
+/**
+ * The heading for a second level of grouping.
+ *
+ * A row inside the table rather than a card of its own, because the columns
+ * have to keep lining up: a nested table would let each sub-group choose its
+ * own column widths, and a list you cannot read down a column is not a list.
+ */
+export function SubGroupRow({
+  label,
+  count,
+  columns,
+}: {
+  label: string
+  count: number
+  columns: number
+}) {
+  return (
+    <tr className="bg-slate-50/80">
+      <td colSpan={columns} className="px-4 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          {label}
+        </span>
+        <span className="ml-2 text-xs text-slate-400">{count}</span>
+      </td>
+    </tr>
+  )
+}

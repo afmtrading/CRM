@@ -5,7 +5,7 @@ import {
   applyFilter,
   fieldsFor,
   filterFromSearchParams,
-  groupRows,
+  groupRowsNested,
   parseFilterConfig,
 } from "@/lib/filters";
 import { contactName } from "@/lib/format";
@@ -40,6 +40,7 @@ import {
   PageHeader,
   StatCard,
   StatGrid,
+  SubGroupRow,
 } from "@/components/ui";
 import {
   AlertIcon,
@@ -230,14 +231,122 @@ export default async function ContactsPage({
     fieldOptions: contactOptions,
   });
 
-  const groups = groupRows(rows, config.groupBy, (value) => {
+  /*
+   * Resolving ids to names has to know which field it is looking at, now that
+   * two of them can be in play at once — an owner id and a company id are both
+   * uuids and one of them would otherwise be labelled with the other's names.
+   */
+  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) => {
     if (value === null) return "None";
-    if (config.groupBy === "owner_id")
-      return ownerNames.get(value) ?? "Unknown user";
-    if (config.groupBy === "company_id")
-      return companyNames.get(value) ?? "Unknown company";
+    if (field === "owner_id") return ownerNames.get(value) ?? "Unknown user";
+    if (field === "company_id") return companyNames.get(value) ?? "Unknown company";
     return value;
   });
+
+  const COLUMNS = 8;
+
+  /*
+   * One row, named, because it is now rendered from two places: straight into
+   * the table when there is no second level, and under a sub-group heading when
+   * there is. Duplicating it is how the two drift apart.
+   */
+  const contactRow = (contact: (typeof rows)[number]) => {
+    const name = contactName(contact);
+    return (
+      <tr key={contact.id} className="transition-colors hover:bg-slate-50/70">
+        <td>
+          <SelectRow id={contact.id} label={`Select ${name}`} />
+        </td>
+        {/* The company rides under the name rather than taking its own column
+            — who someone is and who they work for read as one thing, and the
+            row gets a column back for what they are worth. */}
+        <td>
+          <div className="min-w-0">
+            <Link
+              href={`/contacts/${contact.id}`}
+              className="block truncate font-medium text-slate-900 hover:text-brand-700"
+            >
+              {name}
+            </Link>
+            {contact.companies ? (
+              <Link
+                href={`/companies/${contact.companies.id}`}
+                className="block truncate text-xs text-slate-500 hover:text-brand-700 hover:underline"
+              >
+                {contact.companies.name}
+              </Link>
+            ) : (
+              <span className="block truncate text-xs text-slate-400">
+                No company
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="text-slate-600">
+          {contact.owner_id ? (ownerNames.get(contact.owner_id) ?? "—") : "—"}
+        </td>
+        <td>
+          {contact.priority ? (
+            <OptionBadge
+              value={contact.priority}
+              color={optionColor(optionsFor("priority"), contact.priority)}
+            />
+          ) : (
+            <span className="text-slate-400">—</span>
+          )}
+        </td>
+        <td>
+          <OptionBadges
+            values={contact.role_type}
+            options={optionsFor("role_type")}
+          />
+        </td>
+        <td>
+          {contact.credibility ? (
+            <OptionBadge
+              value={contact.credibility}
+              color={optionColor(optionsFor("credibility"), contact.credibility)}
+            />
+          ) : (
+            <span className="text-slate-400">—</span>
+          )}
+        </td>
+        <td>
+          <OptionBadges
+            values={companyFieldValues(contact.companies, regionField)}
+            options={regionOptions}
+          />
+        </td>
+        <td>
+          <div className="flex items-center justify-end gap-1">
+            {contact.phone && (
+              <a
+                // Stripped, like every other tel: link in the app: a stored
+                // number may carry the spaces and dashes that make it
+                // readable, and a space in a URI is not a dialable digit.
+                href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}
+                aria-label={`Call ${name}`}
+                title={contact.phone}
+                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              >
+                <PhoneIcon className="h-4 w-4" />
+              </a>
+            )}
+            {contact.email && (
+              <a
+                href={`mailto:${contact.email}`}
+                aria-label={`Email ${name}`}
+                title={contact.email}
+                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              >
+                <MailIcon className="h-4 w-4" />
+              </a>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <>
@@ -339,7 +448,7 @@ export default async function ContactsPage({
           }
         />
       ) : (
-        <BulkEdit entity="contact" fields={bulkFields}>
+        <BulkEdit entity="contact" fields={bulkFields} canDelete={context.canDelete}>
           <ConsentBar lists={(emailLists ?? []) as { id: string; name: string }[]} />
           <div className="space-y-6">
             {groups.map((group) => (
@@ -378,112 +487,26 @@ export default async function ContactsPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {group.rows.map((contact) => {
-                      const name = contactName(contact);
-                      return (
-                        <tr
-                          key={contact.id}
-                          className="transition-colors hover:bg-slate-50/70"
-                        >
-                          <td>
-                            <SelectRow id={contact.id} label={`Select ${name}`} />
-                          </td>
-                          {/* The company rides under the name rather than
-                              taking its own column — who someone is and who
-                              they work for read as one thing, and the row gets
-                              a column back for what they are worth. */}
-                          <td>
-                            <div className="min-w-0">
-                              <Link
-                                href={`/contacts/${contact.id}`}
-                                className="block truncate font-medium text-slate-900 hover:text-brand-700"
-                              >
-                                {name}
-                              </Link>
-                              {contact.companies ? (
-                                <Link
-                                  href={`/companies/${contact.companies.id}`}
-                                  className="block truncate text-xs text-slate-500 hover:text-brand-700 hover:underline"
-                                >
-                                  {contact.companies.name}
-                                </Link>
-                              ) : (
-                                <span className="block truncate text-xs text-slate-400">
-                                  No company
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="text-slate-600">
-                            {contact.owner_id
-                              ? (ownerNames.get(contact.owner_id) ?? "—")
-                              : "—"}
-                          </td>
-                          <td>
-                            {contact.priority ? (
-                              <OptionBadge
-                                value={contact.priority}
-                                color={optionColor(
-                                  optionsFor("priority"),
-                                  contact.priority,
-                                )}
-                              />
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-                          <td>
-                            <OptionBadges
-                              values={contact.role_type}
-                              options={optionsFor("role_type")}
-                            />
-                          </td>
-                          <td>
-                            {contact.credibility ? (
-                              <OptionBadge
-                                value={contact.credibility}
-                                color={optionColor(
-                                  optionsFor("credibility"),
-                                  contact.credibility,
-                                )}
-                              />
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-                          <td>
-                            <OptionBadges
-                              values={companyFieldValues(contact.companies, regionField)}
-                              options={regionOptions}
-                            />
-                          </td>
-                          <td>
-                            <div className="flex items-center justify-end gap-1">
-                              {contact.phone && (
-                                <a
-                                  href={`tel:${contact.phone}`}
-                                  aria-label={`Call ${name}`}
-                                  title={contact.phone}
-                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                >
-                                  <PhoneIcon className="h-4 w-4" />
-                                </a>
-                              )}
-                              {contact.email && (
-                                <a
-                                  href={`mailto:${contact.email}`}
-                                  aria-label={`Email ${name}`}
-                                  title={contact.email}
-                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                >
-                                  <MailIcon className="h-4 w-4" />
-                                </a>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {/*
+                      With a sub-group, each one gets a heading row and then its
+                      rows; without, the rows go straight in. Same table either
+                      way, so the columns keep their widths.
+                    */}
+                    {(group.subGroups ?? [{ key: null, label: "", rows: group.rows }]).flatMap(
+                      (sub) => [
+                        ...(group.subGroups
+                          ? [
+                              <SubGroupRow
+                                key={`sub-${sub.key ?? "none"}`}
+                                label={sub.label}
+                                count={sub.rows.length}
+                                columns={COLUMNS}
+                              />,
+                            ]
+                          : []),
+                        ...sub.rows.map(contactRow),
+                      ],
+                    )}
                   </tbody>
                 </table>
               </div>

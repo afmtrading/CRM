@@ -19,6 +19,13 @@ export interface SessionContext {
   /** Anyone but a read-only user. */
   canWrite: boolean
   /**
+   * May send a record to the recycle bin.
+   *
+   * Separate from canWrite because editing and deleting are different sizes of
+   * mistake, and the permission sets have always had a box for each.
+   */
+  canDelete: boolean
+  /**
    * May edit permission sets and assign people to them.
    *
    * Deliberately not implied by isAdmin: without the separation, anybody who
@@ -110,6 +117,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
         userRow.role === 'manager' ||
         userRow.role === 'sales_director'),
     canWrite: permissions?.write_records ?? userRow.role !== 'readonly',
+    canDelete: permissions?.delete_records ?? userRow.role !== 'readonly',
     canManagePermissions: permissions?.manage_permissions ?? userRow.role === 'admin',
     canSeeHidden: permissions?.see_hidden ?? false,
     supabase,

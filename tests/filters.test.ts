@@ -4,9 +4,11 @@ import {
   applyFilter,
   conditionToPredicate,
   dealVisibility,
+  EMPTY_FILTER,
   filterFromSearchParams,
   filterToSearchParams,
   groupRows,
+  groupRowsNested,
   parseFilterConfig,
   toColumn,
   type FilterConfig,
@@ -203,6 +205,58 @@ describe('groupRows', () => {
   })
 })
 
+describe('groupRowsNested', () => {
+  const rows = [
+    { id: '1', owner: 'ada', priority: 'high', custom_fields: {} },
+    { id: '2', owner: 'ada', priority: 'low', custom_fields: {} },
+    { id: '3', owner: 'ada', priority: 'high', custom_fields: {} },
+    { id: '4', owner: 'raj', priority: null, custom_fields: {} },
+  ]
+
+  it('splits each group by the second field', () => {
+    const groups = groupRowsNested(rows, 'owner', 'priority')
+
+    expect(groups.map((group) => group.key)).toEqual(['ada', 'raj'])
+
+    const ada = groups[0]
+    expect(ada.rows).toHaveLength(3)
+    expect(ada.subGroups?.map((sub) => sub.key)).toEqual(['high', 'low'])
+    expect(ada.subGroups?.[0].rows).toHaveLength(2)
+  })
+
+  it('carries the ungrouped bucket into the second level too', () => {
+    const groups = groupRowsNested(rows, 'owner', 'priority')
+    expect(groups[1].subGroups?.[0].key).toBeNull()
+  })
+
+  it('leaves subGroups off when only one level was asked for', () => {
+    expect(groupRowsNested(rows, 'owner', null)[0].subGroups).toBeUndefined()
+  })
+
+  /*
+   * The same field twice would give every group one sub-group holding exactly
+   * itself — a heading repeating the heading above it.
+   */
+  it('treats the same field on both levels as one level', () => {
+    expect(groupRowsNested(rows, 'owner', 'owner')[0].subGroups).toBeUndefined()
+  })
+
+  it('labels each level with its own field', () => {
+    const groups = groupRowsNested(rows, 'owner', 'priority', (field, value) =>
+      value === null ? 'None' : `${field}=${value}`,
+    )
+
+    expect(groups[0].label).toBe('owner=ada')
+    expect(groups[0].subGroups?.[0].label).toBe('priority=high')
+  })
+
+  it('does nothing with a sub-group and no group', () => {
+    const groups = groupRowsNested(rows, null, 'priority')
+    expect(groups).toHaveLength(1)
+    expect(groups[0].subGroups).toBeUndefined()
+  })
+})
+
 describe('saved filter round-tripping', () => {
   it('survives a trip through the URL', () => {
     const config: FilterConfig = {
@@ -213,6 +267,7 @@ describe('saved filter round-tripping', () => {
       ],
       search: 'acme',
       groupBy: 'owner_id',
+      subGroupBy: 'lifecycle_stage',
       sort: { field: 'lead_score', direction: 'asc' },
     }
 
@@ -220,6 +275,19 @@ describe('saved filter round-tripping', () => {
     const restored = filterFromSearchParams(Object.fromEntries(params.entries()))
 
     expect(restored).toEqual(config)
+  })
+
+  it('drops a sub-group with no group to sit inside', () => {
+    const params = filterToSearchParams({
+      ...EMPTY_FILTER,
+      groupBy: null,
+      subGroupBy: 'priority',
+    })
+
+    expect(params.has('subgroup')).toBe(false)
+    // And a hand-written URL claiming one is not honoured either, so a bookmark
+    // cannot resurrect a level with nothing above it.
+    expect(filterFromSearchParams({ subgroup: 'priority' }).subGroupBy).toBeNull()
   })
 
   it('parses a stored filter, ignoring malformed conditions', () => {
