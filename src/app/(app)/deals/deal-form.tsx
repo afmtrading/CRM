@@ -13,6 +13,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { CustomFieldInputs } from '@/components/form-fields'
+import { CURRENCIES } from '@/lib/format'
 
 import type { DealActionState } from './actions'
 
@@ -156,10 +157,11 @@ export function DealForm({
             className="input"
             defaultValue={deal?.currency ?? defaultCurrency}
           >
-            <option value="CAD">CAD</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
           </select>
         </div>
 

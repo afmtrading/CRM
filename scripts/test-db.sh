@@ -103,5 +103,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/25_import_profi
 echo "→ bulk delete"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/26_bulk_delete.sql"
 
+echo "→ default currency"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/27_default_currency.sql"
+
 echo
 echo "All database tests passed."

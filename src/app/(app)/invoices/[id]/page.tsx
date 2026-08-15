@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { todayIn } from '@/lib/timezone'
-import { formatDate, formatDay, formatNumber, formatPrice } from '@/lib/format'
+import { CURRENCIES, formatDate, formatDay, formatNumber, formatPrice } from '@/lib/format'
 import {
   INVOICE_STATUS_LABELS,
   daysOverdue,
@@ -98,6 +98,10 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
   const owed = Number(invoice.total) - Number(invoice.amount_paid)
   const late = daysOverdue(invoice.due_date, today)
+
+  // Draft and unpaid is a correction; anything else would be restating a
+  // document somebody has already acted on.
+  const currencyFixed = invoice.status !== 'draft' || Number(invoice.amount_paid) !== 0
 
   return (
     <>
@@ -476,6 +480,44 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
             <form action={updateInvoice} className="space-y-3 border-t border-slate-100 pt-4">
               <input type="hidden" name="id" value={id} />
+
+              {/*
+                There was nowhere to set this at all — an invoice took whatever
+                currency it was raised with and kept it silently. Editable only
+                while the document is still a draft with no money against it,
+                because changing a currency converts nothing: every figure keeps
+                its number and acquires a new label, which on a document already
+                sent is restating history rather than correcting it. The
+                database refuses the same cases; this is the interface agreeing.
+              */}
+              <div>
+                <label className="label" htmlFor="currency">
+                  Currency
+                </label>
+                {currencyFixed ? (
+                  <>
+                    <p className="input bg-slate-50 text-slate-600">{invoice.currency}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {invoice.status === 'draft'
+                        ? 'Fixed once a payment has been recorded.'
+                        : 'Fixed once the invoice has been sent.'}
+                    </p>
+                  </>
+                ) : (
+                  <select
+                    id="currency"
+                    name="currency"
+                    className="input"
+                    defaultValue={invoice.currency}
+                  >
+                    {CURRENCIES.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
               <div>
                 <label className="label" htmlFor="due_date">

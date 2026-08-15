@@ -1,6 +1,8 @@
 import type { OrganizationRow } from '@/lib/database.types'
 import { TIMEZONES, timeZoneAbbreviation, timeZoneLabel } from '@/lib/timezone'
 
+import { CURRENCIES } from '@/lib/format'
+
 import { updateOrganization } from '../actions'
 
 export function OrganizationForm({ organization }: { organization: OrganizationRow }) {
@@ -23,11 +25,16 @@ export function OrganizationForm({ organization }: { organization: OrganizationR
           className="input"
           defaultValue={organization.default_currency}
         >
-          <option value="CAD">CAD</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
+          {CURRENCIES.map((code) => (
+            <option key={code} value={code}>
+              {code}
+            </option>
+          ))}
         </select>
+        <p className="mt-1 text-xs text-slate-400">
+          What a new deal, product, order or invoice is priced in. Changing it never restates
+          anything already raised — those keep the currency they were entered in.
+        </p>
       </div>
 
       {/*

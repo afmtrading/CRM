@@ -9,7 +9,6 @@ import { ActionForm, SubmitButton } from '@/components/action-form'
 import { assignPermissionSet, deleteUser, updateUser } from '../actions'
 import { DeleteUserButton } from './delete-user-button'
 import { InviteUserForm } from './invite-form'
-import { OrganizationForm } from './organization-form'
 
 export const metadata = { title: 'Users · FLO CRM' }
 
@@ -259,10 +258,6 @@ export default async function UserSettingsPage({
               records stay in the CRM as unassigned, but their saved filters, notifications,
               connected mailbox and any assignment rule routing leads to them are destroyed.
             </p>
-          </Section>
-
-          <Section title="Organization">
-            <OrganizationForm organization={context.organization} />
           </Section>
         </div>
 

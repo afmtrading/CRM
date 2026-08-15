@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import { CURRENCIES } from '@/lib/format'
 import { canTransition, isEditable } from '@/lib/sales'
 import type { RevisedRateType, SalesOrderStatus } from '@/lib/database.types'
 
@@ -61,7 +62,12 @@ const headerSchema = z.object({
   contact_id: optionalId,
   owner_id: optionalId,
   location_id: optionalId,
-  currency: z.string().trim().min(3).max(3).default('CAD'),
+  /*
+   * Optional, with no default. The picker is disabled once the order leaves
+   * draft, so the browser sends nothing — and a default here would write that
+   * default over the order's real currency on every unrelated save.
+   */
+  currency: z.enum(CURRENCIES).optional().catch(undefined),
   order_date: z.string().trim().min(1),
   payment_terms: text(200),
   shipping_charge: z.coerce.number().min(0).default(0),
@@ -79,9 +85,13 @@ export async function updateSalesOrder(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? 'Those details are not valid')
   }
 
+  // Pulled out so an absent currency is left alone rather than sent as null.
+  const { currency, ...header } = parsed.data
+
   const { error } = await scoped(context, 'sales_orders')
     .update({
-      ...parsed.data,
+      ...header,
+      ...(currency ? { currency } : {}),
       payment_terms: parsed.data.payment_terms || null,
       notes: parsed.data.notes || null,
       terms: parsed.data.terms || null,

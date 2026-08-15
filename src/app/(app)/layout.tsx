@@ -24,6 +24,7 @@ import {
   ReportsIcon,
   SalesOrderIcon,
   ScoringIcon,
+  SettingsIcon,
   ShieldIcon,
   SearchIcon,
   SendIcon,
@@ -83,6 +84,7 @@ const MARKETING_NAV: NavItem[] = [
 ]
 
 const ADMIN_NAV: NavItem[] = [
+  { href: '/settings/organization', label: 'Organization', icon: <SettingsIcon className={ICON} /> },
   { href: '/settings/pipelines', label: 'Pipelines', icon: <PipelinesIcon className={ICON} /> },
   { href: '/settings/users', label: 'Users', icon: <UsersIcon className={ICON} /> },
   { href: '/settings/lead-scoring', label: 'Lead scoring', icon: <ScoringIcon className={ICON} /> },
