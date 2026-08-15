@@ -163,3 +163,47 @@ export function CardLink({ href, children }: { href: string; children: React.Rea
     </Link>
   )
 }
+
+/**
+ * A custom field, in a table cell.
+ *
+ * The three lists all offer custom fields as columns, and a custom field's
+ * value is whatever somebody typed into a jsonb blob — a string, a number, a
+ * boolean, or an array from a multiselect. Rendering it is the same problem on
+ * every page, so it is solved once here rather than three times.
+ *
+ * No option colours. A badge needs the field's palette, which means loading
+ * field_options for every custom field on the list; plain text is honest and
+ * costs nothing, and the record page shows it properly.
+ */
+export function CustomCell({
+  row,
+  columnKey,
+}: {
+  row: { custom_fields?: Record<string, unknown> | null }
+  /** The catalogue key, e.g. `custom_fields.tier`. */
+  columnKey: string
+}) {
+  if (!columnKey.startsWith('custom_fields.')) return <Empty />
+
+  const value = row.custom_fields?.[columnKey.slice('custom_fields.'.length)]
+
+  if (value === null || value === undefined || value === '') return <Empty />
+
+  if (Array.isArray(value)) {
+    const items = value.filter((item) => item !== null && item !== '')
+    return items.length === 0 ? (
+      <Empty />
+    ) : (
+      <span className="block truncate text-slate-600">{items.join(', ')}</span>
+    )
+  }
+
+  // A boolean reads as Yes/No rather than "true": nobody types "true" into a
+  // checkbox, so nobody should have to read it back.
+  if (typeof value === 'boolean') {
+    return <span className="text-slate-600">{value ? 'Yes' : 'No'}</span>
+  }
+
+  return <span className="block truncate text-slate-600">{String(value)}</span>
+}

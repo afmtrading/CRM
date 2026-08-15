@@ -14,7 +14,12 @@ import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
 import { FilterBar } from '@/components/filter-bar'
 import { EmptyState, PageHeader, SubGroupRow } from '@/components/ui'
-import { OptionBadges } from '@/components/contact-cards'
+import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
+import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
+import { ColumnPicker } from '@/components/column-picker'
+import { formatDay } from '@/lib/format'
+
+import { readColumns } from '../column-actions'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 
@@ -79,6 +84,7 @@ export default async function CompaniesPage({
   query = applyFilter(query as any, config, 'company') as any
 
   const { data, count } = await query.limit(200)
+  const savedColumns = await readColumns('company')
   const rows = (data ?? []) as (CompanyRow & { contacts: { count: number }[] })[]
 
   const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
@@ -96,43 +102,125 @@ export default async function CompaniesPage({
     return value
   })
 
-  const COLUMNS = 7
+  const catalogue = columnCatalogue('company', definitions)
+  const columns = resolveColumns('company', savedColumns, catalogue)
 
-  const companyRow = (company: (typeof rows)[number]) => (
-    <tr key={company.id} className="transition-colors hover:bg-slate-50/70">
-      <td>
-        <SelectRow id={company.id} label={`Select ${company.name}`} />
-      </td>
-      <td>
-        <div className="min-w-0">
+  // The checkbox, plus whatever was chosen. Companies have no actions cell.
+  const COLUMNS = columns.length + 1
+
+  const cell = (company: (typeof rows)[number], key: string): React.ReactNode => {
+    switch (key) {
+      case 'name':
+        return (
           <Link
             href={`/companies/${company.id}`}
             className="block truncate font-medium text-slate-900 hover:text-brand-700"
           >
             {company.name}
           </Link>
-          <div className="mt-1">
-            {company.customer_type?.length ? (
-              <OptionBadges values={company.customer_type} options={typeOptions} />
-            ) : (
-              <span className="text-xs text-slate-400">No company type</span>
-            )}
-          </div>
-        </div>
-      </td>
+        )
+      case 'customer_type':
+        return company.customer_type?.length ? (
+          <OptionBadges values={company.customer_type} options={typeOptions} />
+        ) : (
+          <Empty />
+        )
+      case 'specialty_market':
+        return <OptionBadges values={company.specialty_market} options={marketOptions} />
+      case 'stock_type':
+        return company.stock_type?.length ? (
+          <span className="block truncate text-slate-600">{company.stock_type.join(', ')}</span>
+        ) : (
+          <Empty />
+        )
+      case 'owner':
+        return company.owner_id ? (
+          <span className="text-slate-600">{ownerNames.get(company.owner_id) ?? '—'}</span>
+        ) : (
+          <Empty />
+        )
+      case 'contacts':
+        return <span className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</span>
+      case 'size':
+        return <OptionBadges values={companyFieldValues(company, sizeField)} options={sizeOptions} />
+      case 'region':
+        return (
+          <OptionBadges values={companyFieldValues(company, regionField)} options={regionOptions} />
+        )
+      case 'based_in':
+        return company.based_in ? (
+          <span className="text-slate-600">{company.based_in}</span>
+        ) : (
+          <Empty />
+        )
+      case 'based_in_region':
+        return company.based_in_region ? (
+          <span className="text-slate-600">{company.based_in_region}</span>
+        ) : (
+          <Empty />
+        )
+      case 'sells_in':
+        return company.sells_in?.length ? (
+          <span className="block truncate text-slate-600">{company.sells_in.join(', ')}</span>
+        ) : (
+          <Empty />
+        )
+      case 'sources_in':
+        return company.sources_in?.length ? (
+          <span className="block truncate text-slate-600">{company.sources_in.join(', ')}</span>
+        ) : (
+          <Empty />
+        )
+      case 'industry':
+        return company.industry ? (
+          <span className="block truncate text-slate-600">{company.industry}</span>
+        ) : (
+          <Empty />
+        )
+      case 'domain':
+        return company.domain ? (
+          <a
+            href={company.domain.startsWith('http') ? company.domain : `https://${company.domain}`}
+            target="_blank"
+            rel="noreferrer"
+            className="block truncate text-brand-700 hover:underline"
+          >
+            {company.domain}
+          </a>
+        ) : (
+          <Empty />
+        )
+      case 'email':
+        return company.email ? (
+          <a href={`mailto:${company.email}`} className="block truncate text-brand-700 hover:underline">
+            {company.email}
+          </a>
+        ) : (
+          <Empty />
+        )
+      case 'phone':
+        return company.phone ? (
+          <span className="whitespace-nowrap text-slate-600">{company.phone}</span>
+        ) : (
+          <Empty />
+        )
+      case 'created_at':
+        return <span className="text-slate-600">{formatDay(company.created_at)}</span>
+      default:
+        return <CustomCell row={company} columnKey={key} />
+    }
+  }
+
+  const companyRow = (company: (typeof rows)[number]) => (
+    <tr key={company.id} className="transition-colors hover:bg-slate-50/70">
       <td>
-        <OptionBadges values={company.specialty_market} options={marketOptions} />
+        <SelectRow id={company.id} label={`Select ${company.name}`} />
       </td>
-      <td className="text-slate-600">
-        {company.owner_id ? (ownerNames.get(company.owner_id) ?? '—') : '—'}
-      </td>
-      <td className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</td>
-      <td>
-        <OptionBadges values={companyFieldValues(company, sizeField)} options={sizeOptions} />
-      </td>
-      <td>
-        <OptionBadges values={companyFieldValues(company, regionField)} options={regionOptions} />
-      </td>
+      {columns.map((column) => (
+        <td key={column.key} className={column.align === 'right' ? 'text-right' : undefined}>
+          <div className="min-w-0 max-w-xs">{cell(company, column.key)}</div>
+        </td>
+      ))}
     </tr>
   )
 
@@ -142,11 +230,18 @@ export default async function CompaniesPage({
         title="Companies"
         description={count ? `${count} compan${count === 1 ? 'y' : 'ies'}` : undefined}
         actions={
-          context.canWrite ? (
-            <Link href="/companies/new" className="btn-primary">
-              New company
-            </Link>
-          ) : undefined
+          <>
+            <ColumnPicker
+              entity="company"
+              catalogue={catalogue}
+              selected={columns.map((column) => column.key)}
+            />
+            {context.canWrite && (
+              <Link href="/companies/new" className="btn-primary">
+                New company
+              </Link>
+            )}
+          </>
         }
       />
 
@@ -184,21 +279,23 @@ export default async function CompaniesPage({
               <table className="table">
                 <thead>
                   {/*
-                    What kind of business it is, not when it was typed in. The
-                    website left the row — it is one click away on the record
-                    and was mostly empty here — and the company type came in
-                    under the name, where it reads as part of naming it.
+                    Whatever this person chose, in their order. The defaults
+                    say what kind of business it is rather than when it was
+                    typed in; anything else in the catalogue — website, the
+                    territories, the dates — is a tick away in Columns.
                   */}
                   <tr>
                     <th className="w-10">
                       <SelectAll label="Select every company shown" />
                     </th>
-                    <th>Name</th>
-                    <th>Market</th>
-                    <th>Owner</th>
-                    <th>Contacts</th>
-                    <th>Size</th>
-                    <th>Region</th>
+                    {columns.map((column) => (
+                      <th
+                        key={column.key}
+                        className={column.align === 'right' ? 'text-right' : undefined}
+                      >
+                        {column.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>

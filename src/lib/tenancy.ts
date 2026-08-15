@@ -224,6 +224,7 @@ export type TenantTable =
   | 'field_options'
   | 'notifications'
   | 'permission_sets'
+  | 'column_preferences'
   | 'mailbox_connections'
   | 'sending_domains'
   | 'email_suppressions'
