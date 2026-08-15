@@ -41,7 +41,7 @@ export function NavLink({
       {icon && (
         <span className={`flex shrink-0 ${active ? 'text-brand-600' : 'text-slate-400'}`}>{icon}</span>
       )}
-      <span className="hidden truncate lg:block">{children}</span>
+      <span className="sidebar-label hidden truncate lg:block">{children}</span>
     </Link>
   )
 }

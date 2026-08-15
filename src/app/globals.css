@@ -108,3 +108,37 @@ body {
     @apply border-b-0;
   }
 }
+
+/*
+ * The sidebar, shut.
+ *
+ * Every label inside carries `sidebar-label` and is otherwise `hidden lg:block`
+ * — visible from lg up, where there is room for it. Closing the sidebar has to
+ * take those back out, and it cannot do it with another utility class: both
+ * would be a single class selector, so which one won would come down to the
+ * order Tailwind happened to emit them in.
+ *
+ * A descendant selector is two, so this wins outright wherever it applies and
+ * nothing depends on stylesheet order. That is the whole reason it is written
+ * here in CSS rather than as a variant on the elements themselves.
+ */
+[data-sidebar='collapsed'] .sidebar-label {
+  display: none;
+}
+
+/*
+ * …and the two things a shut sidebar has to put back.
+ *
+ * A closed nav group hides its links from `lg` up, which is right only while
+ * its heading is on screen to open them again. Shut the sidebar and the heading
+ * goes with it, so the links have to return or the group becomes a way to lose
+ * a page permanently. The separator that stands in for the heading on the rail
+ * comes back for the same reason.
+ */
+[data-sidebar='collapsed'] .sidebar-group-items {
+  display: block;
+}
+
+[data-sidebar='collapsed'] .sidebar-rail-only {
+  display: block;
+}

@@ -70,7 +70,7 @@ export function NavGroup({
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        className="hidden w-full items-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold tracking-wider text-slate-900 uppercase transition-colors hover:text-slate-500 lg:flex"
+        className="sidebar-label hidden w-full items-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold tracking-wider text-slate-900 uppercase transition-colors hover:text-slate-500 lg:flex"
       >
         <ChevronDownIcon
           className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
@@ -78,10 +78,19 @@ export function NavGroup({
         {label}
       </button>
 
-      {/* The rail has no heading, so it gets a rule instead. */}
-      <hr className="mb-2 border-slate-200 lg:hidden" />
+      {/* The rail has no heading, so it gets a rule instead — including when
+          the rail is a closed sidebar rather than a narrow screen. */}
+      <hr className="sidebar-rail-only mb-2 border-slate-200 lg:hidden" />
 
-      <div className={`space-y-1 ${open ? 'mt-1' : 'lg:hidden'}`}>{children}</div>
+      {/*
+        `lg:hidden` is what closing a group does, and it is correct only while
+        the heading is on screen to open it again. A shut sidebar has no
+        heading, so the links come back — see globals.css. Collapsing a group
+        must never be a way to lose a page.
+      */}
+      <div className={`sidebar-group-items space-y-1 ${open ? 'mt-1' : 'lg:hidden'}`}>
+        {children}
+      </div>
     </div>
   )
 }
