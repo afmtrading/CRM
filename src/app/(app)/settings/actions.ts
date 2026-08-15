@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { assertCanManage, requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
 import type { ActionState } from '@/components/action-form'
 import { safeTimeZone } from '@/lib/timezone'
+import { CURRENCIES } from '@/lib/format'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
@@ -745,6 +746,12 @@ export async function deleteTag(formData: FormData) {
 // Organization settings (PRD 8.1, available early since it is trivial)
 // -----------------------------------------------------------------------------
 
+/** A currency code from the list, or the one already saved. */
+function currencyOr(value: string, fallback: string): string {
+  const code = value.trim().toUpperCase()
+  return (CURRENCIES as readonly string[]).includes(code) ? code : fallback
+}
+
 export async function updateOrganization(formData: FormData) {
   const context = await requireAdmin()
 
@@ -753,7 +760,16 @@ export async function updateOrganization(formData: FormData) {
     .update({
       name: String(formData.get('name') ?? '').trim() || context.organization.name,
       primary_color: String(formData.get('primary_color') ?? context.organization.primary_color),
-      default_currency: String(formData.get('default_currency') ?? 'USD').toUpperCase(),
+      /*
+       * Checked against the list rather than trusted. A currency code ends up
+       * on printed documents and inside Intl.NumberFormat, and an unknown one
+       * renders as a blank symbol rather than failing — so a typo would be
+       * discovered by a customer.
+       */
+      default_currency: currencyOr(
+        String(formData.get('default_currency') ?? ''),
+        context.organization.default_currency,
+      ),
       /*
        * Validated here as well as by the database's trigger, so a zone this
        * Node build cannot format is refused before it reaches a report and
@@ -766,6 +782,7 @@ export async function updateOrganization(formData: FormData) {
 
   if (error) throw new Error(error.message)
   revalidatePath('/', 'layout')
+  revalidatePath('/settings/organization')
 }
 
 // -----------------------------------------------------------------------------

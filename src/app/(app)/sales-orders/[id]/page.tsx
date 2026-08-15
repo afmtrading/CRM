@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { formatDate, formatNumber, formatPrice } from '@/lib/format'
+import { CURRENCIES, formatDate, formatNumber, formatPrice } from '@/lib/format'
 import {
   SALES_ORDER_STATUS_HINTS,
   SALES_ORDER_STATUS_LABELS,
@@ -603,13 +603,32 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   <label className="label" htmlFor="currency">
                     Currency
                   </label>
-                  <input
+                  {/*
+                    A list, not a free-text box. Three characters accepted
+                    anything, and a typo does not fail — it renders as a blank
+                    symbol on a document that has already gone to a customer.
+                    Frozen once the order leaves draft, because changing it
+                    converts nothing: every stored figure keeps its number and
+                    quietly acquires a new label.
+                  */}
+                  <select
                     id="currency"
                     name="currency"
                     className="input"
-                    maxLength={3}
                     defaultValue={salesOrder.currency}
-                  />
+                    disabled={salesOrder.status !== 'draft'}
+                  >
+                    {CURRENCIES.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
+                      </option>
+                    ))}
+                  </select>
+                  {salesOrder.status !== 'draft' && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      Fixed once the order is confirmed.
+                    </p>
+                  )}
                 </div>
               </div>
 

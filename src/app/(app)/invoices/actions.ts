@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import { CURRENCIES } from '@/lib/format'
 import { settableInvoiceStatuses } from '@/lib/sales'
 import type { InvoiceStatus, RevisedRateType } from '@/lib/database.types'
 
@@ -29,6 +30,16 @@ const headerSchema = z.object({
   payment_terms: text(200),
   notes: z.string().max(20_000).default(''),
   terms: z.string().max(20_000).default(''),
+  /*
+   * Absent when the field was not rendered — a sent or part-paid invoice shows
+   * the currency rather than offering it — and absent means "leave it alone"
+   * rather than "clear it". The database has the last word either way: a
+   * trigger refuses the change on anything but an unpaid draft.
+   */
+  currency: z
+    .enum(CURRENCIES)
+    .optional()
+    .catch(undefined),
 })
 
 export async function updateInvoice(formData: FormData) {
@@ -47,6 +58,7 @@ export async function updateInvoice(formData: FormData) {
       payment_terms: parsed.data.payment_terms || null,
       notes: parsed.data.notes || null,
       terms: parsed.data.terms || null,
+      ...(parsed.data.currency ? { currency: parsed.data.currency } : {}),
     })
     .eq('id', id)
 
