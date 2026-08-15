@@ -889,6 +889,13 @@ export type StockLevelRow = {
    * on the record. The form points it out rather than blocking it.
    */
   reserved: number
+  /**
+   * A standing note about this place: a damaged pallet, a recount pending,
+   * whose floor it is on. Describes the place as it stands and is meant to be
+   * revised — unlike StockAdjustmentRow.note, which explains one movement and
+   * is written once.
+   */
+  note: string | null
   updated_by: string | null
   created_at: string
   updated_at: string

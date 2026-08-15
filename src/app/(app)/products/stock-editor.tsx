@@ -45,7 +45,7 @@ export function StockEditor({
   defaultValue: StockEntry[]
   committed?: number
 }) {
-  const blank = { location_id: '', bin_id: '', quantity: '', reserved: '' }
+  const blank = { location_id: '', bin_id: '', quantity: '', reserved: '', note: '' }
   const [rows, setRows] = useState<StockEntry[]>(
     defaultValue.length > 0 ? defaultValue : [blank],
   )
@@ -89,11 +89,12 @@ export function StockEditor({
       </div>
 
       <div className="space-y-2">
-        <div className="hidden gap-2 px-1 sm:grid sm:grid-cols-[1fr_1fr_7rem_7rem_2rem]">
+        <div className="hidden gap-2 px-1 sm:grid sm:grid-cols-[1fr_1fr_6rem_6rem_1.4fr_2rem]">
           <span className="label mb-0">Location</span>
           <span className="label mb-0">Bin</span>
           <span className="label mb-0">Quantity</span>
           <span className="label mb-0">Reserved</span>
+          <span className="label mb-0">Notes</span>
           <span />
         </div>
 
@@ -108,7 +109,7 @@ export function StockEditor({
           return (
             <div
               key={index}
-              className="grid gap-2 sm:grid-cols-[1fr_1fr_7rem_7rem_2rem] sm:items-center"
+              className="grid gap-2 sm:grid-cols-[1fr_1fr_6rem_6rem_1.4fr_2rem] sm:items-center"
             >
               <select
                 className="input"
@@ -167,6 +168,21 @@ export function StockEditor({
                 title={
                   over ? 'More is held back here than the count says is here' : undefined
                 }
+              />
+
+              {/*
+                What is true about this place right now — a damaged pallet, a
+                recount pending, whose floor it is on. Not why a number moved:
+                that is the adjustment's reason, which is written once and
+                never edited, while this is meant to be revised.
+              */}
+              <input
+                className="input"
+                placeholder="Damaged pallet, recount pending…"
+                maxLength={500}
+                value={row.note ?? ''}
+                onChange={(event) => update(index, { note: event.target.value })}
+                aria-label={`Notes for row ${index + 1}`}
               />
 
               <button

@@ -169,3 +169,54 @@ describe('normaliseEntries — reserved', () => {
     )
   })
 })
+
+describe('notes on a place', () => {
+  it('keeps a note through normalising', () => {
+    const [entry] = normaliseEntries([
+      { location_id: 'a', bin_id: '', quantity: '5', reserved: '0', note: '  Damaged pallet  ' },
+    ])
+
+    expect(entry.note).toBe('Damaged pallet')
+  })
+
+  it('drops a note that is only whitespace', () => {
+    const [entry] = normaliseEntries([
+      { location_id: 'a', bin_id: '', quantity: '5', reserved: '0', note: '   ' },
+    ])
+
+    expect(entry.note).toBeUndefined()
+  })
+
+  /*
+   * Two rows for one place is somebody having typed it twice. The counts add
+   * up, so the notes have to survive too — picking one silently would lose
+   * whichever was typed second.
+   */
+  it('joins the notes when two rows collapse into one place', () => {
+    const [entry] = normaliseEntries([
+      { location_id: 'a', bin_id: '', quantity: '5', reserved: '0', note: 'Damaged' },
+      { location_id: 'a', bin_id: '', quantity: '3', reserved: '0', note: 'Recount pending' },
+    ])
+
+    expect(entry.quantity).toBe('8')
+    expect(entry.note).toBe('Damaged · Recount pending')
+  })
+
+  it('does not repeat the same note twice', () => {
+    const [entry] = normaliseEntries([
+      { location_id: 'a', bin_id: '', quantity: '5', reserved: '0', note: 'Damaged' },
+      { location_id: 'a', bin_id: '', quantity: '3', reserved: '0', note: 'Damaged' },
+    ])
+
+    expect(entry.note).toBe('Damaged')
+  })
+
+  it('leaves a place with no note alone', () => {
+    const [entry] = normaliseEntries([
+      { location_id: 'a', bin_id: '', quantity: '5', reserved: '0' },
+      { location_id: 'a', bin_id: '', quantity: '1', reserved: '0' },
+    ])
+
+    expect(entry.note).toBeUndefined()
+  })
+})

@@ -183,6 +183,9 @@ async function applyStock(
       p_reserved: Number(entry.reserved),
       p_reason: 'Edited on the product',
       p_note: null,
+      // '' rather than null: null means "leave the note as it was", so an
+      // emptied box has to say emptied rather than say nothing.
+      p_place_note: entry.note?.trim() ?? '',
     })
     if (error) problems.push(error.message)
   }

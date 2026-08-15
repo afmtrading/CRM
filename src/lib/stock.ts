@@ -15,6 +15,11 @@ export type StockEntry = {
   quantity: string
   /** Held back by hand, at this place. */
   reserved: string
+  /**
+   * A standing note about this place — damaged pallet, recount pending, whose
+   * floor it is on. Not the reason a number moved; that goes on the adjustment.
+   */
+  note?: string
 }
 
 export type StockSummary = {
@@ -111,11 +116,17 @@ export function normaliseEntries(entries: StockEntry[]): StockEntry[] {
     if (existing) {
       existing.quantity = String(num(existing.quantity) + num(entry.quantity))
       existing.reserved = String(num(existing.reserved) + num(entry.reserved))
+      // Two rows for one place is somebody having typed it twice. The counts
+      // add up; the notes are joined rather than one of them being dropped,
+      // because there is no way to tell which of the two was meant.
+      const notes = [existing.note, entry.note].map((n) => n?.trim()).filter(Boolean)
+      existing.note = notes.length > 0 ? [...new Set(notes)].join(' · ') : undefined
     } else {
       byPlace.set(key, {
         ...entry,
         quantity: String(num(entry.quantity)),
         reserved: String(num(entry.reserved)),
+        note: entry.note?.trim() || undefined,
       })
     }
   }

@@ -479,6 +479,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       <th>Bin</th>
                       <th className="text-right">On hand</th>
                       <th className="text-right">Reserved</th>
+                      <th>Notes</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -499,6 +500,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                         <td className="text-right text-slate-600">
                           {Number(level.reserved) > 0 ? formatQuantity(level.reserved) : '—'}
                         </td>
+                        {/* What is true about this place — a damaged pallet, a
+                            recount pending. Wrapped rather than truncated: a
+                            note nobody can read is a note nobody wrote. */}
+                        <td className="max-w-xs whitespace-pre-wrap text-slate-600">
+                          {level.note ? (
+                            level.note
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -511,7 +522,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               follows their line items rather than being entered here, so cancelling an order or
               winning a deal releases it with nothing to remember. Reserved is the separate number
               you set by hand, for stock held back for a reason that is not a document yet.
-              Available can go negative, which means more has been promised than exists.
+              Available can go negative, which means more has been promised than exists. Notes
+              describe a place as it stands — a damaged pallet, a recount pending — and are
+              edited under Adjust; why a number moved goes on the movement itself, in the
+              history below.
             </p>
           </Section>
 

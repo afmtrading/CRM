@@ -440,7 +440,10 @@ begin
   raise notice 'What anon may execute:';
 
   foreach v_fn in array array[
-    'public.set_stock_level(uuid, uuid, uuid, numeric, numeric, text, text)',
+    -- Eight arguments since 20260243000000, the last being the standing note
+    -- on the place. Spelled out in full deliberately: a signature that has
+    -- drifted is exactly how a revoke ends up pointing at nothing and passing.
+    'public.set_stock_level(uuid, uuid, uuid, numeric, numeric, text, text, text)',
     'public.clear_stock_level(uuid, uuid, uuid, text)',
     'public.product_stock_summary(uuid)'
   ] loop
