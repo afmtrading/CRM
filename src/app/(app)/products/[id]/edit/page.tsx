@@ -62,6 +62,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           bin_id: level.bin_id ?? '',
           quantity: String(level.quantity),
           reserved: String(level.reserved),
+          note: level.note ?? '',
         }))}
         committed={Number(totals?.committed ?? 0)}
         submitLabel="Save changes"

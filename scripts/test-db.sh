@@ -106,5 +106,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/26_bulk_delete.
 echo "→ default currency"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/27_default_currency.sql"
 
+echo "→ stock notes"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/28_stock_level_notes.sql"
+
 echo
 echo "All database tests passed."
