@@ -1,9 +1,12 @@
 import Link from 'next/link'
 
+import { cookies } from 'next/headers'
+
 import { requireSession, scoped } from '@/lib/tenancy'
 import { USER_ROLE_LABELS } from '@/lib/field-options'
 
 import { NavGroup } from '@/components/nav-group'
+import { Sidebar } from '@/components/sidebar'
 import { NavLink } from '@/components/nav-link'
 import {
   ActivityIcon,
@@ -127,6 +130,11 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const context = await requireSession()
+  /*
+   * Read here rather than in the browser so the first paint is already the
+   * right width. See components/sidebar for why this is a cookie.
+   */
+  const collapsed = (await cookies()).get('sidebar')?.value === 'collapsed'
   const { user, organization, isAdmin, canBulk } = context
   const displayName = user.name || user.email
 
@@ -145,22 +153,39 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      {/* Icon rail on narrow screens, full labels from lg up — one nav, not two. */}
-      <aside className="sticky top-0 flex h-screen w-16 shrink-0 flex-col border-r border-slate-200/80 bg-white lg:w-60 print:hidden">
-        <div className="px-3 py-5 lg:px-5">
-          <Link href="/" className="flex items-center gap-2.5" title={organization.name}>
+      {/*
+        Icon rail on narrow screens, full labels from lg up — one nav, not two.
+        Closing it from lg up puts it back on the rail, which is why there is
+        only one set of styles to keep true.
+      */}
+      <Sidebar
+        defaultCollapsed={collapsed}
+        brand={
+          <Link href="/" className="flex min-w-0 items-center gap-2.5" title={organization.name}>
             <span
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
               style={{ backgroundColor: organization.primary_color }}
             >
               {organization.name.slice(0, 1)}
             </span>
-            <span className="hidden truncate text-sm font-semibold text-slate-900 lg:block">
+            <span className="sidebar-label hidden truncate text-sm font-semibold text-slate-900 lg:block">
               {organization.name}
             </span>
           </Link>
-        </div>
-
+        }
+        footer={
+          <div className="border-t border-slate-200/80 p-2 lg:p-3">
+            <div className="flex items-center gap-2.5 rounded-xl px-1 py-2 lg:px-2">
+              <div className="sidebar-label hidden min-w-0 flex-1 lg:block">
+                <p className="truncate text-sm font-medium text-slate-800">{displayName}</p>
+                <p className="truncate text-xs text-slate-500">
+                  {USER_ROLE_LABELS[user.role] ?? user.role}
+                </p>
+              </div>
+            </div>
+          </div>
+        }
+      >
         <nav className="flex-1 overflow-y-auto px-2 pb-4 lg:px-3">
           <div className="space-y-1">
             {NAV.map((item) => (
@@ -194,18 +219,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </NavGroup>
           )}
         </nav>
-
-        <div className="border-t border-slate-200/80 p-2 lg:p-3">
-          <div className="flex items-center gap-2.5 rounded-xl px-1 py-2 lg:px-2">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-800">{displayName}</p>
-              <p className="truncate text-xs text-slate-500">
-                {USER_ROLE_LABELS[user.role] ?? user.role}
-              </p>
-            </div>
-          </div>
-        </div>
-      </aside>
+      </Sidebar>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur print:hidden">
