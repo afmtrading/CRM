@@ -48,6 +48,18 @@ $$;
 
 grant execute on function sign_in_as(text) to authenticated;
 
+/** Moves the organization's clock. Definer, because the test signs in as a user. */
+create or replace function set_org_zone(p_org uuid, p_zone text)
+returns void
+language sql
+security definer
+set search_path = public, pg_temp
+as $$
+  update organizations set timezone = p_zone where id = p_org;
+$$;
+
+grant execute on function set_org_zone(uuid, text) to authenticated;
+
 do $$
 declare
   v_org      uuid;
@@ -258,6 +270,58 @@ begin
   -- Put it back, so the visibility tests below count what they expect to.
   perform sign_in_as('admin_auth');
   perform public.restore_deal(v_byhand);
+end;
+$$;
+
+-- =============================================================================
+-- A sales cycle is measured on one calendar.
+--
+-- The assertion above — a deal opened and closed in the same instant took no
+-- days — used to be true only for part of the day. actual_close_date was
+-- stamped with `current_date`, the server's today, while the ledger read
+-- created_at in the organization's zone, so an evening close in Toronto came
+-- out as one day.
+--
+-- Two zones on opposite sides of the date line, so this fails under the old
+-- behaviour at every hour rather than only in the evening: whatever UTC's date
+-- happens to be, one of these two disagrees with it.
+-- =============================================================================
+do $$
+declare
+  v_org    uuid := (select id from fixture where key = 'org');
+  v_costed uuid := (select id from fixture where key = 'costed');
+  v_open   uuid := (select id from fixture where key = 'stage');
+  v_won    uuid := (select id from fixture where key = 'won_stage');
+  v_zone   text;
+  v_days   integer;
+begin
+  raise notice 'Cycle length, whatever the clock says:';
+  perform sign_in_as('admin_auth');
+
+  foreach v_zone in array array['Pacific/Kiritimati', 'Pacific/Midway'] loop
+    perform set_org_zone(v_org, v_zone);
+
+    -- Reopening clears the stamp, so winning it again exercises the trigger
+    -- rather than reading the date left over from the last pass.
+    update deals set stage_id = v_open where id = v_costed;
+    update deals set stage_id = v_won where id = v_costed;
+
+    select cycle_days into v_days from public.deal_ledger('regions') where deal_id = v_costed;
+    perform test_assert(
+      v_days = 0,
+      format('a deal opened and closed together took no days in %s', v_zone)
+    );
+
+    perform test_assert(
+      (select actual_close_date from deals where id = v_costed) = public.org_today(v_org),
+      format('and its close date is the organization''s own today in %s', v_zone)
+    );
+  end loop;
+
+  -- Back to where the rest of the file found it.
+  perform set_org_zone(v_org, 'America/Toronto');
+  update deals set stage_id = v_open where id = v_costed;
+  update deals set stage_id = v_won where id = v_costed;
 end;
 $$;
 

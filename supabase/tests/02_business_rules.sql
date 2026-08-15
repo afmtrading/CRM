@@ -99,10 +99,16 @@ begin
   select probability into v_prob from deals where id = v_deal;
   perform test_assert(v_prob = 0.500, 'clearing the override restores stage-default behaviour');
 
-  -- Closing a deal stamps the close date; reopening clears it.
+  -- Closing a deal stamps the close date; reopening clears it. The day is the
+  -- organization's own, not the server's — see 20260241000000. This used to
+  -- read `current_date`, which agreed with it for most of the day and quietly
+  -- did not in the evening.
   update deals set status = 'won' where id = v_deal;
   select status, actual_close_date into v_status, v_closed from deals where id = v_deal;
-  perform test_assert(v_status = 'won' and v_closed = current_date, 'winning a deal stamps the close date');
+  perform test_assert(
+    v_status = 'won' and v_closed = public.org_today(v_org),
+    'winning a deal stamps the close date on the organization''s calendar'
+  );
 
   update deals set status = 'open' where id = v_deal;
   select actual_close_date into v_closed from deals where id = v_deal;
