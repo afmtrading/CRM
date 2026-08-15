@@ -461,7 +461,11 @@ export default async function ContactsPage({
                             <div className="flex items-center justify-end gap-1">
                               {contact.phone && (
                                 <a
-                                  href={`tel:${contact.phone}`}
+                                  // Stripped, like every other tel: link in the
+                                  // app: a stored number may carry the spaces
+                                  // and dashes that make it readable, and a
+                                  // space in a URI is not a dialable digit.
+                                  href={`tel:${contact.phone.replace(/[^\d+]/g, '')}`}
                                   aria-label={`Call ${name}`}
                                   title={contact.phone}
                                   className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
