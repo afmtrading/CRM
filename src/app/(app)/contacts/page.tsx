@@ -8,7 +8,7 @@ import {
   groupRowsNested,
   parseFilterConfig,
 } from "@/lib/filters";
-import { contactName } from "@/lib/format";
+import { contactName, formatDay } from "@/lib/format";
 import type {
   FieldOptionRow,
   ContactRow,
@@ -27,9 +27,14 @@ import {
   SelectRow,
 } from "@/components/bulk-bar";
 import { bulkFieldsFor } from "@/lib/bulk-edit";
+import { columnCatalogue, resolveColumns } from "@/lib/table-columns";
+import { ColumnPicker } from "@/components/column-picker";
+import { readColumns } from "../column-actions";
 import { ConsentBar } from "@/components/consent-bar";
 import { FilterBar } from "@/components/filter-bar";
 import {
+  CustomCell,
+  Empty,
   OptionBadge,
   OptionBadges,
   optionColor,
@@ -197,6 +202,7 @@ export default async function ContactsPage({
 
   const { data: contacts, count, error } = await query.limit(PAGE_SIZE);
   const [totalStat, newThisMonth, customers, unassigned] = await statsPromise;
+  const savedColumns = await readColumns("contact");
 
   const rows = (contacts ?? []) as (ContactRow & {
     companies: {
@@ -243,13 +249,121 @@ export default async function ContactsPage({
     return value;
   });
 
-  const COLUMNS = 8;
-
   /*
-   * One row, named, because it is now rendered from two places: straight into
-   * the table when there is no second level, and under a sub-group heading when
-   * there is. Duplicating it is how the two drift apart.
+   * The columns this person has chosen, and how to draw each one. The
+   * catalogue and the ordering rules are shared — see lib/table-columns — but
+   * the cells stay here, where the lookups they need already are. A shared
+   * renderer would mean threading owner names, option colours and the company
+   * region field into it from three different pages.
    */
+  const catalogue = columnCatalogue("contact", contactDefinitions);
+  const columns = resolveColumns("contact", savedColumns, catalogue);
+
+  // Checkbox, the chosen columns, and the call/email icons at the end.
+  const COLUMNS = columns.length + 2;
+
+  const cell = (
+    contact: (typeof rows)[number],
+    key: string,
+  ): React.ReactNode => {
+    const name = contactName(contact);
+
+    switch (key) {
+      case "name":
+        return (
+          <Link
+            href={`/contacts/${contact.id}`}
+            className="block truncate font-medium text-slate-900 hover:text-brand-700"
+          >
+            {name}
+          </Link>
+        );
+      case "company":
+        return contact.companies ? (
+          <Link
+            href={`/companies/${contact.companies.id}`}
+            className="block truncate text-slate-600 hover:text-brand-700 hover:underline"
+          >
+            {contact.companies.name}
+          </Link>
+        ) : (
+          <Empty />
+        );
+      case "email":
+        return contact.email ? (
+          <a href={`mailto:${contact.email}`} className="text-brand-700 hover:underline">
+            {contact.email}
+          </a>
+        ) : (
+          <Empty />
+        );
+      case "phone":
+        return contact.phone ? (
+          <span className="whitespace-nowrap text-slate-600">{contact.phone}</span>
+        ) : (
+          <Empty />
+        );
+      case "owner":
+        return contact.owner_id ? (
+          <span className="text-slate-600">{ownerNames.get(contact.owner_id) ?? "—"}</span>
+        ) : (
+          <Empty />
+        );
+      case "priority":
+        return contact.priority ? (
+          <OptionBadge
+            value={contact.priority}
+            color={optionColor(optionsFor("priority"), contact.priority)}
+          />
+        ) : (
+          <Empty />
+        );
+      case "role_type":
+        return <OptionBadges values={contact.role_type} options={optionsFor("role_type")} />;
+      case "credibility":
+        return contact.credibility ? (
+          <OptionBadge
+            value={contact.credibility}
+            color={optionColor(optionsFor("credibility"), contact.credibility)}
+          />
+        ) : (
+          <Empty />
+        );
+      case "lifecycle_stage":
+        return contact.lifecycle_stage ? (
+          <span className="text-slate-600">{contact.lifecycle_stage}</span>
+        ) : (
+          <Empty />
+        );
+      case "lead_score":
+        return <span className="text-slate-600">{contact.lead_score ?? 0}</span>;
+      case "source":
+        return contact.source ? (
+          <span className="text-slate-600">{contact.source}</span>
+        ) : (
+          <Empty />
+        );
+      case "job_title":
+        return contact.job_title ? (
+          <span className="block truncate text-slate-600">{contact.job_title}</span>
+        ) : (
+          <Empty />
+        );
+      case "region":
+        // The company's, not the person's — a contact has no region of its own.
+        return (
+          <OptionBadges
+            values={companyFieldValues(contact.companies, regionField)}
+            options={regionOptions}
+          />
+        );
+      case "created_at":
+        return <span className="text-slate-600">{formatDay(contact.created_at)}</span>;
+      default:
+        return <CustomCell row={contact} columnKey={key} />;
+    }
+  };
+
   const contactRow = (contact: (typeof rows)[number]) => {
     const name = contactName(contact);
     return (
@@ -257,66 +371,16 @@ export default async function ContactsPage({
         <td>
           <SelectRow id={contact.id} label={`Select ${name}`} />
         </td>
-        {/* The company rides under the name rather than taking its own column
-            — who someone is and who they work for read as one thing, and the
-            row gets a column back for what they are worth. */}
-        <td>
-          <div className="min-w-0">
-            <Link
-              href={`/contacts/${contact.id}`}
-              className="block truncate font-medium text-slate-900 hover:text-brand-700"
-            >
-              {name}
-            </Link>
-            {contact.companies ? (
-              <Link
-                href={`/companies/${contact.companies.id}`}
-                className="block truncate text-xs text-slate-500 hover:text-brand-700 hover:underline"
-              >
-                {contact.companies.name}
-              </Link>
-            ) : (
-              <span className="block truncate text-xs text-slate-400">
-                No company
-              </span>
-            )}
-          </div>
-        </td>
-        <td className="text-slate-600">
-          {contact.owner_id ? (ownerNames.get(contact.owner_id) ?? "—") : "—"}
-        </td>
-        <td>
-          {contact.priority ? (
-            <OptionBadge
-              value={contact.priority}
-              color={optionColor(optionsFor("priority"), contact.priority)}
-            />
-          ) : (
-            <span className="text-slate-400">—</span>
-          )}
-        </td>
-        <td>
-          <OptionBadges
-            values={contact.role_type}
-            options={optionsFor("role_type")}
-          />
-        </td>
-        <td>
-          {contact.credibility ? (
-            <OptionBadge
-              value={contact.credibility}
-              color={optionColor(optionsFor("credibility"), contact.credibility)}
-            />
-          ) : (
-            <span className="text-slate-400">—</span>
-          )}
-        </td>
-        <td>
-          <OptionBadges
-            values={companyFieldValues(contact.companies, regionField)}
-            options={regionOptions}
-          />
-        </td>
+
+        {columns.map((column) => (
+          <td
+            key={column.key}
+            className={column.align === "right" ? "text-right" : undefined}
+          >
+            <div className="min-w-0 max-w-xs">{cell(contact, column.key)}</div>
+          </td>
+        ))}
+
         <td>
           <div className="flex items-center justify-end gap-1">
             {contact.phone && (
@@ -355,6 +419,11 @@ export default async function ContactsPage({
         description="Manage your contacts"
         actions={
           <>
+            <ColumnPicker
+              entity="contact"
+              catalogue={catalogue}
+              selected={columns.map((column) => column.key)}
+            />
             {context.canBulk && (
               <Link href="/settings/import" className="btn-secondary">
                 <ImportIcon className="h-4 w-4" />
@@ -467,22 +536,24 @@ export default async function ContactsPage({
                 <table className="table">
                   <thead>
                     {/*
-                      The list answers "who is worth calling" rather than "when
-                      was this typed in": priority, role and credibility are
-                      what a rep sorts on, and the region is the company's, not
-                      the person's. Email and lifecycle stage left the row —
-                      the mail icon covers one, the record page the other.
+                      Whatever this person chose, in their order. The defaults
+                      answer "who is worth calling" rather than "when was this
+                      typed in" — priority, role and credibility — and the
+                      Columns button is how somebody who wants a different
+                      question asked changes it.
                     */}
                     <tr>
                       <th className="w-10">
                         <SelectAll label="Select every contact shown" />
                       </th>
-                      <th>Name</th>
-                      <th>Owner</th>
-                      <th>Priority</th>
-                      <th>Role type</th>
-                      <th>Credibility</th>
-                      <th>Region</th>
+                      {columns.map((column) => (
+                        <th
+                          key={column.key}
+                          className={column.align === "right" ? "text-right" : undefined}
+                        >
+                          {column.label}
+                        </th>
+                      ))}
                       <th className="text-right">Actions</th>
                     </tr>
                   </thead>

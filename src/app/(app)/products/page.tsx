@@ -2,13 +2,18 @@ import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatNumber, formatPrice } from '@/lib/format'
-import type { FieldOptionRow, ProductRow } from '@/lib/database.types'
+import type { CustomFieldDefinitionRow, FieldOptionRow, ProductRow } from '@/lib/database.types'
 import { derivePricing } from '@/lib/products'
 import { availableTone, formatQuantity } from '@/lib/stock'
 import { productImageUrl } from '@/lib/product-image'
 import { likeContains } from '@/lib/sql'
 import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/ui'
-import { OptionBadges } from '@/components/contact-cards'
+import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
+import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
+import { ColumnPicker } from '@/components/column-picker'
+import { formatDay } from '@/lib/format'
+
+import { readColumns } from '../column-actions'
 import { CurrencyIcon, LayersIcon, ProductsIcon, SearchIcon, TagIcon } from '@/components/icons'
 
 export const metadata = { title: 'Products · FLO CRM' }
@@ -33,7 +38,8 @@ export default async function ProductsPage({
   if (category) query = query.eq('category', category)
   if (!showRetired) query = query.eq('active', true)
 
-  const [{ data }, { data: fieldOptions }, { data: stockRows }] = await Promise.all([
+  const [{ data }, { data: fieldOptions }, { data: stockRows }, { data: definitionRows }] =
+    await Promise.all([
     query.order('name').limit(500),
     scoped(context, 'field_options')
       .select('*')
@@ -44,14 +50,28 @@ export default async function ProductsPage({
     // the open deals, which no page-level query could see through its own
     // policies anyway.
     context.supabase.rpc('product_stock_overview'),
+    // For the column catalogue: a custom field on a product is a column like
+    // any other, so the picker has to know they exist.
+    scoped(context, 'custom_field_definitions')
+      .select('*')
+      .eq('entity_type', 'product')
+      .order('order'),
   ])
 
   const products = (data ?? []) as ProductRow[]
+  const definitions = (definitionRows ?? []) as CustomFieldDefinitionRow[]
+  const savedColumns = await readColumns('product')
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
   const categoryOptions = allOptions.filter((o) => o.field_key === 'product_category')
   const statusOptions = allOptions.filter((o) => o.field_key === 'product_status')
 
-  type StockRow = { product_id: string; available: number; locations: string[] }
+  type StockRow = {
+    product_id: string
+    available: number
+    on_hand: number
+    committed: number
+    locations: string[]
+  }
   const stockByProduct = new Map<string, StockRow>(
     ((stockRows ?? []) as StockRow[]).map((row) => [row.product_id, row]),
   )
@@ -76,17 +96,161 @@ export default async function ProductsPage({
         ) / withMargin.length
       : 0
 
+  const catalogue = columnCatalogue('product', definitions)
+  const columns = resolveColumns('product', savedColumns, catalogue)
+
+  /*
+   * One cell, by key. Prices go through derivePricing rather than being read
+   * off the row, because showroom and wholesale are usually not stored at all —
+   * they are 70% and 30% of retail until somebody overrides them, and reading
+   * the column directly would show a blank for most of the catalogue.
+   */
+  const cell = (product: ProductRow, key: string): React.ReactNode => {
+    const pricing = derivePricing(product)
+    const stock = stockByProduct.get(product.id)
+    /*
+     * A price that derives to nothing shows an em dash rather than $0.00.
+     * Zero is a price somebody could have meant; blank is the honest reading of
+     * a retail price nobody has typed yet.
+     */
+    const money = (value: number | null) =>
+      value === null ? <Empty /> : formatPrice(value, product.currency)
+
+    switch (key) {
+      case 'name': {
+        const imageUrl = productImageUrl(product.image_path)
+        return (
+          <div className="flex items-center gap-3">
+            <span className="icon-chip h-9 w-9 overflow-hidden bg-brand-50 text-brand-700">
+              {imageUrl ? (
+                /* The product's own photo where there is one. A 36px square of
+                   a storage URL is not worth next/image, which would also need
+                   a remote pattern for it — but it is worth the three
+                   attributes next/image would have set: intrinsic size so the
+                   browser reserves the box, and lazy loading so a catalogue of
+                   fifty does not fetch fifty images above the fold. */
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageUrl}
+                  alt=""
+                  width={36}
+                  height={36}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <ProductsIcon className="h-4 w-4" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <Link
+                href={`/products/${product.id}`}
+                className="font-medium text-slate-900 hover:text-brand-700"
+              >
+                {product.name}
+              </Link>
+              <p className="text-xs text-slate-500">
+                {[product.brand, product.sku].filter(Boolean).join(' · ') || '—'}
+              </p>
+            </div>
+          </div>
+        )
+      }
+      case 'status':
+        return (
+          <OptionBadges
+            values={product.status ? [product.status] : []}
+            options={statusOptions}
+          />
+        )
+      case 'available': {
+        const available = Number(stock?.available ?? 0)
+        return (
+          <span className={`font-medium ${availableTone(available)}`}>
+            {formatQuantity(available)}
+          </span>
+        )
+      }
+      case 'on_hand':
+        return <span className="text-slate-600">{formatQuantity(Number(stock?.on_hand ?? 0))}</span>
+      case 'committed':
+        return (
+          <span className="text-slate-600">{formatQuantity(Number(stock?.committed ?? 0))}</span>
+        )
+      case 'location': {
+        const locations = stock?.locations ?? []
+        return locations.length === 0 ? (
+          <Empty />
+        ) : (
+          // Everywhere it is stocked, because "TOR +2" makes somebody open the
+          // product to find out what the two are.
+          <span className="text-xs text-slate-600">{locations.join(' · ')}</span>
+        )
+      }
+      case 'price_showroom':
+        return <span className="text-slate-800">{money(pricing.unit.showroom.value)}</span>
+      case 'price_wholesale':
+        return <span className="text-slate-800">{money(pricing.unit.wholesale.value)}</span>
+      case 'price_retail':
+        return <span className="text-slate-600">{money(pricing.unit.retail.value)}</span>
+      case 'unit_cost':
+        return <span className="text-slate-600">{money(pricing.unit.cost.value)}</span>
+      case 'brand':
+        return product.brand ? (
+          <span className="block truncate text-slate-600">{product.brand}</span>
+        ) : (
+          <Empty />
+        )
+      case 'sku':
+        return product.sku ? (
+          <span className="whitespace-nowrap text-slate-600">{product.sku}</span>
+        ) : (
+          <Empty />
+        )
+      case 'category':
+        return product.category ? (
+          <span className="block truncate text-slate-600">{product.category}</span>
+        ) : (
+          <Empty />
+        )
+      case 'product_condition':
+        return product.product_condition ? (
+          <span className="block truncate text-slate-600">{product.product_condition}</span>
+        ) : (
+          <Empty />
+        )
+      case 'case_pack':
+        return product.case_pack ? (
+          <span className="text-slate-600">{formatNumber(Number(product.case_pack))}</span>
+        ) : (
+          <Empty />
+        )
+      case 'created_at':
+        return <span className="text-slate-600">{formatDay(product.created_at)}</span>
+      default:
+        return <CustomCell row={product} columnKey={key} />
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Products"
         description="What the organization sells. Deals are built from these, and every line item keeps the price it was added at."
         actions={
-          context.canManage ? (
-            <Link href="/products/new" className="btn-primary">
-              New product
-            </Link>
-          ) : undefined
+          <>
+            <ColumnPicker
+              entity="product"
+              catalogue={catalogue}
+              selected={columns.map((column) => column.key)}
+            />
+            {context.canManage && (
+              <Link href="/products/new" className="btn-primary">
+                New product
+              </Link>
+            )}
+          </>
         }
       />
 
@@ -182,95 +346,47 @@ export default async function ProductsPage({
           <table className="table">
             <thead>
               <tr>
-                <th>Product</th>
-                <th>Status</th>
-                <th className="text-center">Available</th>
-                <th className="text-center">Location</th>
-                <th className="text-center">Showroom $</th>
-                <th className="text-center">Wholesale $</th>
+                {/*
+                  Whatever this person chose, in their order. The defaults are
+                  what the catalogue is usually opened for — is it sellable,
+                  how many, where, and at what — and the rest of the fields are
+                  a tick away in Columns.
+                */}
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    className={
+                      column.align === 'center'
+                        ? 'text-center'
+                        : column.align === 'right'
+                          ? 'text-right'
+                          : undefined
+                    }
+                  >
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => {
-                const pricing = derivePricing(product)
-                const stock = stockByProduct.get(product.id)
-                const available = Number(stock?.available ?? 0)
-                const locations = stock?.locations ?? []
-                const imageUrl = productImageUrl(product.image_path)
-
-                return (
-                  <tr key={product.id}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <span className="icon-chip h-9 w-9 overflow-hidden bg-brand-50 text-brand-700">
-                          {imageUrl ? (
-                            /* The product's own photo where there is one. A 36px
-                               square of a storage URL is not worth next/image,
-                               which would also need a remote pattern for it —
-                               but it is worth the three attributes next/image
-                               would have set: intrinsic size so the browser
-                               reserves the box, and lazy loading so a catalogue
-                               of fifty does not fetch fifty images above the
-                               fold. */
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={imageUrl}
-                              alt=""
-                              width={36}
-                              height={36}
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <ProductsIcon className="h-4 w-4" />
-                          )}
-                        </span>
-                        <div className="min-w-0">
-                          <Link
-                            href={`/products/${product.id}`}
-                            className="font-medium text-slate-900 hover:text-brand-700"
-                          >
-                            {product.name}
-                          </Link>
-                          <p className="text-xs text-slate-500">
-                            {[product.brand, product.sku].filter(Boolean).join(' · ') || '—'}
-                          </p>
-                        </div>
-                      </div>
+              {products.map((product) => (
+                <tr key={product.id}>
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={
+                        column.align === 'center'
+                          ? 'text-center'
+                          : column.align === 'right'
+                            ? 'text-right'
+                            : undefined
+                      }
+                    >
+                      {cell(product, column.key)}
                     </td>
-
-                    <td>
-                      <OptionBadges
-                        values={product.status ? [product.status] : []}
-                        options={statusOptions}
-                      />
-                    </td>
-
-                    <td className={`text-center font-medium ${availableTone(available)}`}>
-                      {formatQuantity(available)}
-                    </td>
-
-                    <td className="text-center text-slate-600">
-                      {locations.length === 0 ? (
-                        <span className="text-slate-300">—</span>
-                      ) : (
-                        // Everywhere it is stocked, because "TOR +2" makes
-                        // somebody open the product to find out what the two are.
-                        <span className="text-xs">{locations.join(' · ')}</span>
-                      )}
-                    </td>
-
-                    <td className="text-center text-slate-800">
-                      {formatPrice(pricing.unit.showroom.value ?? 0, product.currency)}
-                    </td>
-
-                    <td className="text-center text-slate-800">
-                      {formatPrice(pricing.unit.wholesale.value ?? 0, product.currency)}
-                    </td>
-                  </tr>
-                )
-              })}
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

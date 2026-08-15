@@ -1606,3 +1606,23 @@ export interface Database {
     CompositeTypes: Record<string, never>
   }
 }
+
+/**
+ * One person's column choice for one list.
+ *
+ * Personal, and readable by nobody else — see 20260244000000. The keys are
+ * strings the application resolves against its own catalogue rather than
+ * references to anything, so a stale one degrades to a missing column instead
+ * of blocking a custom field from being deleted.
+ */
+export type ColumnPreferenceRow = {
+  id: string
+  organization_id: string
+  user_id: string
+  /** 'contact' | 'company' | 'product'. */
+  entity_type: string
+  /** In display order. The order is the preference as much as the set is. */
+  columns: string[]
+  created_at: string
+  updated_at: string
+}
