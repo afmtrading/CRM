@@ -57,11 +57,11 @@ export default async function MarketplacesPage({
   ] = await Promise.all([
       query.order('name').limit(500),
       scoped(context, 'users').select('*').order('name'),
-      // Company and contact both: the marketplace lists live on the company
-      // entity, and priority is reused from the contact one on purpose.
+      // All on the company entity, priority included — a marketplace is a
+      // company and reads the company's priority rather than its own.
       scoped(context, 'field_options')
         .select('*')
-        .in('entity_type', ['company', 'contact'])
+        .eq('entity_type', 'company')
         .order('order'),
       scoped(context, 'custom_field_definitions')
         .select('*')

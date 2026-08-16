@@ -43,14 +43,13 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
         .order('last_name')
         .limit(50),
       /*
-       * Both entities in one round trip. The marketplace lists live on the
-       * company entity because a marketplace is a company; priority lives on
-       * the contact one and is reused deliberately, so "Critical" means the
-       * same thing wherever it is read.
+       * All on the company entity, priority included since 20260247000000 —
+       * a marketplace is a company, and it reads the company's priority rather
+       * than carrying one of its own.
        */
       scoped(context, 'field_options')
         .select('*')
-        .in('entity_type', ['company', 'contact'])
+        .eq('entity_type', 'company')
         .order('order'),
     ])
 
