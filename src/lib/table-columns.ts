@@ -16,7 +16,7 @@
 
 import type { CustomFieldDefinitionRow } from '@/lib/database.types'
 
-export type TableEntity = 'contact' | 'company' | 'product'
+export type TableEntity = 'contact' | 'company' | 'product' | 'marketplace'
 
 export interface TableColumn {
   key: string
@@ -94,11 +94,38 @@ const PRODUCT_COLUMNS: TableColumn[] = [
   { key: 'created_at', label: 'Created' },
 ]
 
+/*
+ * A marketplace is a company, so its list can show anything a company can. What
+ * is added is what only a marketplace has — the rate, the payout terms, which
+ * directions it trades in — and those are what it leads with, because they are
+ * the questions the section exists to answer.
+ */
+const MARKETPLACE_COLUMNS: TableColumn[] = [
+  { key: 'name', label: 'Marketplace', locked: true },
+  { key: 'direction', label: 'Used for' },
+  { key: 'take_rate', label: 'Take rate', align: 'right' },
+  { key: 'settlement_terms', label: 'Payout' },
+  { key: 'account_status', label: 'Account' },
+  { key: 'store_name', label: 'Store' },
+  { key: 'buy_rate', label: "Buyer's premium", align: 'right' },
+  { key: 'reserve_percent', label: 'Reserve', align: 'right' },
+  { key: 'minimum_lot_value', label: 'Minimum lot', align: 'right' },
+  { key: 'payout_currency', label: 'Settles in' },
+  { key: 'owner', label: 'Owner' },
+  { key: 'contacts', label: 'Contacts', align: 'right' },
+  { key: 'based_in', label: 'Based in' },
+  { key: 'sells_in', label: 'Ships to' },
+  { key: 'specialty_market', label: 'Merchandise' },
+  { key: 'domain', label: 'Website' },
+  { key: 'opened_on', label: 'Opened' },
+]
+
 /** What each list shows before anybody has said otherwise — today's columns. */
 const DEFAULTS: Record<TableEntity, string[]> = {
   contact: ['name', 'company', 'owner', 'priority', 'role_type', 'credibility', 'region'],
   company: ['name', 'customer_type', 'specialty_market', 'owner', 'contacts', 'size', 'region'],
   product: ['name', 'status', 'available', 'location', 'price_showroom', 'price_wholesale'],
+  marketplace: ['name', 'direction', 'take_rate', 'settlement_terms', 'account_status', 'sells_in'],
 }
 
 function baseColumns(entity: TableEntity): TableColumn[] {
@@ -107,6 +134,8 @@ function baseColumns(entity: TableEntity): TableColumn[] {
       return COMPANY_COLUMNS
     case 'product':
       return PRODUCT_COLUMNS
+    case 'marketplace':
+      return MARKETPLACE_COLUMNS
     default:
       return CONTACT_COLUMNS
   }
@@ -122,8 +151,16 @@ export function columnCatalogue(
   entity: TableEntity,
   customFields: CustomFieldDefinitionRow[] = [],
 ): TableColumn[] {
+  /*
+   * A marketplace is a company, so it inherits the company's custom fields.
+   * There is no 'marketplace' entity_type to define one against, and inventing
+   * one would mean a custom field that exists on some companies and not others
+   * depending on a profile row.
+   */
+  const owner = entity === 'marketplace' ? 'company' : entity
+
   const custom = customFields
-    .filter((definition) => definition.entity_type === entity)
+    .filter((definition) => definition.entity_type === owner)
     .map((definition) => ({
       key: `custom_fields.${definition.key}`,
       label: definition.label,

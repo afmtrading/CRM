@@ -24,10 +24,11 @@ const PATHS: Record<TableEntity, string> = {
   contact: '/contacts',
   company: '/companies',
   product: '/products',
+  marketplace: '/marketplaces',
 }
 
 function isEntity(value: string): value is TableEntity {
-  return value === 'contact' || value === 'company' || value === 'product'
+  return value in PATHS
 }
 
 export async function saveColumns(entity: string, columns: string[]): Promise<void> {
@@ -40,11 +41,16 @@ export async function saveColumns(entity: string, columns: string[]): Promise<vo
    * accepted from the browser, so a key can only be stored if this organization
    * actually has a column by that name.
    */
+  /*
+   * A marketplace is a company, so it inherits the company's custom fields —
+   * there is no 'marketplace' entity_type to define one against, and inventing
+   * one would mean a field that exists on half the companies.
+   */
   const { data: customFields } = await context.supabase
     .from('custom_field_definitions')
     .select('*')
     .eq('organization_id', context.organizationId)
-    .eq('entity_type', entity)
+    .eq('entity_type', entity === 'marketplace' ? 'company' : entity)
 
   const catalogue = columnCatalogue(entity, (customFields ?? []) as CustomFieldDefinitionRow[])
   const wanted = normaliseSelection(entity, columns, catalogue)

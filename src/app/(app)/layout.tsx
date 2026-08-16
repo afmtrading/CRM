@@ -27,6 +27,7 @@ import {
   ReportsIcon,
   SalesOrderIcon,
   ScoringIcon,
+  StoreIcon,
   SettingsIcon,
   ShieldIcon,
   SearchIcon,
@@ -66,6 +67,12 @@ const NAV: NavItem[] = [
 const DATABASE_NAV: NavItem[] = [
   { href: '/contacts', label: 'Contacts', icon: <ContactsIcon className={ICON} /> },
   { href: '/companies', label: 'Companies', icon: <CompaniesIcon className={ICON} /> },
+  /*
+   * Under Database rather than in Sales: a marketplace is a record type, not a
+   * document. It is the same companies as the row above, narrowed to the ones
+   * you trade through and asked a different question.
+   */
+  { href: '/marketplaces', label: 'Marketplaces', icon: <StoreIcon className={ICON} /> },
   { href: '/products', label: 'Products', icon: <ProductsIcon className={ICON} /> },
 ]
 
