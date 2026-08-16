@@ -168,6 +168,13 @@ export const OPTION_FIELDS: {
   { key: 'stock_type', label: 'Stock type', card: 'rating', multiple: true, entity: 'company' },
   { key: 'customer_type', label: 'Company type', card: 'rating', multiple: true, entity: 'company' },
   /*
+   * Its own list rather than the contacts' one, seeded to match it. Every other
+   * select field here is scoped to an entity and Settings → Fields is grouped
+   * that way — and it is the truer model besides: a Critical account can have a
+   * Standard person at it, and one list would make those the same statement.
+   */
+  { key: 'priority', label: 'Priority', card: 'rating', multiple: false, entity: 'company' },
+  /*
    * Where a selling account stands with the platform. On the company entity
    * because a marketplace *is* a company — the profile that makes it one holds
    * the value, and this list is what may go in it.

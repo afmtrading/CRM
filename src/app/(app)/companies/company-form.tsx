@@ -241,6 +241,31 @@ export function CompanyForm({
             selected={company?.customer_type ?? []}
           />
         </div>
+
+        {/*
+          The company's own list, not the contacts' one — a Critical account can
+          have a Standard person at it, and one list would make those the same
+          statement. Both are seeded identically, so they agree until somebody
+          deliberately changes one.
+        */}
+        <div>
+          <label className="label" htmlFor="priority">
+            Priority
+          </label>
+          <select
+            id="priority"
+            name="priority"
+            className="input"
+            defaultValue={company?.priority ?? ''}
+          >
+            <option value="">—</option>
+            {optionsFor('priority').map((option) => (
+              <option key={option.id} value={option.value}>
+                {option.value}
+              </option>
+            ))}
+          </select>
+        </div>
         <CustomFieldInputs
           fields={customByCard('rating')}
           values={custom}

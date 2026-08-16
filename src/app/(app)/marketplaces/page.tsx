@@ -174,11 +174,12 @@ export default async function MarketplacesPage({
         ) : (
           <Empty />
         )
+      // The company's own, not a copy — the same reasoning as sells_in.
       case 'priority':
-        return profile.priority ? (
+        return row.priority ? (
           <OptionBadge
-            value={profile.priority}
-            color={optionColor(optionsFor(MARKETPLACE_OPTION_FIELDS.priority), profile.priority)}
+            value={row.priority}
+            color={optionColor(optionsFor(MARKETPLACE_OPTION_FIELDS.priority), row.priority)}
           />
         ) : (
           <Empty />

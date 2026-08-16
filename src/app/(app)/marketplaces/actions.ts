@@ -91,7 +91,6 @@ const profileSchema = z.object({
   fee_notes: z.string().max(20_000).optional().transform((value) => value ?? ''),
   payment: optional(80),
   selling_cost: optional(40),
-  priority: optional(40),
   reserve_percent: optionalNumber,
   minimum_lot_value: optionalNumber,
 })
@@ -144,7 +143,6 @@ export async function updateMarketplace(
     p_selling_cost: parsed.data.selling_cost,
     p_audience: formData.getAll('audience').map(String),
     p_inventory_type: formData.getAll('inventory_type').map(String),
-    p_priority: parsed.data.priority,
   })
 
   if (error) return { error: error.message }

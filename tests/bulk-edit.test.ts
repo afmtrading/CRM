@@ -56,7 +56,7 @@ describe('bulkFieldsFor', () => {
   it('offers a company its own set', () => {
     const keys = bulkFieldsFor('company', empty).map((field) => field.key)
 
-    expect(keys).toEqual(['owner_id', 'specialty_market', 'customer_type'])
+    expect(keys).toEqual(['owner_id', 'priority', 'specialty_market', 'customer_type'])
     expect(keys).not.toContain('name')
   })
 

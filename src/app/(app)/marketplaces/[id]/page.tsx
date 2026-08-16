@@ -163,17 +163,24 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                   options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
                 />
               </Fact>
-              <Fact label="Priority">
-                {profile.priority ? (
+              {/* The company's, like Sells in below it — a marketplace has no
+                  priority of its own to disagree with the account's. */}
+              <Fact label="Priority" hint="From the company record">
+                {business.priority ? (
                   <OptionBadge
-                    value={profile.priority}
+                    value={business.priority}
                     color={optionColor(
                       optionsFor(MARKETPLACE_OPTION_FIELDS.priority),
-                      profile.priority,
+                      business.priority,
                     )}
                   />
                 ) : (
-                  <Empty />
+                  <Link
+                    href={`/companies/${business.id}/edit`}
+                    className="text-xs text-brand-700 hover:underline"
+                  >
+                    Set on the company
+                  </Link>
                 )}
               </Fact>
               {/*
@@ -311,13 +318,6 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                 options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
                 selected={profile.inventory_type}
               />
-              <Single
-                name="priority"
-                label="Priority"
-                options={optionsFor(MARKETPLACE_OPTION_FIELDS.priority)}
-                selected={profile.priority}
-              />
-
               <div>
                 <label className="label" htmlFor="fee_notes">
                   Fees and costs

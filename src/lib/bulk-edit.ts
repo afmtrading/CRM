@@ -115,6 +115,14 @@ export function bulkFieldsFor(
       : [
           { key: 'owner_id', label: 'Owner', multiple: false, options: owners, modes: SINGLE },
           {
+            key: 'priority',
+            label: 'Priority',
+            multiple: false,
+            // The company list, not the contacts' one — see 20260247000000.
+            options: optionsFor('priority'),
+            modes: SINGLE,
+          },
+          {
             key: 'specialty_market',
             label: 'Market',
             multiple: true,
