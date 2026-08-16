@@ -40,6 +40,16 @@ const headerSchema = z.object({
     .enum(CURRENCIES)
     .optional()
     .catch(undefined),
+  /*
+   * Absent when the field was not rendered — an invoice from an order shows the
+   * channel rather than offering it — and absent means "leave it alone". Blank
+   * is a different answer: it means direct, and has to reach null.
+   */
+  marketplace_id: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value || null)),
 })
 
 export async function updateInvoice(formData: FormData) {
@@ -59,6 +69,9 @@ export async function updateInvoice(formData: FormData) {
       notes: parsed.data.notes || null,
       terms: parsed.data.terms || null,
       ...(parsed.data.currency ? { currency: parsed.data.currency } : {}),
+      ...(parsed.data.marketplace_id === undefined
+        ? {}
+        : { marketplace_id: parsed.data.marketplace_id }),
     })
     .eq('id', id)
 

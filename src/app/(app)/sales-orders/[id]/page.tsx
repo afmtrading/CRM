@@ -75,6 +75,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     { data: locations },
     { data: products },
     { data: invoiceRow },
+    { data: channelRows },
   ] = await Promise.all([
     scoped(context, 'sales_order_lines')
       .select('*')
@@ -110,11 +111,22 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'invoices').select('*').eq('sales_order_id', id).maybeSingle(),
+    /*
+     * The channels a sale can be attributed to. Sell-side only: money running
+     * the other way is a purchase, and the database refuses a source-only
+     * marketplace here anyway — this keeps the picker from offering one.
+     */
+    scoped(context, 'marketplace_profiles')
+      .select('company_id, companies(name)')
+      .eq('sells_through', true),
   ])
 
   const lines = (lineRows ?? []) as SalesOrderLineRow[]
   const payments = (paymentRows ?? []) as SalesOrderPaymentRow[]
   const invoice = invoiceRow as InvoiceRow | null
+  const channels = ((channelRows ?? []) as { company_id: string; companies: { name: string } | null }[])
+    .map((row) => ({ id: row.company_id, name: row.companies?.name ?? 'Unnamed' }))
+    .sort((a, b) => a.name.localeCompare(b.name))
   const catalogue = (products ?? []) as PickerProduct[]
   const productById = new Map(catalogue.map((product) => [product.id, product]))
 
@@ -646,6 +658,40 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                     className="input"
                     defaultValue={String(salesOrder.shipping_charge)}
                   />
+                </div>
+
+                {/*
+                  Which channel this sold through. Blank is the ordinary case —
+                  a direct sale to a buyer is not a channel sale — and leaving
+                  it blank is different from nobody having recorded it, which is
+                  why there is no default.
+                */}
+                <div className="col-span-2">
+                  <label className="label" htmlFor="marketplace_id">
+                    Sold through
+                  </label>
+                  <select
+                    id="marketplace_id"
+                    name="marketplace_id"
+                    className="input"
+                    defaultValue={salesOrder.marketplace_id ?? ''}
+                  >
+                    <option value="">Direct — no marketplace</option>
+                    {channels.map((channel) => (
+                      <option key={channel.id} value={channel.id}>
+                        {channel.name}
+                      </option>
+                    ))}
+                  </select>
+                  {channels.length === 0 && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      No marketplaces set up yet —{' '}
+                      <Link href="/marketplaces" className="text-brand-700 hover:underline">
+                        add one
+                      </Link>
+                      .
+                    </p>
+                  )}
                 </div>
 
                 <div>

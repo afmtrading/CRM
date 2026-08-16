@@ -40,6 +40,7 @@ function invoice(overrides: Partial<InvoiceRow> = {}): InvoiceRow {
     organization_id: 'o1',
     number: 'INV-0001',
     sales_order_id: null,
+    marketplace_id: null,
     company_id: 'c1',
     contact_id: null,
     owner_id: 'u1',

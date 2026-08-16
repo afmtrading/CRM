@@ -49,6 +49,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     { data: contact },
     { data: order },
     { data: products },
+    { data: channelRows },
   ] =
     await Promise.all([
       scoped(context, 'invoice_lines').select('*').eq('invoice_id', id).order('position'),
@@ -75,6 +76,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             .order('name')
             .limit(500)
         : Promise.resolve({ data: [] }),
+      // Sell-side channels only: the database refuses a source-only one here,
+      // so the picker should not offer it.
+      scoped(context, 'marketplace_profiles')
+        .select('company_id, companies(name)')
+        .eq('sells_through', true),
     ])
 
   const lines = (lineRows ?? []) as InvoiceLineRow[]
@@ -95,6 +101,12 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     unit_price: number
     unit_cost: number
   }[]
+
+  const channels = (
+    (channelRows ?? []) as { company_id: string; companies: { name: string } | null }[]
+  )
+    .map((row) => ({ id: row.company_id, name: row.companies?.name ?? 'Unnamed' }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const owed = Number(invoice.total) - Number(invoice.amount_paid)
   const late = daysOverdue(invoice.due_date, today)
@@ -513,6 +525,41 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                     {CURRENCIES.map((code) => (
                       <option key={code} value={code}>
                         {code}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/*
+                Carried from the sales order when there was one, and settable
+                directly on an invoice raised on its own. Locked where it came
+                from an order: the order is where that fact belongs, and two
+                places to change one thing is how they end up disagreeing.
+              */}
+              <div>
+                <label className="label" htmlFor="marketplace_id">
+                  Sold through
+                </label>
+                {invoice.sales_order_id ? (
+                  <>
+                    <p className="input bg-slate-50 text-slate-600">
+                      {channels.find((channel) => channel.id === invoice.marketplace_id)?.name ??
+                        'Direct — no marketplace'}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">Set on the sales order.</p>
+                  </>
+                ) : (
+                  <select
+                    id="marketplace_id"
+                    name="marketplace_id"
+                    className="input"
+                    defaultValue={invoice.marketplace_id ?? ''}
+                  >
+                    <option value="">Direct — no marketplace</option>
+                    {channels.map((channel) => (
+                      <option key={channel.id} value={channel.id}>
+                        {channel.name}
                       </option>
                     ))}
                   </select>
