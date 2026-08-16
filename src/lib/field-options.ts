@@ -179,6 +179,18 @@ export const OPTION_FIELDS: {
     multiple: false,
     entity: 'company',
   },
+  /*
+   * The rest of what tells one channel from another. All on the company entity,
+   * because a marketplace is a company — there is no separate entity to hang
+   * them off, and inventing one would give every company a list that applies to
+   * some of them.
+   */
+  { key: 'marketplace_type', label: 'Marketplace type', card: 'rating', multiple: true, entity: 'company' },
+  { key: 'marketplace_fulfilment', label: 'Marketplace fulfilment', card: 'rating', multiple: true, entity: 'company' },
+  { key: 'marketplace_payment', label: 'Marketplace payment', card: 'rating', multiple: false, entity: 'company' },
+  { key: 'marketplace_selling_cost', label: 'Marketplace selling cost', card: 'rating', multiple: false, entity: 'company' },
+  { key: 'marketplace_audience', label: 'Marketplace audience', card: 'rating', multiple: true, entity: 'company' },
+  { key: 'marketplace_inventory_type', label: 'Marketplace inventory type', card: 'rating', multiple: true, entity: 'company' },
   { key: 'role_type', label: 'Role type', card: 'influence', multiple: true, entity: 'contact' },
   { key: 'priority', label: 'Priority', card: 'influence', multiple: false, entity: 'contact' },
   { key: 'credibility', label: 'Credibility', card: 'influence', multiple: false, entity: 'contact' },

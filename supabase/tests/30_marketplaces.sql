@@ -10,10 +10,10 @@
 --       its history, which is the whole reason the profile is separable;
 --     * a company you cannot see cannot be promoted, because promoting one
 --       would tell you it exists;
---     * a rate can only name a category this organization actually has, or the
---       product that has to match it would find nothing;
---     * both directions on one company, because an auctioneer who also buys is
---       one record and its two rate cards must not borrow from each other;
+--     * a save that says nothing about a field leaves it alone, and an emptied
+--       one clears it — the rule every form on this record depends on;
+--     * buyer's premium keeps its third state, because "nobody looked it up" is
+--       not "there is none";
 --     * the tables are readable and not writable — every change goes through a
 --       function, the same one-door rule stock levels follow.
 -- =============================================================================
@@ -65,29 +65,24 @@ as $$
   select exists (select 1 from marketplace_profiles where company_id = p_company);
 $$;
 
-create or replace function fee_count(p_company uuid)
-returns integer
-language sql
+/** One field of a profile, read past every policy. */
+create or replace function profile_text(p_company uuid, p_column text)
+returns text
+language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
-  select count(*)::integer from marketplace_fees where marketplace_id = p_company;
-$$;
-
-create or replace function fee_percent(p_company uuid, p_side text, p_category text)
-returns numeric
-language sql
-security definer
-set search_path = public, pg_temp
-as $$
-  select percent from marketplace_fees
-  where marketplace_id = p_company and side = p_side
-    and category is not distinct from p_category;
+declare
+  v_value text;
+begin
+  execute format('select %I::text from marketplace_profiles where company_id = $1', p_column)
+  into v_value using p_company;
+  return v_value;
+end;
 $$;
 
 grant execute on function is_marketplace(uuid) to authenticated;
-grant execute on function fee_count(uuid) to authenticated;
-grant execute on function fee_percent(uuid, text, text) to authenticated;
+grant execute on function profile_text(uuid, text) to authenticated;
 
 do $$
 declare
@@ -255,91 +250,88 @@ end;
 $$;
 
 -- =============================================================================
--- Two directions on one company.
+-- The fields that tell one channel from another.
 --
--- An auction house takes a seller's commission one way and a buyer's premium
--- the other. The two cards live in one table and must not borrow each other's
--- numbers.
+-- The per-category rate card that used to be tested here is gone — see
+-- 20260246000000. What replaced it is a note and a set of option values, so
+-- what is worth holding is the null-leaves-it rule: a form that posts only what
+-- it renders must not blank what it did not.
 -- =============================================================================
 do $$
 declare
   v_auction uuid := (select id from fixture where key = 'auction');
 begin
-  raise notice 'Both directions:';
+  raise notice 'What describes a marketplace:';
   perform sign_in_as('admin_auth');
 
   perform public.add_marketplace(v_auction, true, true);
 
-  perform public.set_marketplace_fee(v_auction, 'sell', null, 12);
-  perform public.set_marketplace_fee(v_auction, 'buy', null, 18);
-  perform public.set_marketplace_fee(v_auction, 'sell', 'Medical', 8);
-
-  perform test_assert(fee_percent(v_auction, 'sell', null) = 12, 'a selling rate is stored');
-  perform test_assert(fee_percent(v_auction, 'buy', null) = 18, 'and a buying rate beside it');
-  perform test_assert(
-    fee_percent(v_auction, 'sell', 'Medical') = 8,
-    'and a category rate beside that'
-  );
-  perform test_assert(fee_count(v_auction) = 3, 'three rows, not one overwriting another');
-
-  -- Same side, same category, twice: a correction rather than a second rate.
-  perform public.set_marketplace_fee(v_auction, 'sell', 'Medical', 9);
-  perform test_assert(
-    fee_percent(v_auction, 'sell', 'Medical') = 9 and fee_count(v_auction) = 3,
-    'setting the same rate again corrects it rather than adding another'
+  perform public.update_marketplace(
+    p_company_id       => v_auction,
+    p_fee_notes        => '15% seller fee, 3% processing',
+    p_marketplace_type => array['Auction'],
+    p_selling_cost     => 'High',
+    p_audience         => array['B2B', 'B2C'],
+    p_inventory_type   => array['Lots'],
+    p_buyers_premium   => true,
+    p_priority         => 'Critical'
   );
 
-  -- And the fallback is one row, not one per save.
-  perform public.set_marketplace_fee(v_auction, 'sell', null, 11);
   perform test_assert(
-    fee_percent(v_auction, 'sell', null) = 11 and fee_count(v_auction) = 3,
-    'the fallback rate is one row however often it is saved'
+    profile_text(v_auction, 'fee_notes') = '15% seller fee, 3% processing',
+    'the fees are prose rather than a rate card'
   );
-end;
-$$;
+  perform test_assert(
+    profile_text(v_auction, 'selling_cost') = 'High',
+    'and the comparison is one field'
+  );
+  perform test_assert(
+    profile_text(v_auction, 'audience') = '{B2B,B2C}',
+    'a multi-select holds both answers'
+  );
+  perform test_assert(
+    profile_text(v_auction, 'buyers_premium') = 'true',
+    'and the premium is recorded'
+  );
 
--- =============================================================================
--- A rate can only name a category the organization has.
---
--- Free text here would let "Medical" and "medical " become two rates, and the
--- product that has to match one of them would find neither.
--- =============================================================================
-do $$
-declare
-  v_auction uuid := (select id from fixture where key = 'auction');
-  v_ebay    uuid := (select id from fixture where key = 'ebay');
-begin
-  raise notice 'Categories:';
-  perform sign_in_as('admin_auth');
+  -- An unrelated save must not blank any of it.
+  perform public.update_marketplace(
+    p_company_id => v_auction, p_store_name => 'Northern', p_buyers_premium => true
+  );
+  perform test_assert(
+    profile_text(v_auction, 'selling_cost') = 'High'
+      and profile_text(v_auction, 'audience') = '{B2B,B2C}'
+      and profile_text(v_auction, 'fee_notes') = '15% seller fee, 3% processing',
+    'a save that says nothing about them leaves them alone'
+  );
 
-  begin
-    perform public.set_marketplace_fee(v_auction, 'sell', 'Nonsense', 5);
-    perform test_assert(false, 'an unknown category should be refused');
-  exception when others then
-    perform test_assert(sqlerrm like '%No product category%', 'an unknown category is refused');
-  end;
+  -- And an emptied one clears it, which is the other half of that rule.
+  perform public.update_marketplace(
+    p_company_id => v_auction, p_selling_cost => '', p_buyers_premium => true
+  );
+  perform test_assert(
+    profile_text(v_auction, 'selling_cost') is null,
+    'while an emptied field clears'
+  );
 
-  begin
-    perform public.set_marketplace_fee(v_auction, 'sideways', null, 5);
-    perform test_assert(false, 'a side that is neither should be refused');
-  exception when others then
-    perform test_assert(
-      sqlerrm like '%selling or on buying%',
-      'a fee is charged on selling or buying and nothing else'
-    );
-  end;
+  perform public.update_marketplace(
+    p_company_id => v_auction, p_audience => '{}', p_buyers_premium => true
+  );
+  perform test_assert(
+    profile_text(v_auction, 'audience') = '{}',
+    'and an emptied multi-select clears too'
+  );
 
-  -- A rate on something that is not a marketplace has nowhere to hang.
-  begin
-    perform public.set_marketplace_fee(
-      (select id from fixture where key = 'quiet'), 'sell', null, 5
-    );
-    perform test_assert(false, 'a rate on a non-marketplace should be refused');
-  exception when others then
-    perform test_assert(sqlerrm like '%Marketplace not found%', 'a rate needs a marketplace');
-  end;
-
-  perform test_assert(fee_count(v_ebay) = 0, 'and none of that left a stray row');
+  /*
+   * Buyer's premium is the one field where null is a real answer — nobody has
+   * looked it up — so it is written every time rather than following the
+   * null-leaves-it rule the others do.
+   */
+  perform public.update_marketplace(p_company_id => v_auction, p_buyers_premium => null);
+  perform test_assert(
+    profile_text(v_auction, 'buyers_premium') is null,
+    'and "not recorded" is a state the premium can go back to'
+  );
 end;
 $$;
 
@@ -361,7 +353,6 @@ begin
   perform public.remove_marketplace(v_auction);
 
   perform test_assert(not is_marketplace(v_auction), 'the profile is gone');
-  perform test_assert(fee_count(v_auction) = 0, 'and the rate card went with it');
   perform test_assert(
     (select count(*) from companies where id = v_auction) = 1,
     'the company is still there'
@@ -398,10 +389,10 @@ begin
       and not has_table_privilege('authenticated', 'public.marketplace_profiles', 'delete'),
     'and not writable except through the functions'
   );
+  -- Dead schema is worse than none: it invites somebody to fill it in.
   perform test_assert(
-    not has_table_privilege('authenticated', 'public.marketplace_fees', 'insert')
-      and not has_table_privilege('authenticated', 'public.marketplace_fees', 'update'),
-    'nor are the rates'
+    to_regclass('public.marketplace_fees') is null,
+    'and the rate-card table is gone rather than left unused'
   );
 
   perform test_assert(
@@ -423,11 +414,6 @@ begin
     (select count(*) from marketplace_profiles) = 0,
     'another organization sees none of these marketplaces'
   );
-  perform test_assert(
-    (select count(*) from marketplace_fees) = 0,
-    'nor any of their rates'
-  );
-
   begin
     perform public.remove_marketplace((select id from fixture where key = 'ebay'));
   exception when others then

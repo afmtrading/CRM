@@ -80,6 +80,12 @@ export type OptionFieldKey =
   | 'customer_type'
   /** Where a selling account stands with the platform: Active, Paused, Closed. */
   | 'marketplace_account_status'
+  | 'marketplace_type'
+  | 'marketplace_fulfilment'
+  | 'marketplace_payment'
+  | 'marketplace_selling_cost'
+  | 'marketplace_audience'
+  | 'marketplace_inventory_type'
   | 'role_type'
   | 'priority'
   | 'credibility'
@@ -1654,23 +1660,27 @@ export type MarketplaceProfileRow = {
   reserve_percent: number | null
   minimum_lot_value: number | null
   notes: string | null
+  /** What it costs to trade here, in prose. Markdown, never raw HTML. */
+  fee_notes: string | null
+  /** Standard, Auction. */
+  marketplace_type: string[]
+  /** Fulfilled by Platform, Fulfilled by Seller. */
+  fulfilment: string[]
+  /** Via Platform, Via Seller. */
+  payment: string | null
+  /** Null means nobody has recorded it. False means there is none. */
+  buyers_premium: boolean | null
+  /** High, Medium, Low — what the rate card was for, at the size it is used. */
+  selling_cost: string | null
+  /** B2B, B2C. */
+  audience: string[]
+  /** Unit, Lots. */
+  inventory_type: string[]
+  /** From the same list contacts use, so "Critical" means one thing. */
+  priority: string | null
   created_by: string | null
   created_at: string
   updated_at: string
 }
 
-/** One rate on one marketplace, for one category, in one direction. */
-export type MarketplaceFeeRow = {
-  id: string
-  organization_id: string
-  marketplace_id: string
-  /** A product_category value, or null for the fallback rate. */
-  category: string | null
-  side: 'sell' | 'buy'
-  percent: number
-  fixed_fee: number
-  processing_percent: number
-  note: string | null
-  created_at: string
-  updated_at: string
-}
+
