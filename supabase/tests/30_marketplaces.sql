@@ -363,6 +363,79 @@ end;
 $$;
 
 -- =============================================================================
+-- Which channel a sale went through.
+--
+-- The attribution points at the company rather than at its profile, so it
+-- survives the channel being retired — a sale made through a marketplace in
+-- March was still made through it after somebody stops listing there in June.
+-- What the trigger insists on is that it *was* a selling channel at the moment
+-- it was recorded.
+-- =============================================================================
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_ebay    uuid := (select id from fixture where key = 'ebay');
+  v_quiet   uuid := (select id from fixture where key = 'quiet');
+  v_order   uuid;
+  v_row     record;
+begin
+  raise notice 'Attributing a sale:';
+  perform sign_in_as('admin_auth');
+
+  v_order := public.create_sales_order();
+  update sales_orders set marketplace_id = v_ebay, currency = 'USD' where id = v_order;
+  perform test_assert(
+    (select marketplace_id from sales_orders where id = v_order) = v_ebay,
+    'a sales order records the channel it sold through'
+  );
+
+  -- Every company is in the same picker, so this is a typo with a plausible
+  -- shape rather than a hypothetical.
+  begin
+    update sales_orders set marketplace_id = (select id from fixture where key = 'auction')
+    where id = v_order;
+    perform test_assert(false, 'a company that is not a marketplace should be refused');
+  exception when others then
+    perform test_assert(sqlerrm like '%not a marketplace%', 'a plain company is refused');
+  end;
+
+  -- Money running the other way is a purchase, not a sale.
+  perform public.add_marketplace(v_quiet, false, true);
+  begin
+    update sales_orders set marketplace_id = v_quiet where id = v_order;
+    perform test_assert(false, 'a source-only marketplace should be refused');
+  exception when others then
+    perform test_assert(sqlerrm like '%source-only%', 'a source-only channel is refused by name');
+  end;
+  perform public.remove_marketplace(v_quiet);
+
+  -- What the channel has done.
+  select * into v_row from public.marketplace_sales(v_ebay) where currency = 'USD';
+  perform test_assert(v_row.order_count = 1, 'the channel counts its order');
+
+  -- A cancelled order is not money anybody expects.
+  update sales_orders set status = 'cancelled' where id = v_order;
+  perform test_assert(
+    not exists (select 1 from public.marketplace_sales(v_ebay) where currency = 'USD'),
+    'and drops it once it is cancelled'
+  );
+
+  /*
+   * The point of pointing at the company: demote the channel and the sale is
+   * still recorded as having gone through it. An FK to marketplace_profiles
+   * would have erased that.
+   */
+  update sales_orders set status = 'draft' where id = v_order;
+  perform public.remove_marketplace(v_ebay);
+  perform test_assert(
+    (select marketplace_id from sales_orders where id = v_order) = v_ebay,
+    'retiring a channel does not rewrite what already sold through it'
+  );
+  perform public.add_marketplace(v_ebay, true, true);
+end;
+$$;
+
+-- =============================================================================
 -- Demoting.
 --
 -- The rate card goes; everything that made it a company stays. That separation

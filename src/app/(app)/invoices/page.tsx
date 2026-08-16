@@ -176,6 +176,7 @@ export default async function InvoicesPage({
                   <th>Number</th>
                   <th>Status</th>
                   <th>Company</th>
+                  <th>Channel</th>
                   <th>Issued</th>
                   <th>Due</th>
                   <th className="text-right">Total</th>
@@ -210,6 +211,20 @@ export default async function InvoicesPage({
                           </Link>
                         ) : (
                           <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      {/* A marketplace is a company, so the same lookup names it —
+                          the link goes to the channel rather than the account. */}
+                      <td>
+                        {invoice.marketplace_id ? (
+                          <Link
+                            href={`/marketplaces/${invoice.marketplace_id}`}
+                            className="text-brand-700 hover:underline"
+                          >
+                            {companyName.get(invoice.marketplace_id) ?? 'Marketplace'}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-400">Direct</span>
                         )}
                       </td>
                       <td>{formatDay(invoice.issue_date)}</td>

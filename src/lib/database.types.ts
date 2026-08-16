@@ -733,6 +733,14 @@ export type SalesOrderRow = {
   location_id: string | null
   status: SalesOrderStatus
   currency: string
+  /**
+   * The channel this sold through, or null for a direct sale.
+   *
+   * Points at the company, not its marketplace profile: a profile can be
+   * removed, and an order sold through a channel in March was still sold
+   * through it after somebody stops listing there in June.
+   */
+  marketplace_id: string | null
   order_date: string
   payment_terms: string | null
   shipping_charge: number
@@ -815,6 +823,14 @@ export type InvoiceRow = {
   owner_name: string | null
   status: InvoiceStatus
   currency: string
+  /**
+   * The channel this sold through, or null for a direct sale.
+   *
+   * Points at the company, not its marketplace profile: a profile can be
+   * removed, and an order sold through a channel in March was still sold
+   * through it after somebody stops listing there in June.
+   */
+  marketplace_id: string | null
   issue_date: string
   due_date: string | null
   subtotal: number

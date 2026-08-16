@@ -200,6 +200,7 @@ export default async function SalesOrdersPage({
                   <th>Number</th>
                   <th>Status</th>
                   <th>Company</th>
+                  <th>Channel</th>
                   <th>Owner</th>
                   <th>Date</th>
                   <th className="text-right">Value</th>
@@ -229,6 +230,20 @@ export default async function SalesOrdersPage({
                         </Link>
                       ) : (
                         <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    {/* A marketplace is a company, so the same lookup names it —
+                        the link goes to the channel rather than the account. */}
+                    <td>
+                      {order.marketplace_id ? (
+                        <Link
+                          href={`/marketplaces/${order.marketplace_id}`}
+                          className="text-brand-700 hover:underline"
+                        >
+                          {companyName.get(order.marketplace_id) ?? 'Marketplace'}
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-slate-400">Direct</span>
                       )}
                     </td>
                     <td>{order.owner_id ? (ownerName.get(order.owner_id) ?? '—') : '—'}</td>

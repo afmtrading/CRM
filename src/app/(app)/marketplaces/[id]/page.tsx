@@ -32,8 +32,13 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
   const { id } = await params
   const context = await requireSession()
 
-  const [{ data: company }, { data: profileRow }, { data: contactRows }, { data: options }] =
-    await Promise.all([
+  const [
+    { data: company },
+    { data: profileRow },
+    { data: contactRows },
+    { data: options },
+    { data: salesRows },
+  ] = await Promise.all([
       scoped(context, 'companies').select('*').eq('id', id).is('deleted_at', null).maybeSingle(),
       scoped(context, 'marketplace_profiles').select('*').eq('company_id', id).maybeSingle(),
       scoped(context, 'contacts')
@@ -51,6 +56,13 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
         .select('*')
         .eq('entity_type', 'company')
         .order('order'),
+      /*
+       * What has actually gone through this channel. Definer and
+       * organization-scoped, not caller-scoped: orders are visible per owner,
+       * so reading them here through the caller's policies would tell a rep
+       * their channel had turned over a fraction of what it had.
+       */
+      context.supabase.rpc('marketplace_sales', { p_marketplace_id: id }),
     ])
 
   // Both have to exist: a company with no profile is not a marketplace, and a
@@ -62,6 +74,15 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
   const contacts = (contactRows ?? []) as ContactRow[]
   const allOptions = (options ?? []) as FieldOptionRow[]
   const optionsFor = (key: string) => allOptions.filter((option) => option.field_key === key)
+
+  const sales = (salesRows ?? []) as {
+    currency: string
+    order_count: number
+    order_value: number
+    invoice_count: number
+    invoiced: number
+    collected: number
+  }[]
 
   const currency = profile.payout_currency || context.organization.default_currency
   const feesHtml = renderMarkdown(profile.fee_notes)
@@ -200,6 +221,56 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                 )}
               </Fact>
             </dl>
+          </Section>
+
+          {/* -------------------------------------------------------------- */}
+          <Section title="Sold through this channel">
+            {sales.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nothing attributed to this channel yet. A sales order says which channel it sold
+                through, and its invoice carries that across.
+              </p>
+            ) : (
+              <div className="-mx-5 overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Currency</th>
+                      <th className="text-right">Orders</th>
+                      <th className="text-right">Order value</th>
+                      <th className="text-right">Invoiced</th>
+                      <th className="text-right">Collected</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/*
+                      One row per currency rather than one total. Adding USD to
+                      CAD produces a number that means nothing, which is the
+                      rule the money components already hold.
+                    */}
+                    {sales.map((row) => (
+                      <tr key={row.currency}>
+                        <td className="font-medium text-slate-800">{row.currency}</td>
+                        <td className="text-right text-slate-600">{row.order_count}</td>
+                        <td className="text-right">
+                          {formatPrice(Number(row.order_value), row.currency)}
+                        </td>
+                        <td className="text-right">
+                          {formatPrice(Number(row.invoiced), row.currency)}
+                        </td>
+                        <td className="text-right font-medium text-slate-900">
+                          {formatPrice(Number(row.collected), row.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="mt-3 text-xs text-slate-400">
+              Cancelled orders and void invoices are left out — they are not money anybody expects.
+              Set against the fees above, this is what the channel actually returned.
+            </p>
           </Section>
 
           {/* -------------------------------------------------------------- */}

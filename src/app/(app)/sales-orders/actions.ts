@@ -68,6 +68,8 @@ const headerSchema = z.object({
    * default over the order's real currency on every unrelated save.
    */
   currency: z.enum(CURRENCIES).optional().catch(undefined),
+  /* Blank is "direct", which is a real answer and has to reach null. */
+  marketplace_id: optionalId,
   order_date: z.string().trim().min(1),
   payment_terms: text(200),
   shipping_charge: z.coerce.number().min(0).default(0),
