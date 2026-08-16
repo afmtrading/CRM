@@ -48,6 +48,7 @@ import {
 import { ActionForm, SubmitButton } from "@/components/action-form";
 
 import { deleteCompany, setCompanyHidden, setCompanyTags } from "../actions";
+import { addMarketplace } from "../../marketplaces/actions";
 
 export default async function CompanyDetailPage({
   params,
@@ -73,6 +74,7 @@ export default async function CompanyDetailPage({
     { data: fieldOptions },
     { data: customFieldDefs },
     { data: lineItems },
+    { data: marketplace },
   ] = await Promise.all([
     scoped(context, "contacts")
       .select("*")
@@ -103,6 +105,12 @@ export default async function CompanyDetailPage({
     scoped(context, "deal_products")
       .select("*, products(id, name), deals!inner(id, company_id, status, currency)")
       .eq("deals.company_id", id),
+    // Whether this company is also a channel. A profile row is the whole
+    // answer; its absence is the other half of it.
+    scoped(context, "marketplace_profiles")
+      .select("company_id, sells_through, sources_from")
+      .eq("company_id", id)
+      .maybeSingle(),
   ]);
 
   const userList = (users ?? []) as UserRow[];
@@ -187,6 +195,26 @@ export default async function CompanyDetailPage({
               >
                 New contact
               </Link>
+            )}
+            {/*
+              A company can be a channel as well as a counterparty — an
+              auctioneer who also buys is one record, not two — so this is a
+              link rather than a switch away from being a company.
+            */}
+            {marketplace ? (
+              <Link href={`/marketplaces/${id}`} className="btn-secondary">
+                Marketplace
+              </Link>
+            ) : (
+              context.canWrite && (
+                <ActionForm action={addMarketplace}>
+                  <input type="hidden" name="company_id" value={id} />
+                  <input type="hidden" name="sells_through" value="on" />
+                  <SubmitButton className="btn-secondary" pendingLabel="Adding…">
+                    Add as marketplace
+                  </SubmitButton>
+                </ActionForm>
+              )
             )}
             {context.canWrite && (
               <Link href={`/companies/${id}/edit`} className="btn-secondary">

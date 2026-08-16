@@ -167,6 +167,18 @@ export const OPTION_FIELDS: {
    */
   { key: 'stock_type', label: 'Stock type', card: 'rating', multiple: true, entity: 'company' },
   { key: 'customer_type', label: 'Company type', card: 'rating', multiple: true, entity: 'company' },
+  /*
+   * Where a selling account stands with the platform. On the company entity
+   * because a marketplace *is* a company — the profile that makes it one holds
+   * the value, and this list is what may go in it.
+   */
+  {
+    key: 'marketplace_account_status',
+    label: 'Marketplace account status',
+    card: 'rating',
+    multiple: false,
+    entity: 'company',
+  },
   { key: 'role_type', label: 'Role type', card: 'influence', multiple: true, entity: 'contact' },
   { key: 'priority', label: 'Priority', card: 'influence', multiple: false, entity: 'contact' },
   { key: 'credibility', label: 'Credibility', card: 'influence', multiple: false, entity: 'contact' },

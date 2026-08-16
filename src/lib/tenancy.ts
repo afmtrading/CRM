@@ -225,6 +225,8 @@ export type TenantTable =
   | 'notifications'
   | 'permission_sets'
   | 'column_preferences'
+  | 'marketplace_profiles'
+  | 'marketplace_fees'
   | 'mailbox_connections'
   | 'sending_domains'
   | 'email_suppressions'

@@ -37,8 +37,16 @@ describe('columnCatalogue', () => {
     expect(catalogue.some((column) => column.key === 'custom_fields.regions')).toBe(false)
   })
 
+  // A marketplace is a company, so it shows the company's custom fields —
+  // there is no separate entity to define one against.
+  it('gives a marketplace the company custom fields', () => {
+    const catalogue = columnCatalogue('marketplace', [customField('tier', 'Tier', 'company')])
+
+    expect(catalogue.at(-1)).toEqual({ key: 'custom_fields.tier', label: 'Tier' })
+  })
+
   it('has exactly one locked column per list', () => {
-    for (const entity of ['contact', 'company', 'product'] as const) {
+    for (const entity of ['contact', 'company', 'product', 'marketplace'] as const) {
       expect(columnCatalogue(entity).filter((column) => column.locked)).toHaveLength(1)
     }
   })
@@ -48,7 +56,7 @@ describe('columnCatalogue', () => {
    * vanish, and the list would come up one column short with nothing to say so.
    */
   it('can render every default it ships with', () => {
-    for (const entity of ['contact', 'company', 'product'] as const) {
+    for (const entity of ['contact', 'company', 'product', 'marketplace'] as const) {
       const keys = new Set(columnCatalogue(entity).map((column) => column.key))
       for (const key of defaultColumns(entity)) {
         expect(keys.has(key), `${entity} default ${key}`).toBe(true)

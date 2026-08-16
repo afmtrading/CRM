@@ -78,6 +78,8 @@ export type OptionFieldKey =
   /** What condition the goods arrive in: overstock, customer returns, shelf pulls. */
   | 'stock_type'
   | 'customer_type'
+  /** Where a selling account stands with the platform: Active, Paused, Closed. */
+  | 'marketplace_account_status'
   | 'role_type'
   | 'priority'
   | 'credibility'
@@ -1623,6 +1625,52 @@ export type ColumnPreferenceRow = {
   entity_type: string
   /** In display order. The order is the preference as much as the set is. */
   columns: string[]
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * What makes a company a marketplace.
+ *
+ * Keyed on the company: the company *is* the marketplace, and the presence of
+ * this row is the whole answer to "is this one". Promoting inserts it, demoting
+ * deletes it, and the company survives either way — see 20260245000000.
+ */
+export type MarketplaceProfileRow = {
+  company_id: string
+  organization_id: string
+  /** AFM lists inventory here. Both directions can be true at once. */
+  sells_through: boolean
+  /** AFM buys inventory here. */
+  sources_from: boolean
+  store_name: string | null
+  seller_account_id: string | null
+  store_url: string | null
+  account_status: string | null
+  opened_on: string | null
+  settlement_terms: string | null
+  payout_method: string | null
+  payout_currency: string | null
+  reserve_percent: number | null
+  minimum_lot_value: number | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** One rate on one marketplace, for one category, in one direction. */
+export type MarketplaceFeeRow = {
+  id: string
+  organization_id: string
+  marketplace_id: string
+  /** A product_category value, or null for the fallback rate. */
+  category: string | null
+  side: 'sell' | 'buy'
+  percent: number
+  fixed_fee: number
+  processing_percent: number
+  note: string | null
   created_at: string
   updated_at: string
 }

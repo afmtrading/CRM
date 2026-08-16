@@ -112,5 +112,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/28_stock_level_
 echo "→ column preferences"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/29_column_preferences.sql"
 
+echo "→ marketplaces"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/30_marketplaces.sql"
+
 echo
 echo "All database tests passed."

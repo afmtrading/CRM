@@ -327,3 +327,14 @@ export const InvoiceIcon: IconComponent = (p) => (
     <path d="M12 11v7M14 12.5h-3a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3h-3" />
   </Svg>
 )
+
+/** A shopfront: the channels you trade through, rather than the goods. */
+export const StoreIcon: IconComponent = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+       strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M3 9.5 4.6 5A1.5 1.5 0 0 1 6 4h12a1.5 1.5 0 0 1 1.4 1L21 9.5" />
+    <path d="M3 9.5a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0" />
+    <path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" />
+    <path d="M10 20v-5h4v5" />
+  </svg>
+)
