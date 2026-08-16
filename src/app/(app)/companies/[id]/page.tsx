@@ -534,6 +534,18 @@ export default async function CompanyDetailPage({
           */}
           <Section title={COMPANY_CARDS[3].label} className="order-2">
             <dl className="grid gap-3 sm:grid-cols-2">
+              {/* First on the card, because how much an account matters is the
+                  thing somebody scans a record for before anything else. */}
+              <Field label="Priority" wide>
+                {company.priority ? (
+                  <OptionBadges
+                    values={[company.priority]}
+                    options={optionsFor("priority")}
+                  />
+                ) : (
+                  <Empty />
+                )}
+              </Field>
               <Field label="Merchandise" wide>
                 <OptionBadges
                   values={company.specialty_market}

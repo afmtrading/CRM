@@ -14,7 +14,7 @@ import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
 import { FilterBar } from '@/components/filter-bar'
 import { EmptyState, PageHeader, SubGroupRow } from '@/components/ui'
-import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
+import { CustomCell, Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
 import { formatDay } from '@/lib/format'
@@ -45,6 +45,7 @@ export default async function CompaniesPage({
 
   const marketOptions = allOptions.filter((option) => option.field_key === 'specialty_market')
   const typeOptions = allOptions.filter((option) => option.field_key === 'customer_type')
+  const priorityOptions = allOptions.filter((option) => option.field_key === 'priority')
 
   /*
    * Region and size are the organization's own fields, so the columns look them
@@ -118,6 +119,15 @@ export default async function CompaniesPage({
           >
             {company.name}
           </Link>
+        )
+      case 'priority':
+        return company.priority ? (
+          <OptionBadge
+            value={company.priority}
+            color={optionColor(priorityOptions, company.priority)}
+          />
+        ) : (
+          <Empty />
         )
       case 'customer_type':
         return company.customer_type?.length ? (

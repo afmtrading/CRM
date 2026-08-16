@@ -21,6 +21,13 @@ const companySchema = z.object({
   phone: z.string().trim().max(60).default(''),
   email: z.string().trim().email().or(z.literal('')).default(''),
   notes: z.string().max(20_000).default(''),
+  /*
+   * Shape only, like the country codes below: the value has to be one of the
+   * organization's own priority options, and the list that decides is in
+   * field_options rather than in this file. A code check here would be a second
+   * rulebook that goes stale the first time somebody renames one.
+   */
+  priority: z.string().trim().max(60).default(''),
   linkedin: z.string().trim().max(300).default(''),
   facebook: z.string().trim().max(300).default(''),
   instagram: z.string().trim().max(300).default(''),
@@ -101,6 +108,7 @@ function companyColumns(input: z.infer<typeof companySchema>, formData: FormData
     specialty_market: readList(formData, 'specialty_market'),
     stock_type: readList(formData, 'stock_type'),
     customer_type: readList(formData, 'customer_type'),
+    priority: input.priority || null,
     /*
      * Geography goes to the database as typed. Validation is the trigger's job:
      * it upper-cases, sorts, de-duplicates and refuses anything that is not an

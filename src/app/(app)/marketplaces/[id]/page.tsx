@@ -43,14 +43,13 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
         .order('last_name')
         .limit(50),
       /*
-       * Both entities in one round trip. The marketplace lists live on the
-       * company entity because a marketplace is a company; priority lives on
-       * the contact one and is reused deliberately, so "Critical" means the
-       * same thing wherever it is read.
+       * All on the company entity, priority included since 20260247000000 —
+       * a marketplace is a company, and it reads the company's priority rather
+       * than carrying one of its own.
        */
       scoped(context, 'field_options')
         .select('*')
-        .in('entity_type', ['company', 'contact'])
+        .eq('entity_type', 'company')
         .order('order'),
     ])
 
@@ -163,17 +162,24 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                   options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
                 />
               </Fact>
-              <Fact label="Priority">
-                {profile.priority ? (
+              {/* The company's, like Sells in below it — a marketplace has no
+                  priority of its own to disagree with the account's. */}
+              <Fact label="Priority" hint="From the company record">
+                {business.priority ? (
                   <OptionBadge
-                    value={profile.priority}
+                    value={business.priority}
                     color={optionColor(
                       optionsFor(MARKETPLACE_OPTION_FIELDS.priority),
-                      profile.priority,
+                      business.priority,
                     )}
                   />
                 ) : (
-                  <Empty />
+                  <Link
+                    href={`/companies/${business.id}/edit`}
+                    className="text-xs text-brand-700 hover:underline"
+                  >
+                    Set on the company
+                  </Link>
                 )}
               </Fact>
               {/*
@@ -311,13 +317,6 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                 options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
                 selected={profile.inventory_type}
               />
-              <Single
-                name="priority"
-                label="Priority"
-                options={optionsFor(MARKETPLACE_OPTION_FIELDS.priority)}
-                selected={profile.priority}
-              />
-
               <div>
                 <label className="label" htmlFor="fee_notes">
                   Fees and costs

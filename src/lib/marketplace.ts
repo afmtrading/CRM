@@ -20,7 +20,11 @@ export const MARKETPLACE_OPTION_FIELDS = {
   audience: 'marketplace_audience',
   inventoryType: 'marketplace_inventory_type',
   accountStatus: 'marketplace_account_status',
-  /* The contacts' list, deliberately reused: "Critical" has to mean one thing. */
+  /*
+   * The company's own list. A marketplace has no priority of its own — see
+   * 20260247000000 — so this key is here for reading the company's, not for
+   * writing anything on the profile.
+   */
   priority: 'priority',
 } as const
 

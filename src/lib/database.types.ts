@@ -427,6 +427,14 @@ export type CompanyRow = {
   domain: string | null
   /** Superseded by specialty_market; retained so older rows keep their value. */
   industry: string | null
+  /**
+   * How much this account matters.
+   *
+   * Its own list rather than the contacts' one, seeded to match it: a Critical
+   * account can have a Standard person at it, and one list would make those the
+   * same statement. See 20260247000000.
+   */
+  priority: string | null
   owner_id: string | null
   custom_fields: Record<string, Json>
   phone: string | null
@@ -1676,8 +1684,6 @@ export type MarketplaceProfileRow = {
   audience: string[]
   /** Unit, Lots. */
   inventory_type: string[]
-  /** From the same list contacts use, so "Critical" means one thing. */
-  priority: string | null
   created_by: string | null
   created_at: string
   updated_at: string

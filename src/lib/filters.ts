@@ -103,6 +103,7 @@ export const COMPANY_FIELDS: FieldDef[] = [
   { key: 'name', label: 'Name', type: 'text', sortable: true },
   { key: 'domain', label: 'Domain', type: 'text', sortable: true },
   { key: 'industry', label: 'Industry', type: 'text', groupable: true, sortable: true },
+  { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
   /*
    * Where they are and where they trade, as three separate questions.

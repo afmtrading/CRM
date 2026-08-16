@@ -57,6 +57,7 @@ const CONTACT_COLUMNS: TableColumn[] = [
 
 const COMPANY_COLUMNS: TableColumn[] = [
   { key: 'name', label: 'Name', locked: true },
+  { key: 'priority', label: 'Priority' },
   { key: 'customer_type', label: 'Company type' },
   { key: 'specialty_market', label: 'Merchandise' },
   { key: 'stock_type', label: 'Stock type' },
@@ -130,7 +131,7 @@ const MARKETPLACE_COLUMNS: TableColumn[] = [
 /** What each list shows before anybody has said otherwise — today's columns. */
 const DEFAULTS: Record<TableEntity, string[]> = {
   contact: ['name', 'company', 'owner', 'priority', 'role_type', 'credibility', 'region'],
-  company: ['name', 'customer_type', 'specialty_market', 'owner', 'contacts', 'size', 'region'],
+  company: ['name', 'priority', 'customer_type', 'specialty_market', 'owner', 'contacts', 'region'],
   product: ['name', 'status', 'available', 'location', 'price_showroom', 'price_wholesale'],
   marketplace: [
     'name',

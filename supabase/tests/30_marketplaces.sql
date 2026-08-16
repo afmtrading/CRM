@@ -273,8 +273,7 @@ begin
     p_selling_cost     => 'High',
     p_audience         => array['B2B', 'B2C'],
     p_inventory_type   => array['Lots'],
-    p_buyers_premium   => true,
-    p_priority         => 'Critical'
+    p_buyers_premium   => true
   );
 
   perform test_assert(
@@ -292,6 +291,34 @@ begin
   perform test_assert(
     profile_text(v_auction, 'buyers_premium') = 'true',
     'and the premium is recorded'
+  );
+
+  /*
+   * Priority is the company's now — see 20260247000000. The marketplace had one
+   * of its own as a stopgap and it was moved up rather than duplicated, so a
+   * profile column for it should not exist at all.
+   */
+  perform test_assert(
+    not exists (
+      select 1 from information_schema.columns
+      where table_name = 'marketplace_profiles' and column_name = 'priority'
+    ),
+    'a marketplace has no priority of its own — it reads the company''s'
+  );
+
+  update companies set priority = 'Critical' where id = v_auction;
+  perform test_assert(
+    (select priority from companies where id = v_auction) = 'Critical',
+    'which is set on the company and mirrors from there'
+  );
+
+  perform test_assert(
+    public.bulk_update_records('company', array[v_auction], 'priority', 'set', array['High']) = 1,
+    'and can be changed across a selection like any other company field'
+  );
+  perform test_assert(
+    (select priority from companies where id = v_auction) = 'High',
+    'which lands'
   );
 
   -- An unrelated save must not blank any of it.
