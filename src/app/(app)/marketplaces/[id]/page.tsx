@@ -3,60 +3,54 @@ import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { contactName, formatDay, formatPrice } from '@/lib/format'
-import {
-  SIDE_HINTS,
-  SIDE_LABELS,
-  applyFee,
-  directionLabel,
-  resolveFee,
-  sidesFor,
-  type FeeSide,
-} from '@/lib/marketplace'
+import { renderMarkdown } from '@/lib/field-options'
+import { MARKETPLACE_OPTION_FIELDS, directionLabel, yesNo } from '@/lib/marketplace'
 import type {
   CompanyRow,
   ContactRow,
   FieldOptionRow,
-  MarketplaceFeeRow,
   MarketplaceProfileRow,
 } from '@/lib/database.types'
 import { ActionForm, SubmitButton } from '@/components/action-form'
-import { Empty } from '@/components/contact-cards'
+import { Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
 import { PageHeader, Section } from '@/components/ui'
 
-import { removeFee, removeMarketplace, setFee, updateMarketplace } from '../actions'
+import { removeMarketplace, updateMarketplace } from '../actions'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * One channel, and what it costs to use it.
+ * One channel, and what tells it apart from the next one.
  *
- * The company page answers "who are they". This answers "what do I keep", which
- * is the question that decides where a pallet goes — and the only one the CRM
- * could not answer before.
+ * A per-category rate card lived here and was taken out. What it cost to keep
+ * true was a row per category per direction; what it answered was "is this
+ * expensive", which one field says. So the percentages are prose now and the
+ * comparison is a select — and the page is a page somebody will actually fill
+ * in rather than one they will abandon half-priced.
  */
 export default async function MarketplacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const context = await requireSession()
 
-  const [{ data: company }, { data: profileRow }, { data: feeRows }, { data: contactRows }, { data: options }] =
+  const [{ data: company }, { data: profileRow }, { data: contactRows }, { data: options }] =
     await Promise.all([
       scoped(context, 'companies').select('*').eq('id', id).is('deleted_at', null).maybeSingle(),
       scoped(context, 'marketplace_profiles').select('*').eq('company_id', id).maybeSingle(),
-      scoped(context, 'marketplace_fees')
-        .select('*')
-        .eq('marketplace_id', id)
-        .order('side')
-        .order('category', { nullsFirst: true }),
       scoped(context, 'contacts')
         .select('*')
         .eq('company_id', id)
         .is('deleted_at', null)
         .order('last_name')
         .limit(50),
+      /*
+       * Both entities in one round trip. The marketplace lists live on the
+       * company entity because a marketplace is a company; priority lives on
+       * the contact one and is reused deliberately, so "Critical" means the
+       * same thing wherever it is read.
+       */
       scoped(context, 'field_options')
         .select('*')
-        .eq('entity_type', 'company')
-        .in('field_key', ['marketplace_account_status', 'product_category'])
+        .in('entity_type', ['company', 'contact'])
         .order('order'),
     ])
 
@@ -66,39 +60,13 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
 
   const business = company as CompanyRow
   const profile = profileRow as MarketplaceProfileRow
-  const fees = (feeRows ?? []) as MarketplaceFeeRow[]
   const contacts = (contactRows ?? []) as ContactRow[]
   const allOptions = (options ?? []) as FieldOptionRow[]
-  const statusOptions = allOptions.filter(
-    (option) => option.field_key === 'marketplace_account_status',
-  )
-
-  /*
-   * The categories a rate can be set for are the organization's product
-   * categories, which is what makes the arithmetic real: a product knows its
-   * category, so it knows its rate. They live on the product entity, so they
-   * are fetched separately from the company options above.
-   */
-  const { data: categoryRows } = await scoped(context, 'field_options')
-    .select('*')
-    .eq('entity_type', 'product')
-    .eq('field_key', 'product_category')
-    .order('order')
-  const categories = (categoryRows ?? []) as FieldOptionRow[]
+  const optionsFor = (key: string) => allOptions.filter((option) => option.field_key === key)
 
   const currency = profile.payout_currency || context.organization.default_currency
-  const sides = sidesFor(profile)
-
-  /*
-   * A worked example on a round number, because a percentage is abstract and
-   * "you keep $868 of $1,000" is not. The fallback rate, since that is what
-   * most things sell at.
-   */
-  const SAMPLE = 1000
-  const example = sides.map((side) => ({
-    side,
-    breakdown: applyFee(SAMPLE, resolveFee(fees, { side }), side),
-  }))
+  const feesHtml = renderMarkdown(profile.fee_notes)
+  const premium = yesNo(profile.buyers_premium)
 
   return (
     <>
@@ -111,12 +79,7 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
               Company record
             </Link>
             {profile.store_url && (
-              <a
-                href={profile.store_url}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-secondary"
-              >
+              <a href={profile.store_url} target="_blank" rel="noreferrer" className="btn-secondary">
                 Open store
               </a>
             )}
@@ -128,76 +91,110 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
         <div className="space-y-5 lg:col-span-2">
           {/* -------------------------------------------------------------- */}
           <Section title="What it costs">
-            {example.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                This marketplace is not marked as used in either direction.
-              </p>
+            {feesHtml ? (
+              // Safe by construction: renderMarkdown escapes the stored text
+              // before applying any formatting, so nothing here is raw HTML.
+              <div
+                className="space-y-2 text-sm leading-relaxed text-slate-700"
+                dangerouslySetInnerHTML={{ __html: feesHtml }}
+              />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {example.map(({ side, breakdown }) => (
-                  <div key={side} className="rounded-xl border border-slate-200 p-4">
-                    <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                      {SIDE_LABELS[side]}
-                    </p>
-
-                    {breakdown.totalFees === 0 && fees.every((fee) => fee.side !== side) ? (
-                      <p className="mt-2 text-sm text-slate-500">
-                        No rates recorded yet, so nothing can be worked out here.
-                      </p>
-                    ) : (
-                      <>
-                        <p className="mt-2 text-2xl font-semibold text-slate-900">
-                          {formatPrice(breakdown.net, currency)}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {side === 'sell'
-                            ? `kept from a ${formatPrice(SAMPLE, currency)} sale`
-                            : `paid for a ${formatPrice(SAMPLE, currency)} bid`}
-                        </p>
-
-                        <dl className="mt-3 space-y-1 text-xs text-slate-600">
-                          <Line label="Commission" value={formatPrice(breakdown.commission, currency)} />
-                          {breakdown.processing > 0 && (
-                            <Line
-                              label="Processing"
-                              value={formatPrice(breakdown.processing, currency)}
-                            />
-                          )}
-                          {breakdown.fixed > 0 && (
-                            <Line label="Fixed" value={formatPrice(breakdown.fixed, currency)} />
-                          )}
-                          <Line
-                            label="Effective rate"
-                            value={`${breakdown.effectiveRate}%`}
-                            strong
-                          />
-                        </dl>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-slate-500">
+                Nothing recorded yet. Commission, listing fees, processing, whatever this platform
+                charges — in whatever words fit.
+              </p>
             )}
 
-            <p className="mt-4 text-xs text-slate-400">
-              Worked on {formatPrice(SAMPLE, currency)} at the rate that applies to anything without
-              a category of its own. A product in a priced category uses that category&rsquo;s rate
-              instead.
-            </p>
+            {profile.selling_cost && (
+              <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4">
+                <span className="text-xs text-slate-500">Selling cost</span>
+                <OptionBadge
+                  value={profile.selling_cost}
+                  color={optionColor(
+                    optionsFor(MARKETPLACE_OPTION_FIELDS.sellingCost),
+                    profile.selling_cost,
+                  )}
+                />
+              </div>
+            )}
           </Section>
 
           {/* -------------------------------------------------------------- */}
-          {sides.map((side) => (
-            <RateCard
-              key={side}
-              side={side}
-              marketplaceId={id}
-              fees={fees.filter((fee) => fee.side === side)}
-              categories={categories}
-              currency={currency}
-              canWrite={context.canWrite}
-            />
-          ))}
+          <Section title="How it works">
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <Fact label="Marketplace type">
+                <OptionBadges
+                  values={profile.marketplace_type}
+                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.type)}
+                />
+              </Fact>
+              <Fact label="Fulfilment">
+                <OptionBadges
+                  values={profile.fulfilment}
+                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.fulfilment)}
+                />
+              </Fact>
+              <Fact label="Payment">
+                {profile.payment ? (
+                  <OptionBadge
+                    value={profile.payment}
+                    color={optionColor(
+                      optionsFor(MARKETPLACE_OPTION_FIELDS.payment),
+                      profile.payment,
+                    )}
+                  />
+                ) : (
+                  <Empty />
+                )}
+              </Fact>
+              <Fact label="Buyer's premium">
+                {/* Three states: yes, no, and nobody has said. */}
+                {premium ?? <span className="text-xs text-slate-400">Not recorded</span>}
+              </Fact>
+              <Fact label="Audience">
+                <OptionBadges
+                  values={profile.audience}
+                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.audience)}
+                />
+              </Fact>
+              <Fact label="Inventory type">
+                <OptionBadges
+                  values={profile.inventory_type}
+                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
+                />
+              </Fact>
+              <Fact label="Priority">
+                {profile.priority ? (
+                  <OptionBadge
+                    value={profile.priority}
+                    color={optionColor(
+                      optionsFor(MARKETPLACE_OPTION_FIELDS.priority),
+                      profile.priority,
+                    )}
+                  />
+                ) : (
+                  <Empty />
+                )}
+              </Fact>
+              {/*
+                The company's, not a copy. companies.sells_in already normalises
+                to sorted ISO codes and is what the territory filters read; a
+                second copy here would be a second thing to keep true.
+              */}
+              <Fact label="Sells in" hint="From the company record">
+                {business.sells_in?.length ? (
+                  <span className="text-slate-700">{business.sells_in.join(', ')}</span>
+                ) : (
+                  <Link
+                    href={`/companies/${business.id}/edit`}
+                    className="text-xs text-brand-700 hover:underline"
+                  >
+                    Set on the company
+                  </Link>
+                )}
+              </Fact>
+            </dl>
+          </Section>
 
           {/* -------------------------------------------------------------- */}
           <Section title={`Contacts (${contacts.length})`}>
@@ -231,7 +228,7 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
 
         {/* ---------------------------------------------------------------- */}
         <div className="space-y-5">
-          <Section title="Account">
+          <Section title="Details">
             <ActionForm action={updateMarketplace} className="space-y-3">
               <input type="hidden" name="company_id" value={id} />
 
@@ -257,95 +254,168 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                 </label>
               </fieldset>
 
-              <Field name="store_name" label="Store name" value={profile.store_name} />
-              <Field
-                name="seller_account_id"
-                label="Seller account ID"
-                value={profile.seller_account_id}
+              <Multi
+                name="marketplace_type"
+                label="Marketplace type"
+                options={optionsFor(MARKETPLACE_OPTION_FIELDS.type)}
+                selected={profile.marketplace_type}
               />
-              <Field
-                name="store_url"
-                label="Store URL"
-                value={profile.store_url}
-                placeholder="https://…"
+              <Single
+                name="selling_cost"
+                label="Selling cost"
+                options={optionsFor(MARKETPLACE_OPTION_FIELDS.sellingCost)}
+                selected={profile.selling_cost}
+              />
+              <Multi
+                name="fulfilment"
+                label="Fulfilment"
+                options={optionsFor(MARKETPLACE_OPTION_FIELDS.fulfilment)}
+                selected={profile.fulfilment}
+              />
+              <Single
+                name="payment"
+                label="Payment"
+                options={optionsFor(MARKETPLACE_OPTION_FIELDS.payment)}
+                selected={profile.payment}
               />
 
               <div>
-                <label className="label" htmlFor="account_status">
-                  Account status
+                <label className="label" htmlFor="buyers_premium">
+                  Buyer&rsquo;s premium
                 </label>
                 <select
-                  id="account_status"
-                  name="account_status"
+                  id="buyers_premium"
+                  name="buyers_premium"
                   className="input"
-                  defaultValue={profile.account_status ?? ''}
+                  defaultValue={
+                    profile.buyers_premium === null ? '' : String(profile.buyers_premium)
+                  }
                 >
-                  <option value="">—</option>
-                  {statusOptions.map((option) => (
-                    <option key={option.id} value={option.value}>
-                      {option.value}
-                    </option>
-                  ))}
+                  {/* Blank is a real answer, not a prompt: it means nobody has
+                      looked it up, which is different from there being none. */}
+                  <option value="">Not recorded</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
                 </select>
               </div>
 
-              <div>
-                <label className="label" htmlFor="opened_on">
-                  Opened
-                </label>
-                <input
-                  id="opened_on"
-                  name="opened_on"
-                  type="date"
-                  className="input"
-                  defaultValue={profile.opened_on ?? ''}
-                />
-              </div>
-
-              <Field
-                name="settlement_terms"
-                label="Payout terms"
-                value={profile.settlement_terms}
-                placeholder="Weekly, Net 30…"
+              <Multi
+                name="audience"
+                label="Audience"
+                options={optionsFor(MARKETPLACE_OPTION_FIELDS.audience)}
+                selected={profile.audience}
               />
-              <Field name="payout_method" label="Payout method" value={profile.payout_method} />
-              <Field
-                name="payout_currency"
-                label="Settles in"
-                value={profile.payout_currency}
-                placeholder={context.organization.default_currency}
-                maxLength={3}
+              <Multi
+                name="inventory_type"
+                label="Inventory type"
+                options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
+                selected={profile.inventory_type}
+              />
+              <Single
+                name="priority"
+                label="Priority"
+                options={optionsFor(MARKETPLACE_OPTION_FIELDS.priority)}
+                selected={profile.priority}
               />
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field
-                  name="reserve_percent"
-                  label="Reserve %"
-                  value={profile.reserve_percent === null ? '' : String(profile.reserve_percent)}
-                  type="number"
-                />
-                <Field
-                  name="minimum_lot_value"
-                  label="Minimum lot"
-                  value={
-                    profile.minimum_lot_value === null ? '' : String(profile.minimum_lot_value)
-                  }
-                  type="number"
-                />
-              </div>
-
               <div>
-                <label className="label" htmlFor="notes">
-                  Notes
+                <label className="label" htmlFor="fee_notes">
+                  Fees and costs
                 </label>
                 <textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  className="input"
-                  defaultValue={profile.notes ?? ''}
+                  id="fee_notes"
+                  name="fee_notes"
+                  rows={6}
+                  maxLength={20000}
+                  className="input font-normal"
+                  defaultValue={profile.fee_notes ?? ''}
+                  placeholder={'15% seller fee\n3% processing\n$0.30 a listing, waived under $50'}
                 />
+                <p className="mt-1 text-xs text-slate-400">
+                  Markdown: **bold**, `-` bullets, [links](url).
+                </p>
               </div>
+
+              <details className="border-t border-slate-100 pt-3">
+                <summary className="cursor-pointer text-xs font-medium text-slate-500">
+                  Account and payouts
+                </summary>
+
+                <div className="mt-3 space-y-3">
+                  <Field name="store_name" label="Store name" value={profile.store_name} />
+                  <Field
+                    name="seller_account_id"
+                    label="Seller account ID"
+                    value={profile.seller_account_id}
+                  />
+                  <Field
+                    name="store_url"
+                    label="Store URL"
+                    value={profile.store_url}
+                    placeholder="https://…"
+                  />
+                  <Single
+                    name="account_status"
+                    label="Account status"
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.accountStatus)}
+                    selected={profile.account_status}
+                  />
+                  <div>
+                    <label className="label" htmlFor="opened_on">
+                      Opened
+                    </label>
+                    <input
+                      id="opened_on"
+                      name="opened_on"
+                      type="date"
+                      className="input"
+                      defaultValue={profile.opened_on ?? ''}
+                    />
+                  </div>
+                  <Field
+                    name="settlement_terms"
+                    label="Payout terms"
+                    value={profile.settlement_terms}
+                    placeholder="Weekly, Net 30…"
+                  />
+                  <Field name="payout_method" label="Payout method" value={profile.payout_method} />
+                  <Field
+                    name="payout_currency"
+                    label="Settles in"
+                    value={profile.payout_currency}
+                    placeholder={context.organization.default_currency}
+                    maxLength={3}
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field
+                      name="reserve_percent"
+                      label="Reserve %"
+                      value={profile.reserve_percent === null ? '' : String(profile.reserve_percent)}
+                      type="number"
+                    />
+                    <Field
+                      name="minimum_lot_value"
+                      label="Minimum lot"
+                      value={
+                        profile.minimum_lot_value === null ? '' : String(profile.minimum_lot_value)
+                      }
+                      type="number"
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="notes">
+                      Notes
+                    </label>
+                    <textarea
+                      id="notes"
+                      name="notes"
+                      rows={3}
+                      className="input"
+                      defaultValue={profile.notes ?? ''}
+                    />
+                  </div>
+                </div>
+              </details>
 
               {context.canWrite && <SubmitButton className="btn-primary w-full">Save</SubmitButton>}
             </ActionForm>
@@ -354,13 +424,21 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
           <Section title="On the company">
             <dl className="space-y-2 text-sm">
               <Row label="Based in">{business.based_in ?? <Empty />}</Row>
-              <Row label="Ships to">
-                {business.sells_in?.length ? business.sells_in.join(', ') : <Empty />}
+              <Row label="Minimum lot">
+                {profile.minimum_lot_value === null ? (
+                  <Empty />
+                ) : (
+                  formatPrice(Number(profile.minimum_lot_value), currency)
+                )}
               </Row>
               <Row label="Website">
                 {business.domain ? (
                   <a
-                    href={business.domain.startsWith('http') ? business.domain : `https://${business.domain}`}
+                    href={
+                      business.domain.startsWith('http')
+                        ? business.domain
+                        : `https://${business.domain}`
+                    }
                     target="_blank"
                     rel="noreferrer"
                     className="text-brand-700 hover:underline"
@@ -377,14 +455,11 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
             {context.canWrite && (
               <form action={removeMarketplace} className="mt-4 border-t border-slate-100 pt-4">
                 <input type="hidden" name="company_id" value={id} />
-                <button
-                  type="submit"
-                  className="text-xs text-red-700 hover:underline"
-                >
+                <button type="submit" className="text-xs text-red-700 hover:underline">
                   Remove from Marketplaces
                 </button>
                 <p className="mt-1 text-xs text-slate-400">
-                  The company, its contacts and its history stay. Only the rate card goes.
+                  The company, its contacts and its history stay. Only this profile goes.
                 </p>
               </form>
             )}
@@ -397,11 +472,22 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
 
 /* -------------------------------------------------------------------------- */
 
-function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Fact({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}) {
   return (
-    <div className="flex justify-between">
-      <dt>{label}</dt>
-      <dd className={strong ? 'font-medium text-slate-800' : ''}>{value}</dd>
+    <div>
+      <dt className="text-xs text-slate-500">
+        {label}
+        {hint && <span className="ml-1 text-slate-400">· {hint}</span>}
+      </dt>
+      <dd className="mt-1 text-sm text-slate-800">{children}</dd>
     </div>
   )
 }
@@ -450,139 +536,86 @@ function Field({
   )
 }
 
-/**
- * The rates for one direction.
- *
- * The fallback row is shown first and labelled as the fallback rather than
- * being left to look like a category called nothing — it is the rate most
- * things trade at, and a rate card whose most-used line reads as blank is one
- * people distrust.
- */
-function RateCard({
-  side,
-  marketplaceId,
-  fees,
-  categories,
-  currency,
-  canWrite,
+function Single({
+  name,
+  label,
+  options,
+  selected,
 }: {
-  side: FeeSide
-  marketplaceId: string
-  fees: MarketplaceFeeRow[]
-  categories: FieldOptionRow[]
-  currency: string
-  canWrite: boolean
+  name: string
+  label: string
+  options: FieldOptionRow[]
+  selected: string | null
 }) {
-  const taken = new Set(fees.map((fee) => fee.category).filter(Boolean) as string[])
-  const hasFallback = fees.some((fee) => !fee.category)
+  return (
+    <div>
+      <label className="label" htmlFor={name}>
+        {label}
+      </label>
+      <select id={name} name={name} className="input" defaultValue={selected ?? ''}>
+        <option value="">—</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.value}>
+            {option.value}
+          </option>
+        ))}
+      </select>
+      {options.length === 0 && <MissingList />}
+    </div>
+  )
+}
+
+/**
+ * A multi-select as checkboxes rather than a `<select multiple>`.
+ *
+ * These lists hold two or three values each. A multiple select would make
+ * somebody hold ⌘ to pick both of two, and would hide the second option behind
+ * a scroll on a narrow screen; two checkboxes are the whole list, visible.
+ */
+function Multi({
+  name,
+  label,
+  options,
+  selected,
+}: {
+  name: string
+  label: string
+  options: FieldOptionRow[]
+  selected: string[]
+}) {
+  const chosen = new Set(selected)
 
   return (
-    <Section title={SIDE_LABELS[side]}>
-      <p className="mb-3 text-xs text-slate-500">{SIDE_HINTS[side]}</p>
-
-      {fees.length === 0 ? (
-        <p className="mb-4 text-sm text-slate-500">No rates yet.</p>
-      ) : (
-        <div className="-mx-5 mb-4 overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th className="text-right">Commission</th>
-                <th className="text-right">Processing</th>
-                <th className="text-right">Fixed</th>
-                <th>Note</th>
-                {canWrite && <th />}
-              </tr>
-            </thead>
-            <tbody>
-              {fees.map((fee) => (
-                <tr key={fee.id}>
-                  <td className="font-medium text-slate-800">
-                    {fee.category ?? (
-                      <span className="text-slate-500">Everything else</span>
-                    )}
-                  </td>
-                  <td className="text-right">{Number(fee.percent)}%</td>
-                  <td className="text-right text-slate-600">
-                    {Number(fee.processing_percent) > 0 ? `${Number(fee.processing_percent)}%` : '—'}
-                  </td>
-                  <td className="text-right text-slate-600">
-                    {Number(fee.fixed_fee) > 0 ? formatPrice(Number(fee.fixed_fee), currency) : '—'}
-                  </td>
-                  <td className="text-xs text-slate-500">{fee.note ?? ''}</td>
-                  {canWrite && (
-                    <td className="text-right">
-                      <form action={removeFee}>
-                        <input type="hidden" name="fee_id" value={fee.id} />
-                        <input type="hidden" name="marketplace_id" value={marketplaceId} />
-                        <button
-                          type="submit"
-                          className="text-xs text-slate-400 hover:text-red-600"
-                          aria-label={`Remove the ${fee.category ?? 'fallback'} rate`}
-                        >
-                          ✕
-                        </button>
-                      </form>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {canWrite && (
-        <ActionForm action={setFee} className="grid gap-2 sm:grid-cols-[1.4fr_repeat(3,5.5rem)_auto]">
-          <input type="hidden" name="marketplace_id" value={marketplaceId} />
-          <input type="hidden" name="side" value={side} />
-
-          <select name="category" className="input" aria-label="Category for this rate">
-            <option value="">
-              {hasFallback ? 'Everything else (replaces)' : 'Everything else'}
-            </option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.value}>
-                {category.value}
-                {taken.has(category.value) ? ' (replaces)' : ''}
-              </option>
-            ))}
-          </select>
-
+    <fieldset>
+      <legend className="label">{label}</legend>
+      {options.map((option) => (
+        <label
+          key={option.id}
+          className="flex items-center gap-2 py-0.5 text-sm text-slate-700"
+        >
           <input
-            name="percent"
-            type="number"
-            step="0.001"
-            min="0"
-            max="100"
-            className="input"
-            placeholder="%"
-            aria-label="Commission percent"
+            type="checkbox"
+            name={name}
+            value={option.value}
+            defaultChecked={chosen.has(option.value)}
+            className="h-4 w-4 rounded border-slate-300"
           />
-          <input
-            name="processing_percent"
-            type="number"
-            step="0.001"
-            min="0"
-            max="100"
-            className="input"
-            placeholder="Proc %"
-            aria-label="Processing percent"
-          />
-          <input
-            name="fixed_fee"
-            type="number"
-            step="0.01"
-            min="0"
-            className="input"
-            placeholder="Fixed"
-            aria-label="Fixed fee"
-          />
+          {option.value}
+        </label>
+      ))}
+      {options.length === 0 && <MissingList />}
+    </fieldset>
+  )
+}
 
-          <SubmitButton className="btn-secondary">Set rate</SubmitButton>
-        </ActionForm>
-      )}
-    </Section>
+function MissingList() {
+  return (
+    <p className="mt-1 text-xs text-amber-700">
+      Nothing to choose from —{' '}
+      <Link href="/settings/fields" className="underline">
+        add values in Settings → Fields
+      </Link>
+      .
+    </p>
   )
 }

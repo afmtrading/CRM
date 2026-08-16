@@ -102,19 +102,26 @@ const PRODUCT_COLUMNS: TableColumn[] = [
  */
 const MARKETPLACE_COLUMNS: TableColumn[] = [
   { key: 'name', label: 'Marketplace', locked: true },
+  { key: 'marketplace_type', label: 'Type' },
+  { key: 'selling_cost', label: 'Selling cost' },
+  { key: 'audience', label: 'Audience' },
+  { key: 'inventory_type', label: 'Inventory' },
+  { key: 'fulfilment', label: 'Fulfilment' },
+  { key: 'payment', label: 'Payment' },
+  { key: 'buyers_premium', label: "Buyer's premium" },
+  { key: 'priority', label: 'Priority' },
+  /* The company's own column, not a copy — see the note in 20260246000000. */
+  { key: 'sells_in', label: 'Sells in' },
   { key: 'direction', label: 'Used for' },
-  { key: 'take_rate', label: 'Take rate', align: 'right' },
   { key: 'settlement_terms', label: 'Payout' },
   { key: 'account_status', label: 'Account' },
   { key: 'store_name', label: 'Store' },
-  { key: 'buy_rate', label: "Buyer's premium", align: 'right' },
   { key: 'reserve_percent', label: 'Reserve', align: 'right' },
   { key: 'minimum_lot_value', label: 'Minimum lot', align: 'right' },
   { key: 'payout_currency', label: 'Settles in' },
   { key: 'owner', label: 'Owner' },
   { key: 'contacts', label: 'Contacts', align: 'right' },
   { key: 'based_in', label: 'Based in' },
-  { key: 'sells_in', label: 'Ships to' },
   { key: 'specialty_market', label: 'Merchandise' },
   { key: 'domain', label: 'Website' },
   { key: 'opened_on', label: 'Opened' },
@@ -125,7 +132,15 @@ const DEFAULTS: Record<TableEntity, string[]> = {
   contact: ['name', 'company', 'owner', 'priority', 'role_type', 'credibility', 'region'],
   company: ['name', 'customer_type', 'specialty_market', 'owner', 'contacts', 'size', 'region'],
   product: ['name', 'status', 'available', 'location', 'price_showroom', 'price_wholesale'],
-  marketplace: ['name', 'direction', 'take_rate', 'settlement_terms', 'account_status', 'sells_in'],
+  marketplace: [
+    'name',
+    'marketplace_type',
+    'selling_cost',
+    'audience',
+    'inventory_type',
+    'priority',
+    'sells_in',
+  ],
 }
 
 function baseColumns(entity: TableEntity): TableColumn[] {

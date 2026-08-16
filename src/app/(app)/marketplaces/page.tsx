@@ -3,13 +3,12 @@ import Link from 'next/link'
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatDay, formatPrice } from '@/lib/format'
 import { likeContains } from '@/lib/sql'
-import { directionLabel, headlineRate } from '@/lib/marketplace'
+import { MARKETPLACE_OPTION_FIELDS, directionLabel, yesNo } from '@/lib/marketplace'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import type {
   CompanyRow,
   CustomFieldDefinitionRow,
   FieldOptionRow,
-  MarketplaceFeeRow,
   MarketplaceProfileRow,
   UserRow,
 } from '@/lib/database.types'
@@ -41,16 +40,10 @@ export default async function MarketplacesPage({
 
   /*
    * An inner join spelled as a required embed: `!inner` makes PostgREST drop
-   * companies with no profile rather than returning them with a null one. The
-   * fees come along in the same round trip because the take-rate column needs
-   * them for every row, and fetching them per row would be a query per
-   * marketplace.
+   * companies with no profile rather than returning them with a null one.
    */
   let query = scoped(context, 'companies')
-    .select(
-      '*, contacts(count), marketplace_profiles!inner(*, marketplace_fees(*))',
-      { count: 'exact' },
-    )
+    .select('*, contacts(count), marketplace_profiles!inner(*)', { count: 'exact' })
     .is('deleted_at', null)
 
   if (search) query = query.ilike('name', likeContains(search))
@@ -64,7 +57,12 @@ export default async function MarketplacesPage({
   ] = await Promise.all([
       query.order('name').limit(500),
       scoped(context, 'users').select('*').order('name'),
-      scoped(context, 'field_options').select('*').eq('entity_type', 'company').order('order'),
+      // Company and contact both: the marketplace lists live on the company
+      // entity, and priority is reused from the contact one on purpose.
+      scoped(context, 'field_options')
+        .select('*')
+        .in('entity_type', ['company', 'contact'])
+        .order('order'),
       scoped(context, 'custom_field_definitions')
         .select('*')
         .eq('entity_type', 'company')
@@ -84,7 +82,7 @@ export default async function MarketplacesPage({
 
   type Row = CompanyRow & {
     contacts: { count: number }[]
-    marketplace_profiles: MarketplaceProfileRow & { marketplace_fees: MarketplaceFeeRow[] }
+    marketplace_profiles: MarketplaceProfileRow
   }
 
   const rows = (data ?? []) as Row[]
@@ -102,20 +100,18 @@ export default async function MarketplacesPage({
   const selling = rows.filter((row) => row.marketplace_profiles.sells_through)
   const sourcing = rows.filter((row) => row.marketplace_profiles.sources_from)
 
+  const auctions = rows.filter((row) =>
+    row.marketplace_profiles.marketplace_type?.includes('Auction'),
+  )
   /*
-   * Averaged across the channels that have a rate, and only those. Counting an
-   * unpriced marketplace as 0% would drag the average down and make the whole
-   * estate look cheaper than anything actually sold through it.
+   * Counted rather than averaged. A cost band has no mean worth reporting —
+   * "Medium" is a judgement, not a number — so the headline is how many of the
+   * cheap ones there are, which is the thing worth knowing at a glance.
    */
-  const priced = selling
-    .map((row) => headlineRate(row.marketplace_profiles.marketplace_fees ?? [], 'sell'))
-    .filter((rate): rate is number => rate !== null)
-  const averageRate =
-    priced.length > 0 ? priced.reduce((sum, rate) => sum + rate, 0) / priced.length : null
+  const lowCost = rows.filter((row) => row.marketplace_profiles.selling_cost === 'Low')
 
   const cell = (row: Row, key: string): React.ReactNode => {
     const profile = row.marketplace_profiles
-    const fees = profile.marketplace_fees ?? []
 
     switch (key) {
       case 'name':
@@ -129,19 +125,68 @@ export default async function MarketplacesPage({
         )
       case 'direction':
         return <span className="text-slate-600">{directionLabel(profile)}</span>
-      case 'take_rate': {
-        const rate = headlineRate(fees, 'sell')
-        // "Not priced" rather than 0%: an empty rate card is a channel nobody
-        // has costed, and 0% is a claim about it that happens to be false.
-        return rate === null ? (
-          <span className="text-xs text-slate-400">Not priced</span>
-        ) : (
-          <span className="font-medium text-slate-800">{rate}%</span>
+      case 'marketplace_type':
+        return (
+          <OptionBadges
+            values={profile.marketplace_type}
+            options={optionsFor(MARKETPLACE_OPTION_FIELDS.type)}
+          />
         )
-      }
-      case 'buy_rate': {
-        const rate = headlineRate(fees, 'buy')
-        return rate === null ? <Empty /> : <span className="text-slate-700">{rate}%</span>
+      case 'fulfilment':
+        return (
+          <OptionBadges
+            values={profile.fulfilment}
+            options={optionsFor(MARKETPLACE_OPTION_FIELDS.fulfilment)}
+          />
+        )
+      case 'audience':
+        return (
+          <OptionBadges
+            values={profile.audience}
+            options={optionsFor(MARKETPLACE_OPTION_FIELDS.audience)}
+          />
+        )
+      case 'inventory_type':
+        return (
+          <OptionBadges
+            values={profile.inventory_type}
+            options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
+          />
+        )
+      case 'payment':
+        return profile.payment ? (
+          <OptionBadge
+            value={profile.payment}
+            color={optionColor(optionsFor(MARKETPLACE_OPTION_FIELDS.payment), profile.payment)}
+          />
+        ) : (
+          <Empty />
+        )
+      case 'selling_cost':
+        return profile.selling_cost ? (
+          <OptionBadge
+            value={profile.selling_cost}
+            color={optionColor(
+              optionsFor(MARKETPLACE_OPTION_FIELDS.sellingCost),
+              profile.selling_cost,
+            )}
+          />
+        ) : (
+          <Empty />
+        )
+      case 'priority':
+        return profile.priority ? (
+          <OptionBadge
+            value={profile.priority}
+            color={optionColor(optionsFor(MARKETPLACE_OPTION_FIELDS.priority), profile.priority)}
+          />
+        ) : (
+          <Empty />
+        )
+      case 'buyers_premium': {
+        // Three states. "Not recorded" is not "No".
+        const answer = yesNo(profile.buyers_premium)
+        return answer === null ? <Empty /> : <span className="text-slate-600">{answer}</span>
       }
       case 'settlement_terms':
         return profile.settlement_terms ? (
@@ -269,15 +314,11 @@ export default async function MarketplacesPage({
           tone="violet"
         />
         <StatCard
-          label="Average take rate"
-          value={averageRate === null ? '—' : `${averageRate.toFixed(1)}%`}
+          label="Low selling cost"
+          value={String(lowCost.length)}
           icon={TagIcon}
           tone="amber"
-          hint={
-            priced.length < selling.length
-              ? `${selling.length - priced.length} not priced yet`
-              : undefined
-          }
+          hint={auctions.length > 0 ? `${auctions.length} auction` : undefined}
         />
       </StatGrid>
 

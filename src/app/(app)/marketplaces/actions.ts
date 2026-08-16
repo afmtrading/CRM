@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession } from '@/lib/tenancy'
+import { parseYesNo } from '@/lib/marketplace'
 import type { ActionState } from '@/components/action-form'
 
 /**
@@ -87,6 +88,10 @@ const profileSchema = z.object({
   payout_method: optional(120),
   payout_currency: optional(3),
   notes: z.string().max(20_000).optional().transform((value) => value ?? ''),
+  fee_notes: z.string().max(20_000).optional().transform((value) => value ?? ''),
+  payment: optional(80),
+  selling_cost: optional(40),
+  priority: optional(40),
   reserve_percent: optionalNumber,
   minimum_lot_value: optionalNumber,
 })
@@ -124,6 +129,22 @@ export async function updateMarketplace(
     p_reserve_percent: parsed.data.reserve_percent,
     p_minimum_lot_value: parsed.data.minimum_lot_value,
     p_notes: parsed.data.notes,
+
+    p_fee_notes: parsed.data.fee_notes,
+    /*
+     * getAll, because these are multi-selects: a single get would keep the
+     * first value and silently drop the rest. An empty array is a real answer —
+     * "none of these" — and reaches the function as [] rather than as null,
+     * which is what makes clearing one possible.
+     */
+    p_marketplace_type: formData.getAll('marketplace_type').map(String),
+    p_fulfilment: formData.getAll('fulfilment').map(String),
+    p_payment: parsed.data.payment,
+    p_buyers_premium: parseYesNo(formData.get('buyers_premium')),
+    p_selling_cost: parsed.data.selling_cost,
+    p_audience: formData.getAll('audience').map(String),
+    p_inventory_type: formData.getAll('inventory_type').map(String),
+    p_priority: parsed.data.priority,
   })
 
   if (error) return { error: error.message }
@@ -131,49 +152,4 @@ export async function updateMarketplace(
   revalidatePath('/marketplaces')
   revalidatePath(`/marketplaces/${companyId}`)
   return { ok: 'Saved.' }
-}
-
-export async function setFee(_state: ActionState, formData: FormData): Promise<ActionState> {
-  const context = await requireSession()
-  assertCanWrite(context)
-
-  const marketplaceId = String(formData.get('marketplace_id') ?? '')
-  const side = String(formData.get('side') ?? 'sell')
-
-  const number = (name: string) => {
-    const raw = String(formData.get(name) ?? '').trim()
-    return raw === '' ? 0 : Number(raw)
-  }
-
-  for (const name of ['percent', 'fixed_fee', 'processing_percent']) {
-    if (!Number.isFinite(number(name))) return { error: 'Those rates are not numbers.' }
-  }
-
-  const { error } = await context.supabase.rpc('set_marketplace_fee', {
-    p_marketplace_id: marketplaceId,
-    p_side: side,
-    p_category: String(formData.get('category') ?? '').trim() || null,
-    p_percent: number('percent'),
-    p_fixed_fee: number('fixed_fee'),
-    p_processing_percent: number('processing_percent'),
-    p_note: String(formData.get('note') ?? '').trim() || null,
-  })
-
-  if (error) return { error: error.message }
-
-  revalidatePath('/marketplaces')
-  revalidatePath(`/marketplaces/${marketplaceId}`)
-  return { ok: 'Rate saved.' }
-}
-
-export async function removeFee(formData: FormData): Promise<void> {
-  const context = await requireSession()
-  assertCanWrite(context)
-
-  const { error } = await context.supabase.rpc('remove_marketplace_fee', {
-    p_fee_id: String(formData.get('fee_id') ?? ''),
-  })
-  if (error) throw new Error(error.message)
-
-  revalidatePath(`/marketplaces/${String(formData.get('marketplace_id') ?? '')}`)
 }
