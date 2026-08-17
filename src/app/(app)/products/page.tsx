@@ -7,10 +7,12 @@ import { derivePricing } from '@/lib/products'
 import { availableTone, formatQuantity } from '@/lib/stock'
 import { productImageUrl } from '@/lib/product-image'
 import { likeContains } from '@/lib/sql'
-import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/ui'
+import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
 import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
+import { GroupControls } from '@/components/group-controls'
+import { PRODUCT_GROUP_FIELDS, groupRowsNested } from '@/lib/filters'
 import { formatDay } from '@/lib/format'
 
 import { readColumns } from '../column-actions'
@@ -21,13 +23,34 @@ export const metadata = { title: 'Products · FLO CRM' }
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; show?: string }>
+  searchParams: Promise<{
+    q?: string
+    category?: string
+    show?: string
+    group?: string
+    subgroup?: string
+  }>
 }) {
   const params = await searchParams
   const context = await requireSession()
 
   const search = (params.q ?? '').trim()
   const category = params.category ?? ''
+
+  /*
+   * Only fields the list actually offers. A group key arrives in the URL, so it
+   * is somebody's typo or somebody's experiment until it has been checked
+   * against the list — an unrecognised one groups by a column that does not
+   * exist and puts every product in "None".
+   *
+   * Dropping the group drops the sub-group with it: a sub-group with nothing to
+   * nest inside would silently become the grouping, which is not what the URL
+   * says.
+   */
+  const groupable = (key: string | undefined) =>
+    PRODUCT_GROUP_FIELDS.some((field) => field.key === key) ? (key as string) : ''
+  const groupBy = groupable(params.group)
+  const subGroupBy = groupBy ? groupable(params.subgroup) : ''
   // Anything not on offer is hidden by default: the catalogue people work with
   // is the one they can still sell from. `active` is derived from the status, so
   // this one predicate covers inactive, discontinued, quarantined and sold.
@@ -98,6 +121,11 @@ export default async function ProductsPage({
 
   const catalogue = columnCatalogue('product', definitions)
   const columns = resolveColumns('product', savedColumns, catalogue)
+
+  // Every groupable field on a product is already a readable string — a
+  // category, a brand, a currency code — so the only label worth writing is
+  // the one for the products that have none.
+  const groups = groupRowsNested(products, groupBy, subGroupBy, (_field, value) => value ?? 'None')
 
   /*
    * One cell, by key. Prices go through derivePricing rather than being read
@@ -309,6 +337,8 @@ export default async function ProductsPage({
           </select>
         </div>
 
+        <GroupControls fields={PRODUCT_GROUP_FIELDS} groupBy={groupBy} subGroupBy={subGroupBy} />
+
         <label className="flex items-center gap-2 pb-2.5 text-sm text-slate-600">
           <input
             type="checkbox"
@@ -342,53 +372,88 @@ export default async function ProductsPage({
           }
         />
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                {/*
-                  Whatever this person chose, in their order. The defaults are
-                  what the catalogue is usually opened for — is it sellable,
-                  how many, where, and at what — and the rest of the fields are
-                  a tick away in Columns.
-                */}
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    className={
-                      column.align === 'center'
-                        ? 'text-center'
-                        : column.align === 'right'
-                          ? 'text-right'
-                          : undefined
-                    }
-                  >
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => (
-                <tr key={product.id}>
-                  {columns.map((column) => (
-                    <td
-                      key={column.key}
-                      className={
-                        column.align === 'center'
-                          ? 'text-center'
-                          : column.align === 'right'
-                            ? 'text-right'
-                            : undefined
-                      }
-                    >
-                      {cell(product, column.key)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <div key={group.key ?? 'all'}>
+              {groupBy && (
+                <div className="group-header flex items-baseline justify-between gap-3">
+                  <h2>{group.label}</h2>
+                  <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>
+                </div>
+              )}
+              {/*
+                The card starts here rather than around the heading, so the
+                rounded corners land on the column header row.
+              */}
+              <div className="card overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      {/*
+                        Whatever this person chose, in their order. The defaults
+                        are what the catalogue is usually opened for — is it
+                        sellable, how many, where, and at what — and the rest of
+                        the fields are a tick away in Columns.
+                      */}
+                      {columns.map((column) => (
+                        <th
+                          key={column.key}
+                          className={
+                            column.align === 'center'
+                              ? 'text-center'
+                              : column.align === 'right'
+                                ? 'text-right'
+                                : undefined
+                          }
+                        >
+                          {column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/*
+                      With a sub-group, each one gets a heading row and then its
+                      rows; without, the rows go straight in. Same table either
+                      way, so the columns keep their widths.
+                    */}
+                    {(group.subGroups ?? [{ key: null, label: '', rows: group.rows }]).flatMap(
+                      (sub) => [
+                        ...(group.subGroups
+                          ? [
+                              <SubGroupRow
+                                key={`sub-${sub.key ?? 'none'}`}
+                                label={sub.label}
+                                count={sub.rows.length}
+                                columns={columns.length}
+                              />,
+                            ]
+                          : []),
+                        ...sub.rows.map((product) => (
+                          <tr key={product.id}>
+                            {columns.map((column) => (
+                              <td
+                                key={column.key}
+                                className={
+                                  column.align === 'center'
+                                    ? 'text-center'
+                                    : column.align === 'right'
+                                      ? 'text-right'
+                                      : undefined
+                                }
+                              >
+                                {cell(product, column.key)}
+                              </td>
+                            ))}
+                          </tr>
+                        )),
+                      ],
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </>
