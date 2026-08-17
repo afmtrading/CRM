@@ -24,6 +24,7 @@ import {
   sortRows,
 } from '@/lib/filters'
 import type { SavedFilterRow } from '@/lib/database.types'
+import { placeNames, type Place } from '@/lib/geography'
 import { LayersIcon, StoreIcon, TagIcon } from '@/components/icons'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
@@ -78,6 +79,8 @@ export default async function MarketplacesPage({
     { data: definitionRows },
     { data: pickable },
     { data: savedFilterRows },
+    { data: countryRows },
+    { data: subdivisionRows },
   ] = await Promise.all([
       query.order('name').limit(500),
       scoped(context, 'users').select('*').order('name'),
@@ -109,6 +112,14 @@ export default async function MarketplacesPage({
        * Companies list and the other way round.
        */
       scoped(context, 'saved_filters').select('*').eq('entity_type', 'marketplace'),
+      /*
+       * Reference data, not tenant data — no organization to scope it to, and
+       * the same list for everybody. `based_in` and `sells_in` store codes, so
+       * without these the page shows "CA" where it means Canada, and the
+       * filter is a box you have to know to type a code into.
+       */
+      context.supabase.from('countries').select('code, name').order('name'),
+      context.supabase.from('country_subdivisions').select('code, name').order('name'),
     ])
 
   type Row = CompanyRow & {
@@ -117,6 +128,7 @@ export default async function MarketplacesPage({
   }
 
   const savedFilters = (savedFilterRows ?? []) as SavedFilterRow[]
+  const places = placeNames((countryRows ?? []) as Place[], (subdivisionRows ?? []) as Place[])
 
   // A ?view=<id> link replays a saved filter; anything else comes from the URL.
   const savedView =
@@ -153,17 +165,17 @@ export default async function MarketplacesPage({
   const columns = resolveColumns('marketplace', savedColumns, catalogue)
 
   /*
-   * Owner is the one field whose stored value is not its label — everything
-   * else groups by something already written the way a person would read it,
-   * but an owner is a uuid and a heading of uuids is not a heading.
+   * Three fields whose stored value is not their label: an owner is a uuid,
+   * and a country and a region are codes. The rest already read the way a
+   * person would write them, so they pass straight through.
    */
-  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) =>
-    value === null
-      ? 'None'
-      : field === 'owner_id'
-        ? (ownerNames.get(value) ?? 'None')
-        : value,
-  )
+  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) => {
+    if (value === null) return 'None'
+    if (field === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
+    if (field === 'based_in') return places.country(value)
+    if (field === 'based_in_region') return places.region(value)
+    return value
+  })
 
   /*
    * Headline counts describe every marketplace, not the filtered view, so they
@@ -190,8 +202,6 @@ export default async function MarketplacesPage({
    */
   const fieldOptionsByKey: Record<string, string> = {
     priority: MARKETPLACE_OPTION_FIELDS.priority,
-    based_in: 'company_based_in',
-    based_in_region: 'company_region',
     specialty_market: 'specialty_market',
     'marketplace_profiles.marketplace_type': MARKETPLACE_OPTION_FIELDS.type,
     'marketplace_profiles.fulfilment': MARKETPLACE_OPTION_FIELDS.fulfilment,
@@ -209,6 +219,19 @@ export default async function MarketplacesPage({
         ...field,
         options: ownerList.map((user) => ({ value: user.id, label: user.name || user.email })),
       }
+    }
+
+    /*
+     * The geography fields come from the reference tables rather than from an
+     * organization's option lists — there is no field_options row for a
+     * country. Without these the condition falls back to a text box, and the
+     * value it wants is "CA" rather than "Canada", which nobody would guess.
+     */
+    if (field.key === 'based_in' || field.key === 'sells_in') {
+      return { ...field, options: places.countryOptions }
+    }
+    if (field.key === 'based_in_region') {
+      return { ...field, options: places.regionOptions }
     }
 
     const optionKey = fieldOptionsByKey[field.key]
@@ -355,11 +378,18 @@ export default async function MarketplacesPage({
         )
       case 'contacts':
         return <span className="text-slate-600">{row.contacts?.[0]?.count ?? 0}</span>
+      // Codes in the column, names on the screen. See src/lib/geography.ts.
       case 'based_in':
-        return row.based_in ? <span className="text-slate-600">{row.based_in}</span> : <Empty />
+        return row.based_in ? (
+          <span className="text-slate-600">{places.country(row.based_in)}</span>
+        ) : (
+          <Empty />
+        )
       case 'sells_in':
         return row.sells_in?.length ? (
-          <span className="block truncate text-slate-600">{row.sells_in.join(', ')}</span>
+          <span className="block truncate text-slate-600">
+            {row.sells_in.map((code) => places.country(code)).join(', ')}
+          </span>
         ) : (
           <Empty />
         )
