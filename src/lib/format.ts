@@ -4,10 +4,35 @@
  */
 export const CURRENCIES = ['USD', 'CAD', 'EUR', 'GBP'] as const
 
+/**
+ * A currency code Intl will accept, or null.
+ *
+ * `Intl.NumberFormat` throws a RangeError on anything that is not exactly three
+ * ASCII letters — an empty string, null, 'US', a padded ' USD '. Thrown from a
+ * server component it does not blank a cell, it blanks the page, and a money
+ * formatter is the last thing that should be able to do that.
+ *
+ * Every currency column is `not null` today, so this guards against tomorrow:
+ * an import that writes an empty string, a new nullable column, an RPC that
+ * returns one. 'XYZ' is deliberately allowed through — Intl accepts any
+ * well-formed code and renders it beside the number, which is the honest
+ * outcome for a code this module has not heard of.
+ */
+function usableCurrency(currency: string | null | undefined): string | null {
+  const code = (currency ?? '').trim().toUpperCase()
+  return /^[A-Z]{3}$/.test(code) ? code : null
+}
+
 export function formatCurrency(value: number, currency = 'USD'): string {
+  const code = usableCurrency(currency)
+
+  // The number alone rather than a guess. Printing an amount under a currency
+  // nobody chose is worse than printing it under none.
+  if (!code) return formatAmount(value ?? 0)
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency,
+    currency: code,
     maximumFractionDigits: 0,
   }).format(value ?? 0)
 }
@@ -21,9 +46,19 @@ export function formatCurrency(value: number, currency = 'USD'): string {
  * the formatter.
  */
 export function formatPrice(value: number, currency = 'USD'): string {
+  const code = usableCurrency(currency)
+
+  // Still to the cent, still without inventing a currency. See usableCurrency.
+  if (!code) {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value ?? 0)
+  }
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency,
+    currency: code,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value ?? 0)

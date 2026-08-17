@@ -1,4 +1,5 @@
 import { requireSession } from '@/lib/tenancy'
+import { timeZoneLabel } from '@/lib/timezone'
 import { PageHeader, Section } from '@/components/ui'
 
 import { OrganizationForm } from './organization-form'
@@ -29,7 +30,7 @@ export default async function OrganizationSettingsPage() {
           <p className="text-sm text-slate-500">
             Only an administrator can change these. Your organization is priced in{' '}
             <strong>{context.organization.default_currency}</strong> and reads its dates against{' '}
-            <strong>{context.organization.timezone}</strong>.
+            <strong>{timeZoneLabel(context.organization.timezone)}</strong>.
           </p>
         )}
       </Section>
