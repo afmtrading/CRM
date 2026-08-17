@@ -359,3 +359,44 @@ export async function deleteProduct(formData: FormData) {
   revalidatePath('/products')
   redirect('/products')
 }
+
+/**
+ * One place's note, edited in the table rather than in the Adjust editor.
+ *
+ * Goes through set_stock_level like every other stock write — there is one door
+ * into these three tables and this is not a reason to cut a second one. Passing
+ * neither quantity nor reserved is what makes it safe to call from a row that
+ * somebody is only annotating: the function coalesces a null onto the stored
+ * value, so the numbers are left exactly as they are rather than being read
+ * here and written back, which is the version of this that would quietly revert
+ * an adjustment made in another tab a second earlier.
+ *
+ * It also writes no history. The adjustment rows are conditional on a number
+ * actually moving, and a note is not a movement.
+ */
+export async function setStockNote(formData: FormData) {
+  const context = await requireSession()
+  assertCanManage(context)
+
+  const productId = String(formData.get('product_id') ?? '')
+  const locationId = String(formData.get('location_id') ?? '')
+  const binId = String(formData.get('bin_id') ?? '') || null
+
+  /*
+   * Trimmed to an empty string, never to null: null tells set_stock_level to
+   * leave the note alone, which would make an emptied box do nothing at all.
+   */
+  const note = String(formData.get('note') ?? '').trim()
+
+  const { error } = await context.supabase.rpc('set_stock_level', {
+    p_product_id: productId,
+    p_location_id: locationId,
+    p_bin_id: binId,
+    p_reason: 'Note edited on the product',
+    p_place_note: note,
+  })
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/products/${productId}`)
+}
