@@ -36,8 +36,10 @@ export default async function SalesOrdersPage({
   const filter = salesOrderFilterFromParams(params)
 
   const [{ data: companies }, { data: users }] = await Promise.all([
-    scoped(context, 'companies').select('*').is('deleted_at', null).order('name'),
-    scoped(context, 'users').select('*').order('name'),
+    // Named, not whole. Both are here to turn an id into a name and to fill a
+    // dropdown; `*` pulled every column of every company to do it.
+    scoped(context, 'companies').select('id, name').is('deleted_at', null).order('name'),
+    scoped(context, 'users').select('id, name, email').order('name'),
   ])
 
   let query = scoped(context, 'sales_orders')
@@ -78,11 +80,13 @@ export default async function SalesOrdersPage({
   const orderValue = (order: SalesOrderRow) =>
     (valueByOrder.get(order.id) ?? 0) + Number(order.shipping_charge)
 
-  const companyName = new Map(
-    ((companies ?? []) as CompanyRow[]).map((company) => [company.id, company.name]),
-  )
+  const companyList = (companies ?? []) as Pick<CompanyRow, 'id' | 'name'>[]
+  const companyName = new Map(companyList.map((company) => [company.id, company.name]))
   const ownerName = new Map(
-    ((users ?? []) as UserRow[]).map((user) => [user.id, user.name || user.email]),
+    ((users ?? []) as Pick<UserRow, 'id' | 'name' | 'email'>[]).map((user) => [
+      user.id,
+      user.name || user.email,
+    ]),
   )
 
   // Cancelled orders are not money anybody expects, so they stay out of the
@@ -158,7 +162,7 @@ export default async function SalesOrdersPage({
         <Field label="Company" htmlFor="company">
           <select id="company" name="company" className="input" defaultValue={filter.company}>
             <option value="">Every company</option>
-            {((companies ?? []) as CompanyRow[]).map((company) => (
+            {companyList.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.name}
               </option>
