@@ -519,18 +519,24 @@ export default async function ContactsPage({
       ) : (
         <BulkEdit entity="contact" fields={bulkFields} canDelete={context.canDelete}>
           <ConsentBar lists={(emailLists ?? []) as { id: string; name: string }[]} />
-          <div className="space-y-6">
+          <div className="space-y-8">
             {groups.map((group) => (
-            <div key={group.key ?? "all"} className="card overflow-hidden">
+            <div key={group.key ?? "all"}>
               {config.groupBy && (
-                <div className="group-header flex items-center justify-between">
-                  <h2 className="text-sm font-semibold">{group.label}</h2>
-                  <span className="badge bg-white/25 text-white">
+                <div className="group-header flex items-baseline justify-between gap-3">
+                  <h2>{group.label}</h2>
+                  <span className="badge bg-brand-100 text-brand-700">
                     {group.rows.length}
                   </span>
                 </div>
               )}
-              <div className="overflow-x-auto">
+              {/*
+                The card starts here rather than around the heading, so the
+                rounded corners land on the column header row. overflow-x is
+                what makes the radius clip that row's fill; it was already
+                here for wide tables.
+              */}
+              <div className="card overflow-x-auto">
                 <table className="table">
                   <thead>
                     {/*

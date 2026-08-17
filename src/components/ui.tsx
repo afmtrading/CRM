@@ -259,6 +259,10 @@ export function Section({
  * A row inside the table rather than a card of its own, because the columns
  * have to keep lining up: a nested table would let each sub-group choose its
  * own column widths, and a list you cannot read down a column is not a list.
+ *
+ * The row carries nothing but the class — the rule, the padding and the
+ * suppression of the first one's border all live in globals.css, where they
+ * can out-specify the `.table td` defaults they have to beat.
  */
 export function SubGroupRow({
   label,
@@ -270,12 +274,12 @@ export function SubGroupRow({
   columns: number
 }) {
   return (
-    <tr className="bg-band">
-      <td colSpan={columns} className="px-4 py-2">
+    <tr className="subgroup">
+      <td colSpan={columns}>
         <span className="text-xs font-semibold uppercase tracking-wide text-brand-700">
           {label}
         </span>
-        <span className="ml-2 text-xs text-brand-600/70">{count}</span>
+        <span className="ml-2 text-xs text-slate-400">{count}</span>
       </td>
     </tr>
   )

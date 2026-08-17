@@ -277,15 +277,21 @@ export default async function CompaniesPage({
         />
       ) : (
         <BulkEdit entity="company" fields={bulkFields} canDelete={context.canDelete}>
-          <div className="space-y-6">
+          <div className="space-y-8">
             {groups.map((group) => (
-            <div key={group.key ?? 'all'} className="card overflow-hidden">
+            <div key={group.key ?? 'all'}>
               {config.groupBy && (
-                <div className="group-header flex items-center justify-between">
-                  <h2 className="text-sm font-semibold">{group.label}</h2>
-                  <span className="badge bg-white/25 text-white">{group.rows.length}</span>
+                <div className="group-header flex items-baseline justify-between gap-3">
+                  <h2>{group.label}</h2>
+                  <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>
                 </div>
               )}
+              {/*
+                The card starts here rather than around the heading, so the
+                rounded corners land on the column header row, and overflow-x
+                is what makes the radius clip that row's fill.
+              */}
+              <div className="card overflow-x-auto">
               <table className="table">
                 <thead>
                   {/*
@@ -326,6 +332,7 @@ export default async function CompaniesPage({
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
             ))}
           </div>
