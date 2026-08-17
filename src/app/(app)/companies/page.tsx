@@ -281,9 +281,9 @@ export default async function CompaniesPage({
             {groups.map((group) => (
             <div key={group.key ?? 'all'} className="card overflow-hidden">
               {config.groupBy && (
-                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-                  <h2 className="text-sm font-semibold text-slate-800">{group.label}</h2>
-                  <span className="text-xs text-slate-500">{group.rows.length}</span>
+                <div className="group-header flex items-center justify-between">
+                  <h2 className="text-sm font-semibold">{group.label}</h2>
+                  <span className="badge bg-white/25 text-white">{group.rows.length}</span>
                 </div>
               )}
               <table className="table">

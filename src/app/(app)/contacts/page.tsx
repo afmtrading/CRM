@@ -523,11 +523,9 @@ export default async function ContactsPage({
             {groups.map((group) => (
             <div key={group.key ?? "all"} className="card overflow-hidden">
               {config.groupBy && (
-                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    {group.label}
-                  </h2>
-                  <span className="badge bg-slate-100 text-slate-600">
+                <div className="group-header flex items-center justify-between">
+                  <h2 className="text-sm font-semibold">{group.label}</h2>
+                  <span className="badge bg-white/25 text-white">
                     {group.rows.length}
                   </span>
                 </div>

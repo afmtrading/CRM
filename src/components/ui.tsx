@@ -270,12 +270,12 @@ export function SubGroupRow({
   columns: number
 }) {
   return (
-    <tr className="bg-slate-50/80">
+    <tr className="bg-band">
       <td colSpan={columns} className="px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <span className="text-xs font-semibold uppercase tracking-wide text-brand-700">
           {label}
         </span>
-        <span className="ml-2 text-xs text-slate-400">{count}</span>
+        <span className="ml-2 text-xs text-brand-600/70">{count}</span>
       </td>
     </tr>
   )
