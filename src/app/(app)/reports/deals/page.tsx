@@ -420,15 +420,15 @@ export default async function DealLedgerPage({
             return (
               <section key={group.key ?? '—'} className="card overflow-hidden">
                 {groupBy && (
-                  <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-slate-100 px-5 py-3">
-                    <h2 className="text-sm font-semibold text-slate-900">{group.label}</h2>
-                    <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
+                  <header className="group-header flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <h2 className="text-sm font-semibold">{group.label}</h2>
+                    <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-white/80">
                       <span>{formatNumber(group.rows.length)} deals</span>
-                      <span className="text-slate-300">·</span>
+                      <span className="text-white/45">·</span>
                       <MoneyTotals rows={groupSummary.totalValue} />
                       {groupSummary.winRate !== null && (
                         <>
-                          <span className="text-slate-300">·</span>
+                          <span className="text-white/45">·</span>
                           <span>{formatPercent(groupSummary.winRate)} won</span>
                         </>
                       )}

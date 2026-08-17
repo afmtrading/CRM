@@ -2,19 +2,63 @@
 
 @theme {
   /*
-   * Brand green. The app reads as one product across organizations, so the
+   * Brand navy. The app reads as one product across organizations, so the
    * accent is fixed here; an organization's own primary_color is only used for
    * its logo chip.
+   *
+   * This ramp used to be green, and the swap is the whole of the contrast pass:
+   * every primary button, active nav item, focus ring and tinted panel in the
+   * app already reads `brand-*`, so changing these six values moves all of them
+   * at once. It also frees green up. Green currently means both "press this"
+   * and "this is fine", and one colour cannot carry two meanings — after this,
+   * the only green left is the good state.
+   *
+   * 600 is the level-1 button. The rest are built around it.
+   *
+   * 300 and 800 are new. Both were already being referenced — the funnel
+   * chart's "still there" segment and its legend swatch on 300, the mailbox
+   * nudge on 800 — against a ramp that stopped at 200 and skipped from 500 to
+   * 700. In Tailwind v4 a missing token means the utility is never emitted at
+   * all, so those two elements have been rendering with no colour rather than
+   * the wrong one. Defining them is the fix.
    */
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
-  --color-brand-200: #a7f3d0;
-  --color-brand-500: #10b981;
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
+  --color-brand-50: #f1f6fd;
+  --color-brand-100: #dce9f9;
+  --color-brand-200: #b9cfe8;
+  --color-brand-300: #8fb3da;
+  --color-brand-500: #1f5296;
+  --color-brand-600: #184077;
+  --color-brand-700: #102c55;
+  --color-brand-800: #0b1f3a;
+
+  /*
+   * Level 1 of a grouped list, and the loudest thing on a page. It is not a
+   * step on the brand ramp on purpose: a group header is a landmark rather than
+   * something to press, and giving it the button's navy would make every band
+   * look clickable.
+   */
+  --color-group: #1276f9;
+
+  /* Level 2. Deliberately quiet — it has to sit under the header, not beside it. */
+  --color-band: #dce9f9;
 
   /* Cards float on a soft grey canvas rather than sitting on flat white. */
   --color-canvas: #f4f5f7;
+
+  /*
+   * The shadow scale, 8% deeper than Tailwind's default. Small, and meant to
+   * be: depth is what separates a row from a card from a dialog, and the
+   * complaint was that the three were reading as one plane. Every alpha below
+   * is the stock value × 1.08 — nothing else about the scale changes, so
+   * `shadow-sm` and friends keep their offsets and blur.
+   */
+  --shadow-2xs: 0 1px rgb(0 0 0 / 0.054);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.054);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.108), 0 1px 2px -1px rgb(0 0 0 / 0.108);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.108), 0 2px 4px -2px rgb(0 0 0 / 0.108);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.108), 0 4px 6px -4px rgb(0 0 0 / 0.108);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.108), 0 8px 10px -6px rgb(0 0 0 / 0.108);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.27);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -33,11 +77,12 @@ body {
  * utilities can be composed with @apply, which is what btn-primary and friends
  * do with btn.
  */
+/* Shadows here are the same +8% as the scale above: 0.04 → 0.0432, and so on. */
 @utility card {
   @apply rounded-2xl border border-slate-200/80 bg-white;
   box-shadow:
-    0 1px 2px rgb(16 24 40 / 0.04),
-    0 1px 3px rgb(16 24 40 / 0.06);
+    0 1px 2px rgb(16 24 40 / 0.043),
+    0 1px 3px rgb(16 24 40 / 0.065);
 }
 
 /* Lifts on hover — for cards that are themselves links. */
@@ -46,9 +91,20 @@ body {
 
   &:hover {
     box-shadow:
-      0 4px 6px -1px rgb(16 24 40 / 0.07),
-      0 2px 4px -2px rgb(16 24 40 / 0.05);
+      0 4px 6px -1px rgb(16 24 40 / 0.076),
+      0 2px 4px -2px rgb(16 24 40 / 0.054);
   }
+}
+
+/*
+ * The band at the top of a group, level 1.
+ *
+ * Background and padding only. Each list arranges its own contents — the deals
+ * report puts a money summary in there and the contacts list puts a count — and
+ * baking a flex layout in here would mean every caller fighting it back out.
+ */
+@utility group-header {
+  @apply bg-group px-5 py-3 text-white;
 }
 
 @utility btn {
