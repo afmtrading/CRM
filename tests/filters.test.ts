@@ -9,7 +9,9 @@ import {
   filterToSearchParams,
   groupRows,
   groupRowsNested,
+  matchesFilter,
   parseFilterConfig,
+  sortRows,
   toColumn,
   type FilterConfig,
   type QueryLike,
@@ -372,5 +374,158 @@ describe('dealVisibility', () => {
   it('applies nothing at all for "open and closed"', () => {
     expect(dealVisibility('all', 'kanban', closing)).toEqual({ kind: 'all' })
     expect(dealVisibility('all', 'list', closing)).toEqual({ kind: 'all' })
+  })
+})
+
+/*
+ * The in-memory path, used by the marketplaces list because half its fields
+ * live on an embedded profile. Every expectation here is really an assertion
+ * that it agrees with the query path — the same FilterBar drives both.
+ */
+describe('matchesFilter', () => {
+  const row = {
+    name: 'Liquidation Central',
+    domain: 'liq.example',
+    priority: 'High',
+    owner_id: 'ada',
+    sells_in: ['CA', 'US'],
+    marketplace_profiles: {
+      selling_cost: 'Low',
+      payment: 'Via Platform',
+      buyers_premium: true,
+      audience: ['B2B'],
+      store_name: 'Central Outlet',
+      reserve_percent: 12,
+      opened_on: '2025-04-01',
+    },
+  }
+
+  const filter = (...conditions: FilterConfig['conditions']): FilterConfig => ({
+    ...EMPTY_FILTER,
+    conditions,
+  })
+
+  it('matches a condition on an embedded field', () => {
+    const yes = filter({ field: 'marketplace_profiles.selling_cost', operator: 'eq', value: 'Low' })
+    const no = filter({ field: 'marketplace_profiles.selling_cost', operator: 'eq', value: 'High' })
+
+    expect(matchesFilter(row, yes, 'marketplace')).toBe(true)
+    expect(matchesFilter(row, no, 'marketplace')).toBe(false)
+  })
+
+  it('requires every condition under match: all', () => {
+    const config = filter(
+      { field: 'priority', operator: 'eq', value: 'High' },
+      { field: 'marketplace_profiles.payment', operator: 'eq', value: 'Via Seller' },
+    )
+
+    expect(matchesFilter(row, config, 'marketplace')).toBe(false)
+    expect(matchesFilter(row, { ...config, match: 'any' }, 'marketplace')).toBe(true)
+  })
+
+  it('handles the array operators against a stored array', () => {
+    const has = (operator: 'has_all' | 'has_any' | 'has_none', value: string) =>
+      matchesFilter(row, filter({ field: 'sells_in', operator, value }), 'marketplace')
+
+    expect(has('has_all', 'CA,US')).toBe(true)
+    expect(has('has_all', 'CA,MX')).toBe(false)
+    expect(has('has_any', 'MX,US')).toBe(true)
+    expect(has('has_none', 'MX')).toBe(true)
+    expect(has('has_none', 'US')).toBe(false)
+  })
+
+  /* The stored array is sorted by a trigger; what somebody types is not. */
+  it('compares is_exactly as a set rather than in order', () => {
+    const exactly = (value: string) =>
+      matchesFilter(row, filter({ field: 'sells_in', operator: 'is_exactly', value }), 'marketplace')
+
+    expect(exactly('US,CA')).toBe(true)
+    expect(exactly('CA')).toBe(false)
+  })
+
+  it('compares numbers numerically and dates lexicographically', () => {
+    const cond = (field: string, operator: 'gt' | 'lt', value: string) =>
+      matchesFilter(row, filter({ field, operator, value }), 'marketplace')
+
+    // 9 < 12 numerically, which string comparison would get backwards.
+    expect(cond('marketplace_profiles.reserve_percent', 'gt', '9')).toBe(true)
+    expect(cond('marketplace_profiles.reserve_percent', 'lt', '9')).toBe(false)
+    expect(cond('marketplace_profiles.opened_on', 'gt', '2025-01-01')).toBe(true)
+    expect(cond('marketplace_profiles.opened_on', 'lt', '2025-01-01')).toBe(false)
+  })
+
+  /*
+   * `col <> 'x'` is null for a null column, and null is not true. The query
+   * path drops those rows, so this one has to as well.
+   */
+  it('does not match is-not against a row with no value', () => {
+    const bare = { name: 'Nothing recorded', marketplace_profiles: {} }
+    const config = filter({
+      field: 'marketplace_profiles.selling_cost',
+      operator: 'neq',
+      value: 'Low',
+    })
+
+    expect(matchesFilter(bare, config, 'marketplace')).toBe(false)
+  })
+
+  it('answers is_empty and is_not_empty for a missing embedded field', () => {
+    const bare = { name: 'Nothing recorded', marketplace_profiles: {} }
+    const empty = filter({ field: 'marketplace_profiles.selling_cost', operator: 'is_empty', value: '' })
+
+    expect(matchesFilter(bare, empty, 'marketplace')).toBe(true)
+    expect(matchesFilter(row, empty, 'marketplace')).toBe(false)
+  })
+
+  /* A condition somebody has added but not filled in narrows nothing. */
+  it('skips a condition with no value', () => {
+    const config = filter({ field: 'priority', operator: 'eq', value: '' })
+    expect(matchesFilter(row, config, 'marketplace')).toBe(true)
+  })
+
+  it('searches the entity’s own columns, embedded ones included', () => {
+    const search = (term: string) =>
+      matchesFilter(row, { ...EMPTY_FILTER, search: term }, 'marketplace')
+
+    expect(search('liquidation')).toBe(true)
+    expect(search('central outlet')).toBe(true)
+    expect(search('nowhere')).toBe(false)
+  })
+
+  it('applies the search on top of the conditions rather than instead of them', () => {
+    const config = {
+      ...filter({ field: 'priority', operator: 'eq', value: 'High' }),
+      search: 'nowhere',
+    }
+    expect(matchesFilter(row, config, 'marketplace')).toBe(false)
+  })
+})
+
+describe('sortRows', () => {
+  const rows = [
+    { id: 'a', name: 'Beta', profile: { cost: 3 } },
+    { id: 'b', name: 'alpha', profile: { cost: 1 } },
+    { id: 'c', name: 'Gamma', profile: {} },
+  ]
+
+  it('leaves the order alone when nothing was chosen', () => {
+    expect(sortRows(rows, null).map((row) => row.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('sorts by an embedded field, numerically', () => {
+    const sorted = sortRows(rows, { field: 'profile.cost', direction: 'asc' })
+    expect(sorted.map((row) => row.id)).toEqual(['b', 'a', 'c'])
+  })
+
+  /* Blanks last in both directions, matching `nullsFirst: false` on the query. */
+  it('puts rows with no value last whichever way it is sorted', () => {
+    expect(sortRows(rows, { field: 'profile.cost', direction: 'desc' }).at(-1)?.id).toBe('c')
+    expect(sortRows(rows, { field: 'profile.cost', direction: 'asc' }).at(-1)?.id).toBe('c')
+  })
+
+  it('does not mutate the array it was given', () => {
+    const original = [...rows]
+    sortRows(rows, { field: 'name', direction: 'asc' })
+    expect(rows).toEqual(original)
   })
 })

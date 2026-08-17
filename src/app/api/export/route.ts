@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 
 import { getSessionContext, scoped, type TenantTable } from '@/lib/tenancy'
-import { applyFilter, filterFromSearchParams } from '@/lib/filters'
+import { applyFilter, filterFromSearchParams, matchesFilter } from '@/lib/filters'
 import {
   DEFAULT_COLUMNS,
   LEDGER_COLUMNS_COOKIE,
@@ -43,6 +43,7 @@ const ENTITY_TABLES: Record<string, TenantTable> = {
   assignment_rule: 'assignment_rules',
   custom_field_definition: 'custom_field_definitions',
   contact_tag: 'contact_tags',
+  product: 'products',
 }
 
 export async function GET(request: NextRequest) {
@@ -136,6 +137,48 @@ export async function GET(request: NextRequest) {
     })
   }
 
+  /*
+   * Marketplaces are not a table either — they are the companies that have a
+   * profile — and the filter that produced the view was evaluated in memory
+   * rather than in the query, for the reasons set out beside MARKETPLACE_FIELDS.
+   * So the export does the same: fetch the joined rows, run the same predicate
+   * the page ran, and flatten the profile in beside the company.
+   */
+  if (entity === 'marketplace') {
+    const { data, error } = await scoped(context, 'companies')
+      .select('*, marketplace_profiles!inner(*)')
+      .is('deleted_at', null)
+      .order('name')
+      .limit(50_000)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const config = filterFromSearchParams(params)
+    const rows = ((data ?? []) as Record<string, unknown>[])
+      .filter((row) => matchesFilter(row, config, 'marketplace'))
+      .map(({ marketplace_profiles: profile, ...company }) => ({
+        ...company,
+        // Prefixed, because a company and its profile both have a created_at
+        // and a flattened row must not lose one of them.
+        ...Object.fromEntries(
+          Object.entries((profile ?? {}) as Record<string, unknown>).map(([key, value]) => [
+            `marketplace_${key}`,
+            value,
+          ]),
+        ),
+      }))
+
+    const date = new Date().toISOString().slice(0, 10)
+    return new NextResponse(toCsv(rows), {
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': `attachment; filename="${context.organization.slug}-marketplaces-${date}.csv"`,
+      },
+    })
+  }
+
   const table = ENTITY_TABLES[entity]
   if (!table) {
     return NextResponse.json({ error: `Unknown entity "${entity}"` }, { status: 400 })
@@ -143,13 +186,14 @@ export async function GET(request: NextRequest) {
 
   let query = scoped(context, table).select('*')
 
-  // Contacts, companies and deals carry the filter UI, so an export mirrors
-  // exactly what the user is looking at.
-  if (['contact', 'company', 'deal'].includes(entity)) {
+  // These carry the filter UI, so an export mirrors exactly what the user is
+  // looking at.
+  if (['contact', 'company', 'deal', 'product'].includes(entity)) {
     const config = filterFromSearchParams(params)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query = applyFilter(query as any, config, entity as FilterEntityType) as any
     if (entity === 'contact') query = query.is('duplicate_of_id', null)
+    if (entity === 'product') query = query.is('deleted_at', null)
   }
 
   const { data, error } = await query.limit(50_000)

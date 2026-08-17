@@ -145,35 +145,53 @@ export const DEAL_FIELDS: FieldDef[] = [
   { key: 'expected_close_date', label: 'Expected close', type: 'date', sortable: true },
 ]
 
-/*
- * Products and marketplaces group but do not filter.
- *
- * Both pages have their own small GET form rather than the FilterBar, so what
- * they need is the groupable half of a field list and nothing else — no
- * operators, no saved views, no export entity. These are those halves, kept
- * here beside the others so there is one place to look for "what can a list be
- * grouped by".
- */
-export const PRODUCT_GROUP_FIELDS: FieldDef[] = [
-  { key: 'category', label: 'Category', type: 'text', groupable: true },
-  { key: 'status', label: 'Status', type: 'text', groupable: true },
-  { key: 'brand', label: 'Brand', type: 'text', groupable: true },
+export const PRODUCT_FIELDS: FieldDef[] = [
+  { key: 'name', label: 'Name', type: 'text', sortable: true },
+  { key: 'sku', label: 'SKU', type: 'text', sortable: true },
+  { key: 'brand', label: 'Brand', type: 'text', groupable: true, sortable: true },
+  { key: 'category', label: 'Category', type: 'text', groupable: true, sortable: true },
+  { key: 'status', label: 'Status', type: 'enum', groupable: true, sortable: true },
   { key: 'currency', label: 'Currency', type: 'text', groupable: true },
+  { key: 'unit_price', label: 'Retail price', type: 'number', sortable: true },
+  { key: 'unit_cost', label: 'Unit cost', type: 'number', sortable: true },
+  { key: 'case_pack', label: 'Case pack', type: 'number', sortable: true },
+  /*
+   * `active` is deliberately not here. Whether retired products are on the page
+   * at all is a base predicate on the query, toggled beside the list, and
+   * offering it as a condition as well would be two controls that contradict
+   * each other the moment they disagree.
+   */
+  { key: 'created_at', label: 'Created', type: 'date', sortable: true },
 ]
 
 /*
- * A marketplace row is a company with its profile embedded, so the groupable
- * fields come from both halves and the dotted ones are the profile's. Anything
- * stored as an array is left out for the same reason companies leave the
- * territories out: a marketplace with three audiences belongs to three groups
- * at once, and a grouped list would either repeat it or pick one arbitrarily.
+ * A marketplace row is a company with its profile embedded, so the fields come
+ * from both halves and the dotted ones belong to the profile.
+ *
+ * They are the reason the marketplaces list filters in memory rather than in
+ * the query: `conditionToPredicate` packs a condition into
+ * `column.operator.value` and `applyFilter` splits it on the first dot, so a
+ * column whose own name contains one cannot survive the round trip. Rewriting
+ * that packing would touch every list in the app to serve one; evaluating a few
+ * dozen marketplaces in memory does not.
  */
-export const MARKETPLACE_GROUP_FIELDS: FieldDef[] = [
-  { key: 'priority', label: 'Priority', type: 'enum', groupable: true },
+export const MARKETPLACE_FIELDS: FieldDef[] = [
+  { key: 'name', label: 'Name', type: 'text', sortable: true },
+  { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
-  { key: 'based_in', label: 'Based in', type: 'enum', groupable: true },
-  { key: 'marketplace_profiles.selling_cost', label: 'Selling cost', type: 'enum', groupable: true },
+  { key: 'based_in', label: 'Based in', type: 'enum', groupable: true, sortable: true },
+  { key: 'based_in_region', label: 'Region', type: 'enum', groupable: true },
+  { key: 'domain', label: 'Website', type: 'text' },
+  { key: 'sells_in', label: 'Sells in', type: 'array' },
+  { key: 'specialty_market', label: 'Merchandise', type: 'array' },
+
+  { key: 'marketplace_profiles.marketplace_type', label: 'Marketplace type', type: 'array' },
+  { key: 'marketplace_profiles.fulfilment', label: 'Fulfilment', type: 'array' },
+  { key: 'marketplace_profiles.audience', label: 'Audience', type: 'array' },
+  { key: 'marketplace_profiles.inventory_type', label: 'Inventory type', type: 'array' },
   { key: 'marketplace_profiles.payment', label: 'Payment', type: 'enum', groupable: true },
+  { key: 'marketplace_profiles.selling_cost', label: 'Selling cost', type: 'enum', groupable: true },
+  { key: 'marketplace_profiles.buyers_premium', label: "Buyer's premium", type: 'boolean' },
   {
     key: 'marketplace_profiles.account_status',
     label: 'Account status',
@@ -186,6 +204,10 @@ export const MARKETPLACE_GROUP_FIELDS: FieldDef[] = [
     type: 'text',
     groupable: true,
   },
+  { key: 'marketplace_profiles.sells_through', label: 'Sell through', type: 'boolean' },
+  { key: 'marketplace_profiles.sources_from', label: 'Source from', type: 'boolean' },
+  { key: 'marketplace_profiles.settlement_terms', label: 'Settlement terms', type: 'text' },
+  { key: 'marketplace_profiles.opened_on', label: 'Opened', type: 'date', sortable: true },
 ]
 
 export function baseFieldsFor(entity: FilterEntityType): FieldDef[] {
@@ -194,6 +216,10 @@ export function baseFieldsFor(entity: FilterEntityType): FieldDef[] {
       return COMPANY_FIELDS
     case 'deal':
       return DEAL_FIELDS
+    case 'product':
+      return PRODUCT_FIELDS
+    case 'marketplace':
+      return MARKETPLACE_FIELDS
     default:
       return CONTACT_FIELDS
   }
@@ -368,15 +394,25 @@ export function searchPredicate(entity: FilterEntityType, term: string): string 
   const trimmed = term.trim()
   if (!trimmed) return null
 
-  const columns =
-    entity === 'company'
-      ? ['name', 'domain', 'industry']
-      : entity === 'deal'
-        ? ['name']
-        : ['first_name', 'last_name', 'email', 'phone']
+  const columns = searchColumnsFor(entity)
 
   return columns.map((c) => `${c}.ilike.${escapeValue(`%${trimmed}%`)}`).join(',')
 }
+
+/**
+ * The obvious text columns per entity, in one table so the query path and the
+ * in-memory path cannot drift into searching different things.
+ */
+const SEARCH_COLUMNS: Partial<Record<FilterEntityType, string[]>> = {
+  contact: ['first_name', 'last_name', 'email', 'phone'],
+  company: ['name', 'domain', 'industry'],
+  deal: ['name'],
+  product: ['name', 'sku', 'brand'],
+  marketplace: ['name', 'domain', 'marketplace_profiles.store_name'],
+}
+
+const searchColumnsFor = (entity: FilterEntityType): string[] =>
+  SEARCH_COLUMNS[entity] ?? SEARCH_COLUMNS.contact!
 
 /** Minimal shape of the PostgREST builder this module needs. */
 export interface QueryLike {
@@ -395,6 +431,13 @@ export function applyFilter<T extends QueryLike>(
   query: T,
   config: FilterConfig,
   entity: FilterEntityType = 'contact',
+  /*
+   * What to order by when nobody has chosen. Newest first is right for a list
+   * of people or deals, where the question is usually "what has happened
+   * lately"; it is wrong for a catalogue, which is read alphabetically. The
+   * caller knows which of the two it is.
+   */
+  defaultOrder: { column: string; ascending: boolean } = { column: 'created_at', ascending: false },
 ): T {
   let result = query
 
@@ -433,7 +476,7 @@ export function applyFilter<T extends QueryLike>(
       nullsFirst: false,
     }) as T
   } else {
-    result = result.order('created_at', { ascending: false }) as T
+    result = result.order(defaultOrder.column, { ascending: defaultOrder.ascending }) as T
   }
 
   return result
@@ -457,6 +500,12 @@ export interface RowGroup<T> {
  * profile and the thing worth grouping by lives on the profile.
  */
 function groupValue(row: Record<string, unknown>, field: string): string | null {
+  const raw = rowValue(row, field)
+  return raw === null || raw === undefined || raw === '' ? null : String(raw)
+}
+
+/** The same walk, returning what is actually there rather than a label. */
+function rowValue(row: Record<string, unknown>, field: string): unknown {
   let raw: unknown = row
 
   for (const step of field.split('.')) {
@@ -464,7 +513,7 @@ function groupValue(row: Record<string, unknown>, field: string): string | null 
     raw = (raw as Record<string, unknown>)[step]
   }
 
-  return raw === null || raw === undefined || raw === '' ? null : String(raw)
+  return raw ?? null
 }
 
 /**
@@ -525,6 +574,160 @@ export function groupRowsNested<T extends Record<string, unknown>>(
     ...group,
     subGroups: groupRows(group.rows, subGroupBy, (value) => labelFor(subGroupBy, value)),
   }))
+}
+
+// -----------------------------------------------------------------------------
+// The same filter, evaluated in memory
+//
+// For lists whose interesting columns are not columns of the table being
+// queried. The marketplaces list is a company joined to its profile, and half
+// of what anybody wants to filter on — what it costs, how it pays, whether
+// there is a buyer's premium — lives on the profile.
+//
+// Everything below is written to agree with conditionToPredicate rather than to
+// be independently reasonable, because the same FilterBar drives both and a
+// condition that means one thing on Products and another on Marketplaces would
+// be worse than no filter at all. Where SQL and intuition disagree, SQL wins:
+// `is not` does not match a row with no value, because `col <> 'x'` is null for
+// a null column and null is not true.
+// -----------------------------------------------------------------------------
+
+function isBlank(raw: unknown): boolean {
+  if (raw === null || raw === undefined || raw === '') return true
+  return Array.isArray(raw) && raw.length === 0
+}
+
+const text = (value: unknown) => String(value ?? '').toLowerCase()
+
+/** Numeric where both sides are numbers, lexicographic otherwise — which is */
+/** the right answer for ISO dates and the only sane one for everything else. */
+function compare(raw: unknown, value: unknown): number {
+  const a = Number(raw)
+  const b = Number(value)
+  if (Number.isFinite(a) && Number.isFinite(b) && String(raw).trim() !== '') return a - b
+
+  const left = String(raw ?? '')
+  const right = String(value ?? '')
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function matchesCondition(row: Record<string, unknown>, condition: FilterCondition): boolean {
+  const raw = rowValue(row, condition.field)
+  const { operator, value } = condition
+
+  if (operator === 'is_empty') return isBlank(raw)
+  if (operator === 'is_not_empty') return !isBlank(raw)
+
+  // Nothing to compare against is not a match, whichever way the comparison
+  // was going to run. See the note above about `is not`.
+  if (isBlank(raw)) return false
+
+  const list = Array.isArray(value)
+    ? value.map(String)
+    : String(value ?? '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+
+  const asArray = Array.isArray(raw) ? raw.map(String) : [String(raw)]
+
+  switch (operator) {
+    case 'eq':
+      return String(raw) === String(value)
+    case 'neq':
+      return String(raw) !== String(value)
+    case 'contains':
+      return text(raw).includes(text(value))
+    case 'starts_with':
+      return text(raw).startsWith(text(value))
+    case 'gt':
+      return compare(raw, value) > 0
+    case 'gte':
+      return compare(raw, value) >= 0
+    case 'lt':
+      return compare(raw, value) < 0
+    case 'lte':
+      return compare(raw, value) <= 0
+    case 'in':
+      return list.length > 0 && list.includes(String(raw))
+    case 'has_all':
+      return list.length > 0 && list.every((item) => asArray.includes(item))
+    case 'has_any':
+      return list.length > 0 && list.some((item) => asArray.includes(item))
+    case 'has_none':
+      return list.length > 0 && !list.some((item) => asArray.includes(item))
+    /*
+     * Exactly these and no others. Compared as sorted sets rather than in
+     * order, because the stored array is kept sorted and de-duplicated by a
+     * trigger and the typed list is whatever order somebody typed it in.
+     */
+    case 'is_exactly': {
+      if (list.length === 0) return false
+      const a = [...new Set(asArray)].sort()
+      const b = [...new Set(list)].sort()
+      return a.length === b.length && a.every((item, index) => item === b[index])
+    }
+    default:
+      return false
+  }
+}
+
+/**
+ * Whether one row satisfies a filter, conditions and free-text search alike.
+ *
+ * An empty condition — one somebody has added but not filled in — is skipped
+ * rather than failing the row, so a half-typed filter narrows nothing instead
+ * of emptying the screen. That mirrors conditionToPredicate returning null.
+ */
+export function matchesFilter(
+  row: Record<string, unknown>,
+  config: FilterConfig,
+  entity: FilterEntityType,
+): boolean {
+  const usable = config.conditions.filter((condition) => {
+    if (condition.operator === 'is_empty' || condition.operator === 'is_not_empty') return true
+    if (Array.isArray(condition.value)) return condition.value.length > 0
+    return condition.value !== undefined && condition.value !== null && condition.value !== ''
+  })
+
+  if (usable.length > 0) {
+    const results = usable.map((condition) => matchesCondition(row, condition))
+    const passes = config.match === 'any' ? results.some(Boolean) : results.every(Boolean)
+    if (!passes) return false
+  }
+
+  const term = config.search?.trim().toLowerCase()
+  if (!term) return true
+
+  return searchColumnsFor(entity).some((column) => text(rowValue(row, column)).includes(term))
+}
+
+/**
+ * Sorts rows the way applyFilter would have asked the database to.
+ *
+ * Blanks last in both directions — the same `nullsFirst: false` the query path
+ * passes — because a column somebody sorted by is a column they want to read,
+ * and the rows that have nothing to say about it belong at the bottom either
+ * way.
+ */
+export function sortRows<T extends Record<string, unknown>>(
+  rows: T[],
+  sort: FilterConfig['sort'],
+): T[] {
+  if (!sort) return rows
+
+  const direction = sort.direction === 'asc' ? 1 : -1
+
+  return [...rows].sort((a, b) => {
+    const left = rowValue(a, sort.field)
+    const right = rowValue(b, sort.field)
+
+    if (isBlank(left) && isBlank(right)) return 0
+    if (isBlank(left)) return 1
+    if (isBlank(right)) return -1
+
+    return compare(left, right) * direction
+  })
 }
 
 export function parseFilterConfig(value: unknown): FilterConfig {

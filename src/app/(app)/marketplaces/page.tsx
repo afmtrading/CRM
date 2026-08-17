@@ -2,7 +2,6 @@ import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatDay, formatPrice } from '@/lib/format'
-import { likeContains } from '@/lib/sql'
 import { MARKETPLACE_OPTION_FIELDS, directionLabel, yesNo } from '@/lib/marketplace'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import type {
@@ -15,10 +14,19 @@ import type {
 import { ColumnPicker } from '@/components/column-picker'
 import { CustomCell, Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
 import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
-import { GroupControls } from '@/components/group-controls'
-import { MARKETPLACE_GROUP_FIELDS, groupRowsNested } from '@/lib/filters'
-import { LayersIcon, SearchIcon, StoreIcon, TagIcon } from '@/components/icons'
+import { FilterBar } from '@/components/filter-bar'
+import {
+  MARKETPLACE_FIELDS,
+  filterFromSearchParams,
+  groupRowsNested,
+  matchesFilter,
+  parseFilterConfig,
+  sortRows,
+} from '@/lib/filters'
+import type { SavedFilterRow } from '@/lib/database.types'
+import { LayersIcon, StoreIcon, TagIcon } from '@/components/icons'
 
+import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 import { readColumns } from '../column-actions'
 import { AddMarketplaceForm } from './add-marketplace'
 
@@ -34,33 +42,34 @@ export const metadata = { title: 'Marketplaces · FLO CRM' }
 export default async function MarketplacesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; error?: string; group?: string; subgroup?: string }>
+  searchParams: Promise<{
+    q?: string
+    error?: string
+    view?: string
+    f?: string
+    match?: string
+    group?: string
+    subgroup?: string
+    sort?: string
+  }>
 }) {
   const params = await searchParams
   const context = await requireSession()
-  const search = (params.q ?? '').trim()
-
-  /*
-   * Checked against the list rather than trusted: a group key arrives in the
-   * URL, and an unrecognised one would group by a path that resolves to
-   * nothing and put every marketplace in "None". Clearing the group clears the
-   * sub-group with it, so a sub-group is never left to quietly become the
-   * grouping.
-   */
-  const groupable = (key: string | undefined) =>
-    MARKETPLACE_GROUP_FIELDS.some((field) => field.key === key) ? (key as string) : ''
-  const groupBy = groupable(params.group)
-  const subGroupBy = groupBy ? groupable(params.subgroup) : ''
 
   /*
    * An inner join spelled as a required embed: `!inner` makes PostgREST drop
    * companies with no profile rather than returning them with a null one.
+   *
+   * The filter is not applied here. Half the fields worth filtering on live on
+   * the embedded profile, and the query path packs a condition into
+   * `column.operator.value` and splits it on the first dot — a dotted column
+   * cannot survive that. So the whole (bounded) list is fetched and the same
+   * FilterConfig is evaluated over it in memory. The bound is the same 500 the
+   * page has always loaded, and a marketplace list is dozens of rows.
    */
-  let query = scoped(context, 'companies')
+  const query = scoped(context, 'companies')
     .select('*, contacts(count), marketplace_profiles!inner(*)', { count: 'exact' })
     .is('deleted_at', null)
-
-  if (search) query = query.ilike('name', likeContains(search))
 
   const [
     { data, count },
@@ -68,6 +77,7 @@ export default async function MarketplacesPage({
     { data: fieldOptions },
     { data: definitionRows },
     { data: pickable },
+    { data: savedFilterRows },
   ] = await Promise.all([
       query.order('name').limit(500),
       scoped(context, 'users').select('*').order('name'),
@@ -92,6 +102,13 @@ export default async function MarketplacesPage({
         .is('deleted_at', null)
         .order('name')
         .limit(500),
+      /*
+       * Its own entity type, not 'company'. A marketplace is the same record as
+       * a company, but a saved view belongs to the screen that asked the
+       * question — filing them together would put every marketplace view in the
+       * Companies list and the other way round.
+       */
+      scoped(context, 'saved_filters').select('*').eq('entity_type', 'marketplace'),
     ])
 
   type Row = CompanyRow & {
@@ -99,9 +116,33 @@ export default async function MarketplacesPage({
     marketplace_profiles: MarketplaceProfileRow
   }
 
-  const rows = (data ?? []) as Row[]
+  const savedFilters = (savedFilterRows ?? []) as SavedFilterRow[]
+
+  // A ?view=<id> link replays a saved filter; anything else comes from the URL.
+  const savedView =
+    typeof params.view === 'string'
+      ? savedFilters.find((filter) => filter.id === params.view)
+      : undefined
+  const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
+
+  const everything = (data ?? []) as Row[]
   const ownerList = (owners ?? []) as UserRow[]
   const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
+
+  /*
+   * The filter and the sort, run here rather than in the query. Sorted after
+   * filtering rather than before, so a sort by a profile field orders what is
+   * actually on screen; without a chosen sort the alphabetical order the query
+   * asked for is left alone.
+   */
+  const rows = sortRows(
+    everything.filter((row) => matchesFilter(row, config, 'marketplace')),
+    config.sort,
+  )
+
+  // "Nothing matches" versus "nothing here yet" — the difference is whether
+  // anything was actually asked for.
+  const narrowed = Boolean(config.search) || config.conditions.length > 0
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
   const optionsFor = (key: string) => allOptions.filter((option) => option.field_key === key)
   const definitions = (definitionRows ?? []) as CustomFieldDefinitionRow[]
@@ -116,7 +157,7 @@ export default async function MarketplacesPage({
    * else groups by something already written the way a person would read it,
    * but an owner is a uuid and a heading of uuids is not a heading.
    */
-  const groups = groupRowsNested(rows, groupBy, subGroupBy, (field, value) =>
+  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) =>
     value === null
       ? 'None'
       : field === 'owner_id'
@@ -124,10 +165,15 @@ export default async function MarketplacesPage({
         : value,
   )
 
-  const selling = rows.filter((row) => row.marketplace_profiles.sells_through)
-  const sourcing = rows.filter((row) => row.marketplace_profiles.sources_from)
+  /*
+   * Headline counts describe every marketplace, not the filtered view, so they
+   * stay put while somebody narrows the list underneath them — the same rule
+   * the contacts list follows.
+   */
+  const selling = everything.filter((row) => row.marketplace_profiles.sells_through)
+  const sourcing = everything.filter((row) => row.marketplace_profiles.sources_from)
 
-  const auctions = rows.filter((row) =>
+  const auctions = everything.filter((row) =>
     row.marketplace_profiles.marketplace_type?.includes('Auction'),
   )
   /*
@@ -135,7 +181,48 @@ export default async function MarketplacesPage({
    * "Medium" is a judgement, not a number — so the headline is how many of the
    * cheap ones there are, which is the thing worth knowing at a glance.
    */
-  const lowCost = rows.filter((row) => row.marketplace_profiles.selling_cost === 'Low')
+  const lowCost = everything.filter((row) => row.marketplace_profiles.selling_cost === 'Low')
+
+  /*
+   * The option lists behind the conditions, so a filter on selling cost offers
+   * High / Medium / Low rather than a text box. Keyed by the field path, which
+   * is what the FilterBar has to hand.
+   */
+  const fieldOptionsByKey: Record<string, string> = {
+    priority: MARKETPLACE_OPTION_FIELDS.priority,
+    based_in: 'company_based_in',
+    based_in_region: 'company_region',
+    specialty_market: 'specialty_market',
+    'marketplace_profiles.marketplace_type': MARKETPLACE_OPTION_FIELDS.type,
+    'marketplace_profiles.fulfilment': MARKETPLACE_OPTION_FIELDS.fulfilment,
+    'marketplace_profiles.audience': MARKETPLACE_OPTION_FIELDS.audience,
+    'marketplace_profiles.inventory_type': MARKETPLACE_OPTION_FIELDS.inventoryType,
+    'marketplace_profiles.payment': MARKETPLACE_OPTION_FIELDS.payment,
+    'marketplace_profiles.selling_cost': MARKETPLACE_OPTION_FIELDS.sellingCost,
+    'marketplace_profiles.account_status': 'marketplace_account_status',
+  }
+
+  const fields = MARKETPLACE_FIELDS.map((field) => {
+    // An owner is a uuid; the list has to offer names.
+    if (field.key === 'owner_id') {
+      return {
+        ...field,
+        options: ownerList.map((user) => ({ value: user.id, label: user.name || user.email })),
+      }
+    }
+
+    const optionKey = fieldOptionsByKey[field.key]
+    if (!optionKey) return field
+
+    const options = optionsFor(optionKey).map((option) => ({
+      value: option.value,
+      label: option.value,
+    }))
+
+    // An empty list would render a Select… with nothing in it, which is worse
+    // than the free-text box the field would otherwise get.
+    return options.length > 0 ? { ...field, options } : field
+  })
 
   const cell = (row: Row, key: string): React.ReactNode => {
     const profile = row.marketplace_profiles
@@ -350,51 +437,31 @@ export default async function MarketplacesPage({
         />
       </StatGrid>
 
-      {/*
-        A GET form, so a grouped view is a URL somebody can send. Search used to
-        stand alone here and submitted on Enter; now that there are selects
-        beside it there has to be a button, because a select does not submit a
-        form by itself without client JavaScript.
-      */}
-      <form action="/marketplaces" className="card mb-5 flex flex-wrap items-end gap-3 p-4">
-        <div className="min-w-52 flex-1">
-          <label className="label" htmlFor="q">
-            Search
-          </label>
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              id="q"
-              type="search"
-              name="q"
-              defaultValue={search}
-              placeholder="Search marketplaces…"
-              className="input pl-9"
-            />
-          </div>
-        </div>
-
-        <GroupControls
-          fields={MARKETPLACE_GROUP_FIELDS}
-          groupBy={groupBy}
-          subGroupBy={subGroupBy}
-        />
-
-        <button type="submit" className="btn-secondary mb-0.5">
-          Apply
-        </button>
-      </form>
+      <FilterBar
+        fields={fields}
+        initial={config}
+        savedFilters={savedFilters}
+        entityType="marketplace"
+        currentUserId={context.user.id}
+        canExport={context.canBulk}
+        saveAction={saveFilter}
+        deleteAction={deleteSavedFilter}
+      />
 
       {rows.length === 0 ? (
         <EmptyState
-          title={search ? 'No marketplaces match that' : 'No marketplaces yet'}
-          description="A marketplace is a company you trade through. Add one from an existing company — its contacts, notes and history come with it."
+          title={narrowed ? 'No marketplaces match that' : 'No marketplaces yet'}
+          description={
+            narrowed
+              ? 'Try a different search, or clear the filters.'
+              : 'A marketplace is a company you trade through. Add one from an existing company — its contacts, notes and history come with it.'
+          }
         />
       ) : (
         <div className="space-y-8">
           {groups.map((group) => (
             <div key={group.key ?? 'all'}>
-              {groupBy && (
+              {config.groupBy && (
                 <div className="group-header flex items-baseline justify-between gap-3">
                   <h2>{group.label}</h2>
                   <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>

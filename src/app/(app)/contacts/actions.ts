@@ -317,7 +317,9 @@ export async function setContactTags(formData: FormData) {
 
 const savedFilterSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  entity_type: z.enum(['contact', 'company', 'deal', 'campaign']).default('contact'),
+  entity_type: z
+    .enum(['contact', 'company', 'deal', 'campaign', 'product', 'marketplace'])
+    .default('contact'),
   filter_json: z.string(),
   is_shared: z.boolean().default(false),
 })
@@ -343,7 +345,11 @@ export async function saveFilter(formData: FormData) {
   })
 
   if (error) throw new Error(error.message)
-  revalidatePath('/contacts')
+
+  // The list the view was saved from, so it appears under "Saved views" without
+  // a reload. Five screens share this action now, and revalidating /contacts
+  // for all of them would leave four of them stale.
+  revalidatePath(String(formData.get('return_to') ?? '/contacts'))
 }
 
 export async function deleteSavedFilter(formData: FormData) {

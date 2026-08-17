@@ -1,0 +1,26 @@
+-- =============================================================================
+-- 'marketplace' joins the record types
+--
+-- filter_entity_type names the records an organization can define fields,
+-- option lists and saved views against. Marketplaces are getting saved views,
+-- so the value has to exist before a row can carry it.
+--
+-- A marketplace saved view cannot be filed under 'company'. It is the same
+-- underlying record — a marketplace *is* a company — but a saved view is
+-- scoped to the screen it was saved from, and filing them together would put
+-- every marketplace view in the Companies list and every company view in the
+-- Marketplaces one. The two screens ask different questions of the same rows,
+-- and a saved question belongs to the screen that asked it.
+--
+-- Nothing else changes. custom_field_definitions and field_options keep
+-- reading 'company' for a marketplace, because a custom field on a marketplace
+-- is a custom field on the company and the marketplaces page shows the
+-- company's own values rather than a copy.
+--
+-- It is alone in this file on purpose: PostgreSQL refuses to use a new enum
+-- value in the same transaction that added it, so anything referencing
+-- 'marketplace' has to wait for the next migration — or, as here, for the
+-- application.
+-- =============================================================================
+
+alter type filter_entity_type add value if not exists 'marketplace';

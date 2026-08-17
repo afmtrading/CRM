@@ -6,17 +6,24 @@ import type { CustomFieldDefinitionRow, FieldOptionRow, ProductRow } from '@/lib
 import { derivePricing } from '@/lib/products'
 import { availableTone, formatQuantity } from '@/lib/stock'
 import { productImageUrl } from '@/lib/product-image'
-import { likeContains } from '@/lib/sql'
 import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
 import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
-import { GroupControls } from '@/components/group-controls'
-import { PRODUCT_GROUP_FIELDS, groupRowsNested } from '@/lib/filters'
+import { FilterBar } from '@/components/filter-bar'
+import {
+  applyFilter,
+  fieldsFor,
+  filterFromSearchParams,
+  groupRowsNested,
+  parseFilterConfig,
+} from '@/lib/filters'
+import type { SavedFilterRow } from '@/lib/database.types'
 import { formatDay } from '@/lib/format'
 
+import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 import { readColumns } from '../column-actions'
-import { CurrencyIcon, LayersIcon, ProductsIcon, SearchIcon, TagIcon } from '@/components/icons'
+import { CurrencyIcon, LayersIcon, ProductsIcon, TagIcon } from '@/components/icons'
 
 export const metadata = { title: 'Products · FLO CRM' }
 
@@ -25,45 +32,45 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{
     q?: string
-    category?: string
     show?: string
+    view?: string
+    f?: string
+    match?: string
     group?: string
     subgroup?: string
+    sort?: string
   }>
 }) {
   const params = await searchParams
   const context = await requireSession()
 
-  const search = (params.q ?? '').trim()
-  const category = params.category ?? ''
-
-  /*
-   * Only fields the list actually offers. A group key arrives in the URL, so it
-   * is somebody's typo or somebody's experiment until it has been checked
-   * against the list — an unrecognised one groups by a column that does not
-   * exist and puts every product in "None".
-   *
-   * Dropping the group drops the sub-group with it: a sub-group with nothing to
-   * nest inside would silently become the grouping, which is not what the URL
-   * says.
-   */
-  const groupable = (key: string | undefined) =>
-    PRODUCT_GROUP_FIELDS.some((field) => field.key === key) ? (key as string) : ''
-  const groupBy = groupable(params.group)
-  const subGroupBy = groupBy ? groupable(params.subgroup) : ''
   // Anything not on offer is hidden by default: the catalogue people work with
   // is the one they can still sell from. `active` is derived from the status, so
   // this one predicate covers inactive, discontinued, quarantined and sold.
   const showRetired = params.show === 'all'
 
+  const { data: savedFilterRows } = await scoped(context, 'saved_filters')
+    .select('*')
+    .eq('entity_type', 'product')
+  const savedFilters = (savedFilterRows ?? []) as SavedFilterRow[]
+
+  // A ?view=<id> link replays a saved filter; anything else comes from the URL.
+  const savedView =
+    typeof params.view === 'string'
+      ? savedFilters.find((filter) => filter.id === params.view)
+      : undefined
+  const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
+
   let query = scoped(context, 'products').select('*').is('deleted_at', null)
-  if (search) query = query.ilike('name', likeContains(search))
-  if (category) query = query.eq('category', category)
   if (!showRetired) query = query.eq('active', true)
+  // A catalogue is read alphabetically, not newest-first — which is what
+  // applyFilter would otherwise fall back to.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query = applyFilter(query as any, config, 'product', { column: 'name', ascending: true }) as any
 
   const [{ data }, { data: fieldOptions }, { data: stockRows }, { data: definitionRows }] =
     await Promise.all([
-    query.order('name').limit(500),
+    query.limit(500),
     scoped(context, 'field_options')
       .select('*')
       .eq('entity_type', 'product')
@@ -122,10 +129,45 @@ export default async function ProductsPage({
   const catalogue = columnCatalogue('product', definitions)
   const columns = resolveColumns('product', savedColumns, catalogue)
 
+  /*
+   * The catalogue's own option lists, so a condition on category or status
+   * offers the values that exist rather than a free-text box. Custom fields
+   * come with their own options through fieldsFor.
+   */
+  const fields = fieldsFor('product', definitions, allOptions).map((field) =>
+    field.key === 'category'
+      ? { ...field, options: categoryOptions.map((o) => ({ value: o.value, label: o.value })) }
+      : field.key === 'status'
+        ? { ...field, options: statusOptions.map((o) => ({ value: o.value, label: o.value })) }
+        : field,
+  )
+
+  // "Nothing matches" versus "nothing here yet" — the difference is whether
+  // anything was asked for, and the retired toggle is not asking.
+  const narrowed = Boolean(config.search) || config.conditions.length > 0
+
+  /*
+   * The current URL with `show` flipped, so toggling retired products keeps the
+   * filter, the grouping and the sort somebody has already set up rather than
+   * dropping them on the floor.
+   */
+  const retiredToggle = new URLSearchParams(
+    Object.entries(params).filter(([key, value]) => key !== 'show' && typeof value === 'string') as [
+      string,
+      string,
+    ][],
+  )
+  if (!showRetired) retiredToggle.set('show', 'all')
+
   // Every groupable field on a product is already a readable string — a
   // category, a brand, a currency code — so the only label worth writing is
   // the one for the products that have none.
-  const groups = groupRowsNested(products, groupBy, subGroupBy, (_field, value) => value ?? 'None')
+  const groups = groupRowsNested(
+    products,
+    config.groupBy,
+    config.subGroupBy,
+    (_field, value) => value ?? 'None',
+  )
 
   /*
    * One cell, by key. Prices go through derivePricing rather than being read
@@ -305,66 +347,40 @@ export default async function ProductsPage({
         />
       </StatGrid>
 
-      <form className="card mb-5 flex flex-wrap items-end gap-3 p-4">
-        <div className="min-w-52 flex-1">
-          <label className="label" htmlFor="q">
-            Search
-          </label>
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              id="q"
-              name="q"
-              type="search"
-              className="input pl-9"
-              placeholder="Product name…"
-              defaultValue={search}
-            />
-          </div>
-        </div>
+      <FilterBar
+        fields={fields}
+        initial={config}
+        savedFilters={savedFilters}
+        entityType="product"
+        currentUserId={context.user.id}
+        canExport={context.canBulk}
+        saveAction={saveFilter}
+        deleteAction={deleteSavedFilter}
+      />
 
-        <div className="min-w-44">
-          <label className="label" htmlFor="category">
-            Category
-          </label>
-          <select id="category" name="category" className="input" defaultValue={category}>
-            <option value="">All categories</option>
-            {categoryOptions.map((option) => (
-              <option key={option.id} value={option.value}>
-                {option.value}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <GroupControls fields={PRODUCT_GROUP_FIELDS} groupBy={groupBy} subGroupBy={subGroupBy} />
-
-        <label className="flex items-center gap-2 pb-2.5 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            name="show"
-            value="all"
-            defaultChecked={showRetired}
-            className="h-4 w-4 rounded border-slate-300"
-          />
-          Include everything not on offer
-        </label>
-
-        <button type="submit" className="btn-secondary mb-0.5">
-          Apply
-        </button>
-      </form>
+      {/*
+        Whether retired products are on the page at all is a predicate on the
+        query rather than a condition in the filter, so it is a link that keeps
+        everything else in the URL — not a second form somebody has to remember
+        to submit.
+      */}
+      <p className="mb-5 text-sm text-slate-500">
+        {showRetired ? 'Showing everything, on offer or not.' : 'Showing what is on offer.'}{' '}
+        <Link href={`/products?${retiredToggle.toString()}`} className="text-brand-700 underline">
+          {showRetired ? 'Hide what is not on offer' : 'Include everything not on offer'}
+        </Link>
+      </p>
 
       {products.length === 0 ? (
         <EmptyState
-          title={search || category ? 'Nothing matches' : 'No products yet'}
+          title={narrowed ? 'Nothing matches' : 'No products yet'}
           description={
-            search || category
+            narrowed
               ? 'Try a different search, or clear the filters.'
               : 'Add what the organization sells, then build deals from it.'
           }
           action={
-            context.canManage && !search && !category ? (
+            context.canManage && !narrowed ? (
               <Link href="/products/new" className="btn-primary">
                 New product
               </Link>
@@ -375,7 +391,7 @@ export default async function ProductsPage({
         <div className="space-y-8">
           {groups.map((group) => (
             <div key={group.key ?? 'all'}>
-              {groupBy && (
+              {config.groupBy && (
                 <div className="group-header flex items-baseline justify-between gap-3">
                   <h2>{group.label}</h2>
                   <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>
