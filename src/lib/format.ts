@@ -18,17 +18,27 @@ export const CURRENCIES = ['USD', 'CAD', 'EUR', 'GBP'] as const
  * well-formed code and renders it beside the number, which is the honest
  * outcome for a code this module has not heard of.
  */
-function usableCurrency(currency: string | null | undefined): string | null {
+export function usableCurrency(currency: string | null | undefined): string | null {
   const code = (currency ?? '').trim().toUpperCase()
   return /^[A-Z]{3}$/.test(code) ? code : null
 }
 
+/**
+ * What stands where the currency should have been.
+ *
+ * An amount with no currency is a data problem, and the first version of this
+ * guard printed a bare number — which fixed the crash and hid the cause, since
+ * "12.50" looks like a perfectly good figure. It says so now instead. Long and
+ * awkward on purpose: this is meant to be noticed and then fixed, not lived
+ * with.
+ */
+export const NO_CURRENCY = '(no currency)'
+
 export function formatCurrency(value: number, currency = 'USD'): string {
   const code = usableCurrency(currency)
 
-  // The number alone rather than a guess. Printing an amount under a currency
-  // nobody chose is worse than printing it under none.
-  if (!code) return formatAmount(value ?? 0)
+  // The number, and the fact that nobody knows what it is denominated in.
+  if (!code) return `${formatAmount(value ?? 0)} ${NO_CURRENCY}`
 
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -48,12 +58,14 @@ export function formatCurrency(value: number, currency = 'USD'): string {
 export function formatPrice(value: number, currency = 'USD'): string {
   const code = usableCurrency(currency)
 
-  // Still to the cent, still without inventing a currency. See usableCurrency.
+  // Still to the cent, still without inventing a currency. See NO_CURRENCY.
   if (!code) {
-    return new Intl.NumberFormat('en-US', {
+    const amount = new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value ?? 0)
+
+    return `${amount} ${NO_CURRENCY}`
   }
 
   return new Intl.NumberFormat('en-US', {

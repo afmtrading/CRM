@@ -1,6 +1,12 @@
 import { Fragment } from 'react'
 
-import { currencyStyle, currencySymbol, formatAmount, totalsByCurrency } from '@/lib/format'
+import {
+  currencyStyle,
+  currencySymbol,
+  formatAmount,
+  totalsByCurrency,
+  usableCurrency,
+} from '@/lib/format'
 
 /**
  * An amount with its currency standing to the right of it, in that currency's
@@ -28,15 +34,30 @@ export function Money({
   /** Applied to the number alone, for weight and size. */
   amountClassName?: string
 }) {
+  /*
+   * A missing currency used to show as a dash here, which reads as "nothing to
+   * say" rather than "this is wrong" — and an amount whose currency nobody
+   * knows is wrong. It says so, in amber, so a mixed board shows the gap at the
+   * same glance it shows the currencies.
+   */
+  const code = usableCurrency(currency)
+
   return (
     <span className={`inline-flex items-baseline gap-1.5 ${className}`.trim()}>
       <span className={amountClassName || undefined}>
         {currencySymbol(currency)}
         {formatAmount(value)}
       </span>
-      <span className={`text-xs font-semibold ${currencyStyle(currency)}`}>
-        {(currency ?? '').toUpperCase() || '—'}
-      </span>
+      {code ? (
+        <span className={`text-xs font-semibold ${currencyStyle(code)}`}>{code}</span>
+      ) : (
+        <span
+          className="text-xs font-semibold text-amber-700"
+          title="This amount has no currency recorded against it."
+        >
+          no currency
+        </span>
+      )}
     </span>
   )
 }

@@ -10,7 +10,9 @@ import {
   formatDateTime,
   formatDay,
   formatPrice,
+  NO_CURRENCY,
   totalsByCurrency,
+  usableCurrency,
 } from '../src/lib/format'
 
 /*
@@ -280,10 +282,14 @@ describe('totalsByCurrency', () => {
  * the cell, so these are the inputs a money formatter has to survive.
  */
 describe('formatting money with a currency that is not one', () => {
-  const bad = ['', '   ', 'US', 'ZZ', 'DOLLAR', ' USD ', '1SD']
+  /*
+   * Genuinely unusable. ' USD ' is deliberately not here — it is a real code
+   * that only needed trimming, and it is covered on its own below.
+   */
+  const bad = ['', '   ', 'US', 'ZZ', 'DOLLAR', '1SD']
 
   it('never throws on a malformed code', () => {
-    for (const currency of bad) {
+    for (const currency of [...bad, ' USD ']) {
       expect(() => formatPrice(12.5, currency), `formatPrice(${JSON.stringify(currency)})`).not.toThrow()
       expect(() => formatCurrency(12.5, currency), `formatCurrency(${JSON.stringify(currency)})`).not.toThrow()
     }
@@ -294,11 +300,22 @@ describe('formatting money with a currency that is not one', () => {
     expect(() => formatCurrency(12.5, undefined)).not.toThrow()
   })
 
-  /* The number, without inventing a currency nobody chose. */
-  it('falls back to the bare amount', () => {
-    expect(formatPrice(12.5, '')).toBe('12.50')
-    expect(formatPrice(1234.5, null as unknown as string)).toBe('1,234.50')
-    expect(formatCurrency(1200, 'ZZ')).toBe('1,200')
+  /*
+   * The number, and the fact that nobody knows what it is denominated in. A
+   * bare "12.50" fixed the crash and hid the cause; this is meant to be
+   * noticed.
+   */
+  it('says the currency is missing rather than printing a bare number', () => {
+    expect(formatPrice(12.5, '')).toBe('12.50 (no currency)')
+    expect(formatPrice(1234.5, null as unknown as string)).toBe('1,234.50 (no currency)')
+    expect(formatCurrency(1200, 'ZZ')).toBe('1,200 (no currency)')
+  })
+
+  it('never leaves an amount looking like a good figure', () => {
+    for (const currency of bad) {
+      expect(formatPrice(12.5, currency)).toContain(NO_CURRENCY)
+      expect(formatCurrency(12.5, currency)).toContain(NO_CURRENCY)
+    }
   })
 
   it('still formats a real code', () => {
@@ -320,5 +337,19 @@ describe('formatting money with a currency that is not one', () => {
    */
   it('lets an unknown but well-formed code through', () => {
     expect(formatPrice(12.5, 'XYZ')).toContain('XYZ')
+  })
+})
+
+describe('usableCurrency', () => {
+  it('accepts a well-formed code, tidying case and whitespace', () => {
+    expect(usableCurrency('usd')).toBe('USD')
+    expect(usableCurrency(' cad ')).toBe('CAD')
+    expect(usableCurrency('XYZ')).toBe('XYZ')
+  })
+
+  it('rejects anything Intl would throw on', () => {
+    for (const value of ['', '   ', 'US', 'ZZ', 'DOLLAR', '1SD', null, undefined]) {
+      expect(usableCurrency(value), JSON.stringify(value)).toBeNull()
+    }
   })
 })
