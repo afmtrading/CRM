@@ -5,9 +5,11 @@ import {
   currencySymbol,
   dueLabel,
   formatAmount,
+  formatCurrency,
   formatDate,
   formatDateTime,
   formatDay,
+  formatPrice,
   totalsByCurrency,
 } from '../src/lib/format'
 
@@ -269,5 +271,54 @@ describe('totalsByCurrency', () => {
 
   it('has nothing to show for no rows, which is what an empty column is', () => {
     expect(totalsByCurrency([])).toEqual([])
+  })
+})
+
+/*
+ * Intl.NumberFormat throws a RangeError on a currency that is not exactly three
+ * ASCII letters. Thrown from a server component it blanks the page rather than
+ * the cell, so these are the inputs a money formatter has to survive.
+ */
+describe('formatting money with a currency that is not one', () => {
+  const bad = ['', '   ', 'US', 'ZZ', 'DOLLAR', ' USD ', '1SD']
+
+  it('never throws on a malformed code', () => {
+    for (const currency of bad) {
+      expect(() => formatPrice(12.5, currency), `formatPrice(${JSON.stringify(currency)})`).not.toThrow()
+      expect(() => formatCurrency(12.5, currency), `formatCurrency(${JSON.stringify(currency)})`).not.toThrow()
+    }
+  })
+
+  it('never throws on null or undefined', () => {
+    expect(() => formatPrice(12.5, null as unknown as string)).not.toThrow()
+    expect(() => formatCurrency(12.5, undefined)).not.toThrow()
+  })
+
+  /* The number, without inventing a currency nobody chose. */
+  it('falls back to the bare amount', () => {
+    expect(formatPrice(12.5, '')).toBe('12.50')
+    expect(formatPrice(1234.5, null as unknown as string)).toBe('1,234.50')
+    expect(formatCurrency(1200, 'ZZ')).toBe('1,200')
+  })
+
+  it('still formats a real code', () => {
+    expect(formatPrice(12.5, 'USD')).toBe('$12.50')
+    expect(formatCurrency(1200, 'USD')).toBe('$1,200')
+  })
+
+  /* Case and stray whitespace are somebody's typo, not a different currency. */
+  it('accepts a code that only needed tidying', () => {
+    expect(formatPrice(12.5, 'usd')).toBe('$12.50')
+    expect(formatPrice(12.5, ' USD ')).toBe('$12.50')
+  })
+
+  /*
+   * A well-formed code this app has never heard of goes through to Intl, which
+   * renders it beside the number. Showing "XYZ 12.50" is the honest outcome —
+   * the value is present and merely unrecognised, the same rule the geography
+   * lookup follows.
+   */
+  it('lets an unknown but well-formed code through', () => {
+    expect(formatPrice(12.5, 'XYZ')).toContain('XYZ')
   })
 })
