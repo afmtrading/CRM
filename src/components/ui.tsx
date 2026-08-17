@@ -11,6 +11,7 @@ import {
   SALES_ORDER_STATUS_HINTS,
   SALES_ORDER_STATUS_LABELS,
 } from '@/lib/sales'
+import { DEAL_STATUS_LABELS, LIFECYCLE_LABELS } from '@/lib/field-options'
 import { TrendingUpIcon, type IconComponent } from '@/components/icons'
 
 export function PageHeader({
@@ -166,7 +167,7 @@ const LIFECYCLE_STYLES: Record<LifecycleStage, string> = {
 }
 
 export function LifecycleBadge({ stage }: { stage: LifecycleStage }) {
-  return <span className={`badge ${LIFECYCLE_STYLES[stage]}`}>{stage}</span>
+  return <span className={`badge ${LIFECYCLE_STYLES[stage]}`}>{LIFECYCLE_LABELS[stage]}</span>
 }
 
 const DEAL_STATUS_STYLES: Record<DealStatus, string> = {
@@ -176,7 +177,7 @@ const DEAL_STATUS_STYLES: Record<DealStatus, string> = {
 }
 
 export function DealStatusBadge({ status }: { status: DealStatus }) {
-  return <span className={`badge ${DEAL_STATUS_STYLES[status]}`}>{status}</span>
+  return <span className={`badge ${DEAL_STATUS_STYLES[status]}`}>{DEAL_STATUS_LABELS[status]}</span>
 }
 
 /*

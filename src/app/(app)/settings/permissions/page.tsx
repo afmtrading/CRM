@@ -4,6 +4,7 @@ import { requireSession, scoped } from '@/lib/tenancy'
 import type { PermissionSetRow } from '@/lib/database.types'
 import { CAPABILITIES, VISIBILITY_OPTIONS, visibilityOf } from '@/lib/permissions'
 import { ActionForm, SubmitButton } from '@/components/action-form'
+import { USER_ROLE_LABELS } from '@/lib/field-options'
 import { PageHeader, Section } from '@/components/ui'
 
 import {
@@ -86,7 +87,7 @@ export default async function PermissionSettingsPage() {
                   {set.role && (
                     <span
                       className="badge bg-slate-100 text-slate-600"
-                      title={`Anyone whose role is ${set.role} and who is not on a set of their own lands here.`}
+                      title={`Anyone whose role is ${USER_ROLE_LABELS[set.role] ?? set.role} and who is not on a set of their own lands here.`}
                     >
                       role default
                     </span>
