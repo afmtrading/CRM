@@ -40,6 +40,7 @@ import {
 import { DateTime } from '@/components/date-time'
 
 import { deleteProduct } from '../actions'
+import { StockNote } from '../stock-note'
 
 /**
  * One price, and whether anybody chose it.
@@ -502,13 +503,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                         </td>
                         {/* What is true about this place — a damaged pallet, a
                             recount pending. Wrapped rather than truncated: a
-                            note nobody can read is a note nobody wrote. */}
-                        <td className="max-w-xs whitespace-pre-wrap text-slate-600">
-                          {level.note ? (
-                            level.note
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
+                            note nobody can read is a note nobody wrote, and
+                            editable in place because writing one down is the
+                            thing people do here most often. */}
+                        <td className="max-w-xs text-slate-600">
+                          <StockNote
+                            productId={product.id}
+                            locationId={level.location_id}
+                            binId={level.bin_id}
+                            note={level.note}
+                            canEdit={context.canManage}
+                          />
                         </td>
                       </tr>
                     ))}

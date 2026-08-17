@@ -271,4 +271,58 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Editing the note where it is read, rather than in the Adjust editor.
+--
+-- The inline editor on the product page sends the note and nothing else — no
+-- quantity, no reserved. That is only safe because null means "leave alone"
+-- here, and it is the whole reason the cell does not have to read the numbers
+-- back and write them again, which would revert an adjustment somebody made
+-- between the page rendering and the note being saved.
+--
+-- It must also leave the history alone. A note is not a movement, and a stock
+-- history that fills up with rows saying a number stayed the same is a history
+-- nobody will read.
+-- =============================================================================
+do $$
+declare
+  v_product uuid := (select id from fixture where key = 'product');
+  v_place   uuid := (select id from fixture where key = 'place');
+  v_before  integer;
+begin
+  raise notice 'Editing a note on its own:';
+  perform sign_in_as('admin_auth');
+
+  perform public.set_stock_level(v_product, v_place, null, 40, 5, 'Counted');
+  v_before := adjustment_count(v_product);
+
+  -- Exactly what the inline cell sends: the ids, a reason, and the note.
+  perform public.set_stock_level(
+    p_product_id => v_product,
+    p_location_id => v_place,
+    p_reason => 'Note edited on the product',
+    p_place_note => 'Front pallet is the damaged one'
+  );
+
+  perform test_assert(
+    place_note(v_product, v_place) = 'Front pallet is the damaged one',
+    'the note lands'
+  );
+  perform test_assert(
+    (select quantity from stock_levels
+      where product_id = v_product and location_id = v_place and bin_id is null) = 40,
+    'the quantity is untouched'
+  );
+  perform test_assert(
+    (select reserved from stock_levels
+      where product_id = v_product and location_id = v_place and bin_id is null) = 5,
+    'and so is the reserved'
+  );
+  perform test_assert(
+    adjustment_count(v_product) = v_before,
+    'and no movement was written for it'
+  );
+end;
+$$;
+
 rollback;
