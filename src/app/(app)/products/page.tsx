@@ -16,6 +16,7 @@ import {
   fieldsFor,
   filterFromSearchParams,
   groupRowsNested,
+  labelFromFields,
   parseFilterConfig,
 } from '@/lib/filters'
 import type { SavedFilterRow } from '@/lib/database.types'
@@ -159,14 +160,11 @@ export default async function ProductsPage({
   )
   if (!showRetired) retiredToggle.set('show', 'all')
 
-  // Every groupable field on a product is already a readable string — a
-  // category, a brand, a currency code — so the only label worth writing is
-  // the one for the products that have none.
   const groups = groupRowsNested(
     products,
     config.groupBy,
     config.subGroupBy,
-    (_field, value) => value ?? 'None',
+    labelFromFields(fields),
   )
 
   /*

@@ -1,7 +1,14 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { applyFilter, fieldsFor, filterFromSearchParams, groupRowsNested, parseFilterConfig } from '@/lib/filters'
+import {
+  applyFilter,
+  fieldsFor,
+  filterFromSearchParams,
+  groupRowsNested,
+  labelFromFields,
+  parseFilterConfig,
+} from '@/lib/filters'
 import type {
   CompanyRow,
   CustomFieldDefinitionRow,
@@ -125,13 +132,7 @@ export default async function CompaniesPage({
   })
   // The field is passed in because two of them can be grouped on at once, and
   // only one of them holds user ids.
-  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) => {
-    if (value === null) return 'None'
-    if (field === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
-    if (field === 'based_in') return places.country(value)
-    if (field === 'based_in_region') return places.region(value)
-    return value
-  })
+  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, labelFromFields(fields))
 
   const catalogue = columnCatalogue('company', definitions)
   const columns = resolveColumns('company', savedColumns, catalogue)

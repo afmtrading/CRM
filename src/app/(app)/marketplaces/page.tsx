@@ -19,6 +19,7 @@ import {
   MARKETPLACE_FIELDS,
   filterFromSearchParams,
   groupRowsNested,
+  labelFromFields,
   matchesFilter,
   parseFilterConfig,
   sortRows,
@@ -164,18 +165,6 @@ export default async function MarketplacesPage({
   const catalogue = columnCatalogue('marketplace', definitions)
   const columns = resolveColumns('marketplace', savedColumns, catalogue)
 
-  /*
-   * Three fields whose stored value is not their label: an owner is a uuid,
-   * and a country and a region are codes. The rest already read the way a
-   * person would write them, so they pass straight through.
-   */
-  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) => {
-    if (value === null) return 'None'
-    if (field === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
-    if (field === 'based_in') return places.country(value)
-    if (field === 'based_in_region') return places.region(value)
-    return value
-  })
 
   /*
    * Headline counts describe every marketplace, not the filtered view, so they
@@ -246,6 +235,9 @@ export default async function MarketplacesPage({
     // than the free-text box the field would otherwise get.
     return options.length > 0 ? { ...field, options } : field
   })
+
+  // Headings come off the same field list the filter uses. See labelFromFields.
+  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, labelFromFields(fields))
 
   const cell = (row: Row, key: string): React.ReactNode => {
     const profile = row.marketplace_profiles
