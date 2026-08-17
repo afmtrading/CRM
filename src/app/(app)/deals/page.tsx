@@ -277,22 +277,28 @@ export default async function DealsPage({
           No deals match this view.
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           {listGroups.map(({ stage, deals: stageDeals }) => {
             return (
               <section key={stage.id}>
-                <h2 className="mb-2 flex flex-wrap items-baseline gap-2 px-1">
-                  <span className="text-sm font-semibold text-slate-900">{stage.name}</span>
-                  <span className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-slate-400">
+                {/*
+                  The same heading every other grouped list uses. This one had
+                  its own — 14px and semibold, above a plain card — from before
+                  the grouped lists were given a shape, so the deals list was
+                  the one place a stage looked unlike a group.
+                */}
+                <div className="group-header flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <h2>{stage.name}</h2>
+                  <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
                     <span>
                       {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'}
                     </span>
                     <span className="text-slate-300">·</span>
                     <MoneyTotals rows={stageDeals} />
-                  </span>
-                </h2>
+                  </p>
+                </div>
 
-                <div className="card overflow-hidden">
+                <div className="group-panel overflow-x-auto">
                   <table className="table">
                     <thead>
                       <tr>
