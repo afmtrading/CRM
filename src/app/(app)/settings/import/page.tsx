@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { requireBulk, scoped } from '@/lib/tenancy'
 import type { CustomFieldDefinitionRow, ImportJobRow } from '@/lib/database.types'
 import { DateTime } from '@/components/date-time'
+import { IMPORT_STATUS_LABELS } from '@/lib/field-options'
 import { PageHeader, Section } from '@/components/ui'
 
 import { ImportWizard } from './import-wizard'
@@ -63,7 +64,7 @@ export default async function ImportPage() {
                   <tr key={job.id}>
                     <td className="font-medium text-slate-800">{job.file_name || '—'}</td>
                     <td className="capitalize text-slate-600">{job.entity_type}</td>
-                    <td className="text-slate-600">{job.status}</td>
+                    <td className="text-slate-600">{IMPORT_STATUS_LABELS[job.status] ?? job.status}</td>
                     <td className="text-right text-emerald-700">{job.rows_processed}</td>
                     <td className="text-right text-red-700">{job.rows_failed}</td>
                     <td className="text-slate-500">

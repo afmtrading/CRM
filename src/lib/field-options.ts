@@ -1,4 +1,11 @@
-import type { ContactCard, OptionColor, OptionFieldKey } from '@/lib/database.types'
+import type {
+  ContactCard,
+  DealStatus,
+  ImportStatus,
+  LifecycleStage,
+  OptionColor,
+  OptionFieldKey,
+} from '@/lib/database.types'
 
 /**
  * The cards a contact record is divided into. Custom fields pick one of these,
@@ -456,3 +463,35 @@ export const USER_ROLES: { value: string; label: string; description: string }[]
 export const USER_ROLE_LABELS = Object.fromEntries(
   USER_ROLES.map((role) => [role.value, role.label]),
 ) as Record<string, string>
+
+/*
+ * The rest of the stored vocabularies, written the way a person reads them.
+ *
+ * Sales orders and invoices already had these, in lib/sales.ts beside the
+ * status rules they belong to. Lifecycle stage, deal status and an import job's
+ * state never got them, so they reached the screen as the column: a badge
+ * reading "lead", another reading "won", a table cell reading "complete".
+ *
+ * Kept here rather than in the components that draw them, because a label is a
+ * fact about the value and not about the badge — the same word has to come out
+ * of a heading, a badge and a tooltip.
+ */
+export const LIFECYCLE_LABELS: Record<LifecycleStage, string> = {
+  lead: 'Lead',
+  qualified: 'Qualified',
+  customer: 'Customer',
+  other: 'Other',
+}
+
+export const DEAL_STATUS_LABELS: Record<DealStatus, string> = {
+  open: 'Open',
+  won: 'Won',
+  lost: 'Lost',
+}
+
+export const IMPORT_STATUS_LABELS: Record<ImportStatus, string> = {
+  pending: 'Waiting',
+  processing: 'Running',
+  complete: 'Complete',
+  failed: 'Failed',
+}

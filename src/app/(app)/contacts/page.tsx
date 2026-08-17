@@ -43,6 +43,7 @@ import {
 import {
   EmptyState,
   ErrorNote,
+  LifecycleBadge,
   PageHeader,
   StatCard,
   StatGrid,
@@ -327,8 +328,10 @@ export default async function ContactsPage({
           <Empty />
         );
       case "lifecycle_stage":
+        // The badge the contact's own page uses. Every other column here with a
+        // fixed vocabulary is a badge; this one was plain lowercase text.
         return contact.lifecycle_stage ? (
-          <span className="text-slate-600">{contact.lifecycle_stage}</span>
+          <LifecycleBadge stage={contact.lifecycle_stage} />
         ) : (
           <Empty />
         );
