@@ -536,7 +536,7 @@ export default async function ContactsPage({
                 what makes the radius clip that row's fill; it was already
                 here for wide tables.
               */}
-              <div className="card overflow-x-auto">
+              <div className="group-panel overflow-x-auto">
                 <table className="table">
                   <thead>
                     {/*

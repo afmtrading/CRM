@@ -291,7 +291,7 @@ export default async function CompaniesPage({
                 rounded corners land on the column header row, and overflow-x
                 is what makes the radius clip that row's fill.
               */}
-              <div className="card overflow-x-auto">
+              <div className="group-panel overflow-x-auto">
               <table className="table">
                 <thead>
                   {/*

@@ -34,7 +34,7 @@ export function FilterBar({
   fields: FieldDef[]
   initial: FilterConfig
   savedFilters: SavedFilterRow[]
-  entityType: 'contact' | 'company' | 'deal'
+  entityType: 'contact' | 'company' | 'deal' | 'product' | 'marketplace'
   currentUserId: string
   /** Export can pull the whole book, so it is a manager's action. */
   canExport?: boolean
@@ -315,6 +315,7 @@ export function FilterBar({
       {saving && (
         <form action={saveAction} className="flex flex-wrap items-end gap-2 border-t border-slate-100 p-3">
           <input type="hidden" name="entity_type" value={entityType} />
+          <input type="hidden" name="return_to" value={pathname} />
           <input type="hidden" name="filter_json" value={JSON.stringify(config)} />
           <div>
             <label className="label" htmlFor="filter-name">
