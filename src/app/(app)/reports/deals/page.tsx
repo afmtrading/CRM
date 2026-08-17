@@ -440,7 +440,7 @@ export default async function DealLedgerPage({
                   The card starts here rather than around the heading, so the
                   rounded corners land on the column header row.
                 */}
-                <div className="card overflow-x-auto">
+                <div className="group-panel overflow-x-auto">
                   <table className="table">
                     <thead>
                       <tr>

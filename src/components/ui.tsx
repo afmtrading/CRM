@@ -276,10 +276,8 @@ export function SubGroupRow({
   return (
     <tr className="subgroup">
       <td colSpan={columns}>
-        <span className="text-xs font-semibold uppercase tracking-wide text-brand-700">
-          {label}
-        </span>
-        <span className="ml-2 text-xs text-slate-400">{count}</span>
+        <span className="text-sm font-bold uppercase tracking-wide text-brand-700">{label}</span>
+        <span className="ml-2.5 text-sm text-slate-400">{count}</span>
       </td>
     </tr>
   )
