@@ -14,7 +14,9 @@ import type {
 } from '@/lib/database.types'
 import { ColumnPicker } from '@/components/column-picker'
 import { CustomCell, Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
-import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/ui'
+import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
+import { GroupControls } from '@/components/group-controls'
+import { MARKETPLACE_GROUP_FIELDS, groupRowsNested } from '@/lib/filters'
 import { LayersIcon, SearchIcon, StoreIcon, TagIcon } from '@/components/icons'
 
 import { readColumns } from '../column-actions'
@@ -32,11 +34,23 @@ export const metadata = { title: 'Marketplaces · FLO CRM' }
 export default async function MarketplacesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; error?: string }>
+  searchParams: Promise<{ q?: string; error?: string; group?: string; subgroup?: string }>
 }) {
   const params = await searchParams
   const context = await requireSession()
   const search = (params.q ?? '').trim()
+
+  /*
+   * Checked against the list rather than trusted: a group key arrives in the
+   * URL, and an unrecognised one would group by a path that resolves to
+   * nothing and put every marketplace in "None". Clearing the group clears the
+   * sub-group with it, so a sub-group is never left to quietly become the
+   * grouping.
+   */
+  const groupable = (key: string | undefined) =>
+    MARKETPLACE_GROUP_FIELDS.some((field) => field.key === key) ? (key as string) : ''
+  const groupBy = groupable(params.group)
+  const subGroupBy = groupBy ? groupable(params.subgroup) : ''
 
   /*
    * An inner join spelled as a required embed: `!inner` makes PostgREST drop
@@ -96,6 +110,19 @@ export default async function MarketplacesPage({
 
   const catalogue = columnCatalogue('marketplace', definitions)
   const columns = resolveColumns('marketplace', savedColumns, catalogue)
+
+  /*
+   * Owner is the one field whose stored value is not its label — everything
+   * else groups by something already written the way a person would read it,
+   * but an owner is a uuid and a heading of uuids is not a heading.
+   */
+  const groups = groupRowsNested(rows, groupBy, subGroupBy, (field, value) =>
+    value === null
+      ? 'None'
+      : field === 'owner_id'
+        ? (ownerNames.get(value) ?? 'None')
+        : value,
+  )
 
   const selling = rows.filter((row) => row.marketplace_profiles.sells_through)
   const sourcing = rows.filter((row) => row.marketplace_profiles.sources_from)
@@ -323,16 +350,39 @@ export default async function MarketplacesPage({
         />
       </StatGrid>
 
-      <form action="/marketplaces" className="relative mb-4 max-w-md">
-        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="search"
-          name="q"
-          defaultValue={search}
-          placeholder="Search marketplaces…"
-          aria-label="Search marketplaces"
-          className="input bg-slate-50 pl-9"
+      {/*
+        A GET form, so a grouped view is a URL somebody can send. Search used to
+        stand alone here and submitted on Enter; now that there are selects
+        beside it there has to be a button, because a select does not submit a
+        form by itself without client JavaScript.
+      */}
+      <form action="/marketplaces" className="card mb-5 flex flex-wrap items-end gap-3 p-4">
+        <div className="min-w-52 flex-1">
+          <label className="label" htmlFor="q">
+            Search
+          </label>
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              id="q"
+              type="search"
+              name="q"
+              defaultValue={search}
+              placeholder="Search marketplaces…"
+              className="input pl-9"
+            />
+          </div>
+        </div>
+
+        <GroupControls
+          fields={MARKETPLACE_GROUP_FIELDS}
+          groupBy={groupBy}
+          subGroupBy={subGroupBy}
         />
+
+        <button type="submit" className="btn-secondary mb-0.5">
+          Apply
+        </button>
       </form>
 
       {rows.length === 0 ? (
@@ -341,35 +391,70 @@ export default async function MarketplacesPage({
           description="A marketplace is a company you trade through. Add one from an existing company — its contacts, notes and history come with it."
         />
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    className={column.align === 'right' ? 'text-right' : undefined}
-                  >
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="transition-colors hover:bg-slate-50/70">
-                  {columns.map((column) => (
-                    <td
-                      key={column.key}
-                      className={column.align === 'right' ? 'text-right' : undefined}
-                    >
-                      <div className="min-w-0 max-w-xs">{cell(row, column.key)}</div>
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <div key={group.key ?? 'all'}>
+              {groupBy && (
+                <div className="group-header flex items-baseline justify-between gap-3">
+                  <h2>{group.label}</h2>
+                  <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>
+                </div>
+              )}
+              {/*
+                The card starts here rather than around the heading, so the
+                rounded corners land on the column header row.
+              */}
+              <div className="card overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      {columns.map((column) => (
+                        <th
+                          key={column.key}
+                          className={column.align === 'right' ? 'text-right' : undefined}
+                        >
+                          {column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/*
+                      With a sub-group, each one gets a heading row and then its
+                      rows; without, the rows go straight in. Same table either
+                      way, so the columns keep their widths.
+                    */}
+                    {(group.subGroups ?? [{ key: null, label: '', rows: group.rows }]).flatMap(
+                      (sub) => [
+                        ...(group.subGroups
+                          ? [
+                              <SubGroupRow
+                                key={`sub-${sub.key ?? 'none'}`}
+                                label={sub.label}
+                                count={sub.rows.length}
+                                columns={columns.length}
+                              />,
+                            ]
+                          : []),
+                        ...sub.rows.map((row) => (
+                          <tr key={row.id} className="transition-colors hover:bg-slate-50/70">
+                            {columns.map((column) => (
+                              <td
+                                key={column.key}
+                                className={column.align === 'right' ? 'text-right' : undefined}
+                              >
+                                <div className="min-w-0 max-w-xs">{cell(row, column.key)}</div>
+                              </td>
+                            ))}
+                          </tr>
+                        )),
+                      ],
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </>

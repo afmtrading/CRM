@@ -145,6 +145,49 @@ export const DEAL_FIELDS: FieldDef[] = [
   { key: 'expected_close_date', label: 'Expected close', type: 'date', sortable: true },
 ]
 
+/*
+ * Products and marketplaces group but do not filter.
+ *
+ * Both pages have their own small GET form rather than the FilterBar, so what
+ * they need is the groupable half of a field list and nothing else — no
+ * operators, no saved views, no export entity. These are those halves, kept
+ * here beside the others so there is one place to look for "what can a list be
+ * grouped by".
+ */
+export const PRODUCT_GROUP_FIELDS: FieldDef[] = [
+  { key: 'category', label: 'Category', type: 'text', groupable: true },
+  { key: 'status', label: 'Status', type: 'text', groupable: true },
+  { key: 'brand', label: 'Brand', type: 'text', groupable: true },
+  { key: 'currency', label: 'Currency', type: 'text', groupable: true },
+]
+
+/*
+ * A marketplace row is a company with its profile embedded, so the groupable
+ * fields come from both halves and the dotted ones are the profile's. Anything
+ * stored as an array is left out for the same reason companies leave the
+ * territories out: a marketplace with three audiences belongs to three groups
+ * at once, and a grouped list would either repeat it or pick one arbitrarily.
+ */
+export const MARKETPLACE_GROUP_FIELDS: FieldDef[] = [
+  { key: 'priority', label: 'Priority', type: 'enum', groupable: true },
+  { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
+  { key: 'based_in', label: 'Based in', type: 'enum', groupable: true },
+  { key: 'marketplace_profiles.selling_cost', label: 'Selling cost', type: 'enum', groupable: true },
+  { key: 'marketplace_profiles.payment', label: 'Payment', type: 'enum', groupable: true },
+  {
+    key: 'marketplace_profiles.account_status',
+    label: 'Account status',
+    type: 'enum',
+    groupable: true,
+  },
+  {
+    key: 'marketplace_profiles.payout_currency',
+    label: 'Payout currency',
+    type: 'text',
+    groupable: true,
+  },
+]
+
 export function baseFieldsFor(entity: FilterEntityType): FieldDef[] {
   switch (entity) {
     case 'company':
@@ -404,13 +447,22 @@ export interface RowGroup<T> {
   subGroups?: RowGroup<T>[]
 }
 
-/** One row's value for a group field, custom fields included. */
+/**
+ * One row's value for a group field.
+ *
+ * A dotted key walks into the row rather than naming a column, which covers
+ * both of the shapes that need it: `custom_fields.condition` reaching into the
+ * jsonb every entity carries, and `marketplace_profiles.selling_cost` reaching
+ * into an embedded row, where the marketplaces list joins a company to its
+ * profile and the thing worth grouping by lives on the profile.
+ */
 function groupValue(row: Record<string, unknown>, field: string): string | null {
-  const raw = field.startsWith('custom_fields.')
-    ? ((row.custom_fields as Record<string, unknown> | undefined)?.[
-        field.slice('custom_fields.'.length)
-      ] ?? null)
-    : (row[field] ?? null)
+  let raw: unknown = row
+
+  for (const step of field.split('.')) {
+    if (raw === null || raw === undefined || typeof raw !== 'object') return null
+    raw = (raw as Record<string, unknown>)[step]
+  }
 
   return raw === null || raw === undefined || raw === '' ? null : String(raw)
 }

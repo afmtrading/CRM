@@ -199,6 +199,36 @@ describe('groupRows', () => {
     expect(groups.map((group) => group.key)).toEqual(['gold', 'silver', null])
   })
 
+  /*
+   * What the marketplaces list needs: a company row with its profile embedded,
+   * grouped by something that lives on the profile rather than the company.
+   */
+  it('groups by a field on an embedded row', () => {
+    const embedded = [
+      { id: '1', marketplace_profiles: { selling_cost: 'Low' } },
+      { id: '2', marketplace_profiles: { selling_cost: 'High' } },
+      { id: '3', marketplace_profiles: { selling_cost: 'Low' } },
+    ]
+
+    const groups = groupRows(embedded, 'marketplace_profiles.selling_cost')
+    expect(groups.map((group) => group.key)).toEqual(['High', 'Low'])
+    expect(groups.find((group) => group.key === 'Low')?.rows).toHaveLength(2)
+  })
+
+  /*
+   * A path that runs out part way is "no value", not a crash. Grouping keys
+   * arrive from the URL, and a row that simply has no profile — or a key naming
+   * something that was never there — has to land in the empty bucket.
+   */
+  it('treats a path that does not resolve as no value', () => {
+    const partial = [{ id: '1' }, { id: '2', marketplace_profiles: null }]
+
+    const groups = groupRows(partial, 'marketplace_profiles.selling_cost')
+    expect(groups).toHaveLength(1)
+    expect(groups[0].key).toBeNull()
+    expect(groups[0].rows).toHaveLength(2)
+  })
+
   it('sorts the ungrouped bucket last', () => {
     const groups = groupRows(rows, 'source')
     expect(groups.at(-1)?.key).toBeNull()
