@@ -97,14 +97,25 @@ body {
 }
 
 /*
- * The band at the top of a group, level 1.
+ * The heading of a group, level 1.
  *
- * Background and padding only. Each list arranges its own contents — the deals
- * report puts a money summary in there and the contacts list puts a count — and
- * baking a flex layout in here would mean every caller fighting it back out.
+ * It sits on the page ground with nothing behind it, which means size and
+ * weight are the only things holding a group together — hence 2xl and 800,
+ * where a filled band only needed 15px and 700. The card starts below it, at
+ * the column header row, so a group is a heading and a panel rather than one
+ * box with a coloured lid.
+ *
+ * Layout is left to the caller. The deals report puts a money summary up here
+ * and the two lists put a count, and baking a flex direction in would mean
+ * every caller fighting it back out. Only the h2 is claimed, so a sibling
+ * summary keeps its own size.
  */
 @utility group-header {
-  @apply bg-group px-5 py-3 text-white;
+  @apply px-0.5 pb-3;
+
+  & > h2 {
+    @apply text-2xl font-extrabold tracking-tight text-slate-900;
+  }
 }
 
 @utility btn {
@@ -197,4 +208,39 @@ body {
 
 [data-sidebar='collapsed'] .sidebar-rail-only {
   display: block;
+}
+
+/*
+ * Level 2 of a grouped list, as a rule rather than a band.
+ *
+ * With level 1 no longer filled, a filled level 2 would have been the loudest
+ * thing on the page — the second-strongest signal reading as the strongest.
+ * So it becomes a line: a heavier rule opening the sub-group, and the label
+ * sitting on it.
+ *
+ * Written here rather than as classes on the row because `.table td` sets its
+ * own padding and bottom border at (0,1,1). A utility on the cell would tie at
+ * (0,1,0) and lose. `.table tr.subgroup > td` is (0,2,1), so it wins outright
+ * and nothing depends on the order Tailwind happens to emit things in — the
+ * same reason the sidebar rules above are written this way.
+ *
+ * The rule is a top border, not a bottom one, so it reads as opening the
+ * sub-group rather than closing whatever came before. Borders collapse, so the
+ * 2px replaces the preceding row's 1px hairline instead of stacking on it.
+ */
+.table tr.subgroup > td {
+  border-top: 2px solid var(--color-brand-200);
+  border-bottom: 0;
+  padding-top: 1.125rem;
+  padding-bottom: 0.375rem;
+}
+
+/*
+ * …except the first, which needs no rule of its own: the column header row
+ * directly above it already carries a border, and two lines a few pixels apart
+ * read as a mistake rather than a division.
+ */
+.table tbody tr.subgroup:first-child > td {
+  border-top: 0;
+  padding-top: 0.625rem;
 }

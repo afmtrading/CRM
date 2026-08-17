@@ -413,22 +413,22 @@ export default async function DealLedgerPage({
           }
         />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-8">
           {groups.map((group) => {
             const groupSummary = summariseLedger(group.rows)
 
             return (
-              <section key={group.key ?? '—'} className="card overflow-hidden">
+              <section key={group.key ?? '—'}>
                 {groupBy && (
                   <header className="group-header flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <h2 className="text-sm font-semibold">{group.label}</h2>
-                    <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-white/80">
+                    <h2>{group.label}</h2>
+                    <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
                       <span>{formatNumber(group.rows.length)} deals</span>
-                      <span className="text-white/45">·</span>
+                      <span className="text-slate-300">·</span>
                       <MoneyTotals rows={groupSummary.totalValue} />
                       {groupSummary.winRate !== null && (
                         <>
-                          <span className="text-white/45">·</span>
+                          <span className="text-slate-300">·</span>
                           <span>{formatPercent(groupSummary.winRate)} won</span>
                         </>
                       )}
@@ -436,7 +436,11 @@ export default async function DealLedgerPage({
                   </header>
                 )}
 
-                <div className="overflow-x-auto">
+                {/*
+                  The card starts here rather than around the heading, so the
+                  rounded corners land on the column header row.
+                */}
+                <div className="card overflow-x-auto">
                   <table className="table">
                     <thead>
                       <tr>
