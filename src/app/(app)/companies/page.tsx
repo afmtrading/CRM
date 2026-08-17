@@ -10,6 +10,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
+import { placeNames, type Place } from '@/lib/geography'
 import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
 import { FilterBar } from '@/components/filter-bar'
@@ -33,13 +34,28 @@ export default async function CompaniesPage({
   const params = await searchParams
   const context = await requireSession()
 
-  const [{ data: savedFilters }, { data: customFields }, { data: owners }, { data: fieldOptions }] =
-    await Promise.all([
-      scoped(context, 'saved_filters').select('*').eq('entity_type', 'company'),
-      scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company'),
-      scoped(context, 'users').select('*').order('name'),
-      scoped(context, 'field_options').select('*').order('order'),
-    ])
+  const [
+    { data: savedFilters },
+    { data: customFields },
+    { data: owners },
+    { data: fieldOptions },
+    { data: countryRows },
+    { data: subdivisionRows },
+  ] = await Promise.all([
+    scoped(context, 'saved_filters').select('*').eq('entity_type', 'company'),
+    scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company'),
+    scoped(context, 'users').select('*').order('name'),
+    scoped(context, 'field_options').select('*').order('order'),
+    /*
+     * Reference data, not tenant data. based_in and the territories store
+     * codes, so without these the list reads "CA" where it means Canada — in
+     * the cells, and in a group heading, which is worse.
+     */
+    context.supabase.from('countries').select('code, name').order('name'),
+    context.supabase.from('country_subdivisions').select('code, name').order('name'),
+  ])
+
+  const places = placeNames((countryRows ?? []) as Place[], (subdivisionRows ?? []) as Place[])
 
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
 
@@ -72,11 +88,23 @@ export default async function CompaniesPage({
   const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
 
   const ownerList = (owners ?? []) as UserRow[]
-  const fields = fieldsFor('company', definitions, allOptions).map((field) =>
-    field.key === 'owner_id'
-      ? { ...field, options: ownerList.map((u) => ({ value: u.id, label: u.name || u.email })) }
-      : field,
-  )
+  /*
+   * Owners are uuids and the geography fields are codes, so all four have to be
+   * offered as a list — a free-text condition on `based_in` wants "CA", which
+   * nobody would guess, and typing "Canada" quietly matches nothing.
+   */
+  const fields = fieldsFor('company', definitions, allOptions).map((field) => {
+    if (field.key === 'owner_id') {
+      return { ...field, options: ownerList.map((u) => ({ value: u.id, label: u.name || u.email })) }
+    }
+    if (field.key === 'based_in' || field.key === 'sells_in' || field.key === 'sources_in') {
+      return { ...field, options: places.countryOptions }
+    }
+    if (field.key === 'based_in_region') {
+      return { ...field, options: places.regionOptions }
+    }
+    return field
+  })
 
   let query = scoped(context, 'companies')
     .select('*, contacts(count)', { count: 'exact' })
@@ -100,6 +128,8 @@ export default async function CompaniesPage({
   const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) => {
     if (value === null) return 'None'
     if (field === 'owner_id') return ownerNames.get(value) ?? 'Unknown user'
+    if (field === 'based_in') return places.country(value)
+    if (field === 'based_in_region') return places.region(value)
     return value
   })
 
@@ -157,27 +187,32 @@ export default async function CompaniesPage({
         return (
           <OptionBadges values={companyFieldValues(company, regionField)} options={regionOptions} />
         )
+      // Codes in the column, names on the screen. See src/lib/geography.ts.
       case 'based_in':
         return company.based_in ? (
-          <span className="text-slate-600">{company.based_in}</span>
+          <span className="text-slate-600">{places.country(company.based_in)}</span>
         ) : (
           <Empty />
         )
       case 'based_in_region':
         return company.based_in_region ? (
-          <span className="text-slate-600">{company.based_in_region}</span>
+          <span className="text-slate-600">{places.region(company.based_in_region)}</span>
         ) : (
           <Empty />
         )
       case 'sells_in':
         return company.sells_in?.length ? (
-          <span className="block truncate text-slate-600">{company.sells_in.join(', ')}</span>
+          <span className="block truncate text-slate-600">
+            {company.sells_in.map((code) => places.country(code)).join(', ')}
+          </span>
         ) : (
           <Empty />
         )
       case 'sources_in':
         return company.sources_in?.length ? (
-          <span className="block truncate text-slate-600">{company.sources_in.join(', ')}</span>
+          <span className="block truncate text-slate-600">
+            {company.sources_in.map((code) => places.country(code)).join(', ')}
+          </span>
         ) : (
           <Empty />
         )
