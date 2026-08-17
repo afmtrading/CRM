@@ -36,11 +36,6 @@ export default async function InvoicesPage({
   const overdueOnly = (Array.isArray(params.due) ? params.due[0] : params.due) === 'overdue'
   const today = todayIn(context.organization.timezone)
 
-  const { data: companies } = await scoped(context, 'companies')
-    .select('*')
-    .is('deleted_at', null)
-    .order('name')
-
   let query = scoped(context, 'invoices')
     .select('*')
     .order('issue_date', { ascending: false })
@@ -50,14 +45,22 @@ export default async function InvoicesPage({
   if ((STATUSES as string[]).includes(status)) query = query.eq('status', status)
   if (companyId) query = query.eq('company_id', companyId)
 
-  const { data, error } = await query
+  /*
+   * Two columns, and alongside the invoices rather than in front of them.
+   * Companies are here to name an id and fill the filter dropdown; selecting *
+   * dragged every jsonb and array column of the whole book across to do it, and
+   * awaiting it first made the invoice query wait for that.
+   */
+  const [{ data, error }, { data: companies }] = await Promise.all([
+    query,
+    scoped(context, 'companies').select('id, name').is('deleted_at', null).order('name'),
+  ])
   const all = (data ?? []) as InvoiceRow[]
   const invoices = overdueOnly ? all.filter((invoice) => isOverdue(invoice, today)) : all
 
   const summary = summariseInvoices(invoices, today)
-  const companyName = new Map(
-    ((companies ?? []) as CompanyRow[]).map((company) => [company.id, company.name]),
-  )
+  const companyList = (companies ?? []) as Pick<CompanyRow, 'id' | 'name'>[]
+  const companyName = new Map(companyList.map((company) => [company.id, company.name]))
 
   return (
     <>
@@ -134,7 +137,7 @@ export default async function InvoicesPage({
           </label>
           <select id="company" name="company" className="input" defaultValue={companyId}>
             <option value="">Every company</option>
-            {((companies ?? []) as CompanyRow[]).map((company) => (
+            {companyList.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.name}
               </option>
