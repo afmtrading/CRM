@@ -9,6 +9,7 @@ import {
   filterToSearchParams,
   groupRows,
   groupRowsNested,
+  labelFromFields,
   matchesFilter,
   parseFilterConfig,
   sortRows,
@@ -527,5 +528,65 @@ describe('sortRows', () => {
     const original = [...rows]
     sortRows(rows, { field: 'name', direction: 'asc' })
     expect(rows).toEqual(original)
+  })
+})
+
+/*
+ * The defect this exists for: a list grouped by lifecycle stage whose headings
+ * read "lead" and "qualified", and one grouped by owner whose headings are
+ * uuids. Both fields already carried the mapping for the filter's sake.
+ */
+describe('labelFromFields', () => {
+  const label = labelFromFields([
+    {
+      key: 'lifecycle_stage',
+      label: 'Lifecycle stage',
+      type: 'enum',
+      options: [
+        { value: 'lead', label: 'Lead' },
+        { value: 'customer', label: 'Customer' },
+      ],
+    },
+    {
+      key: 'owner_id',
+      label: 'Owner',
+      type: 'uuid',
+      options: [{ value: 'u-1', label: 'Ada Lovelace' }],
+    },
+    { key: 'source', label: 'Source', type: 'text' },
+  ])
+
+  it('reads a stored enum value as its label', () => {
+    expect(label('lifecycle_stage', 'lead')).toBe('Lead')
+    expect(label('lifecycle_stage', 'customer')).toBe('Customer')
+  })
+
+  it('reads an id as the name the filter offers for it', () => {
+    expect(label('owner_id', 'u-1')).toBe('Ada Lovelace')
+  })
+
+  it('calls the empty bucket None', () => {
+    expect(label('lifecycle_stage', null)).toBe('None')
+    expect(label('source', null)).toBe('None')
+  })
+
+  /* A field with nothing to map passes its value straight through. */
+  it('leaves a plain value alone', () => {
+    expect(label('source', 'trade show')).toBe('trade show')
+  })
+
+  /*
+   * An unresolved uuid says nothing to a reader, so it becomes a word. Anything
+   * else reads better as itself: present-but-unrecognised should look slightly
+   * wrong rather than absent.
+   */
+  it('names an unresolved id but keeps an unresolved value', () => {
+    expect(label('owner_id', 'u-gone')).toBe('Unknown')
+    expect(label('lifecycle_stage', 'archived')).toBe('archived')
+  })
+
+  it('ignores a field whose option list is empty', () => {
+    const bare = labelFromFields([{ key: 'status', label: 'Status', type: 'enum', options: [] }])
+    expect(bare('status', 'draft')).toBe('draft')
   })
 })

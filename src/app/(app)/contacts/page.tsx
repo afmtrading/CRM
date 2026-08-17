@@ -6,6 +6,7 @@ import {
   fieldsFor,
   filterFromSearchParams,
   groupRowsNested,
+  labelFromFields,
   parseFilterConfig,
 } from "@/lib/filters";
 import { contactName, formatDay } from "@/lib/format";
@@ -215,10 +216,6 @@ export default async function ContactsPage({
   const ownerNames = new Map(
     ownerList.map((user) => [user.id, user.name || user.email]),
   );
-  const companyNames = new Map(
-    companyList.map((company) => [company.id, company.name]),
-  );
-
   /*
    * Region is not offered here. It belongs to the company, so setting it on a
    * selection of contacts would quietly edit their employers — including for
@@ -238,16 +235,16 @@ export default async function ContactsPage({
   });
 
   /*
-   * Resolving ids to names has to know which field it is looking at, now that
-   * two of them can be in play at once — an owner id and a company id are both
-   * uuids and one of them would otherwise be labelled with the other's names.
+   * Headings come off the same field list the filter uses, so a stage grouped
+   * as `lead` still reads "Lead" and an owner id still reads a name. See
+   * labelFromFields.
    */
-  const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, (field, value) => {
-    if (value === null) return "None";
-    if (field === "owner_id") return ownerNames.get(value) ?? "Unknown user";
-    if (field === "company_id") return companyNames.get(value) ?? "Unknown company";
-    return value;
-  });
+  const groups = groupRowsNested(
+    rows,
+    config.groupBy,
+    config.subGroupBy,
+    labelFromFields(fields),
+  );
 
   /*
    * The columns this person has chosen, and how to draw each one. The

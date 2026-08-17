@@ -560,6 +560,47 @@ export function groupRows<T extends Record<string, unknown>>(
  * Grouping by the same field twice is treated as one level: the sub-groups
  * would each hold exactly the group above them, which is furniture.
  */
+/**
+ * Group headings read off the field list the filter is already using.
+ *
+ * Every field that stores something other than what it shows already carries
+ * the mapping, because the filter needs the same list to offer a condition: an
+ * owner's uuid against a name, a country's `CA` against Canada, a lifecycle
+ * stage's `lead` against Lead. Reading the heading off that same list is what
+ * stops a field being labelled correctly in one place and raw in the other,
+ * which is exactly how "CA" and "lead" ended up as headings.
+ *
+ * Pass the same `fields` array given to the FilterBar, options and all.
+ */
+export function labelFromFields(
+  fields: FieldDef[],
+): (field: string, value: string | null) => string {
+  const labels = new Map(
+    fields
+      .filter((field) => field.options && field.options.length > 0)
+      .map((field) => [
+        field.key,
+        new Map(field.options!.map((option) => [option.value, option.label])),
+      ]),
+  )
+  const types = new Map(fields.map((field) => [field.key, field.type]))
+
+  return (field, value) => {
+    if (value === null) return 'None'
+
+    const label = labels.get(field)?.get(value)
+    if (label) return label
+
+    /*
+     * An unresolved uuid says nothing at all to a reader, so it becomes a
+     * word. Anything else is a code or a stored word, and reads better as
+     * itself than as "Unknown" — a value that is present but unrecognised
+     * should look slightly wrong rather than absent.
+     */
+    return types.get(field) === 'uuid' ? 'Unknown' : value
+  }
+}
+
 export function groupRowsNested<T extends Record<string, unknown>>(
   rows: T[],
   groupBy: string | null | undefined,
