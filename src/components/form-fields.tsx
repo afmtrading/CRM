@@ -140,59 +140,6 @@ export function RadioChips({
   )
 }
 
-/**
- * Products as toggleable chips.
- *
- * Deliberately not a field_options list: a product is a record with a price and
- * a history, and a second vocabulary of product names would drift from the
- * catalogue within a week. Same chip behaviour as ChipGroup, backed by real
- * checkboxes.
- */
-export function ProductChips({
-  products,
-  selected,
-  name = 'product_ids',
-}: {
-  products: { id: string; name: string }[]
-  selected: string[]
-  name?: string
-}) {
-  if (products.length === 0) {
-    return (
-      <p className="text-xs text-slate-500">
-        No products yet.{' '}
-        <Link href="/products" className="text-brand-700 hover:underline">
-          Add some
-        </Link>
-      </p>
-    )
-  }
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {products.map((product) => (
-        <label key={product.id} className="cursor-pointer" title={product.name}>
-          <input
-            type="checkbox"
-            name={name}
-            value={product.id}
-            defaultChecked={selected.includes(product.id)}
-            className="peer sr-only"
-          />
-          <span className="badge bg-brand-100 text-brand-700 opacity-45 grayscale transition-all peer-checked:opacity-100 peer-checked:grayscale-0 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40">
-            {product.name}
-          </span>
-        </label>
-      ))}
-    </div>
-  )
-}
-
-/**
- * Notes editor. Markdown in a textarea rather than a rich-text surface: the
- * stored value is rendered back into the page, and markdown can be escaped
- * before formatting, so a note can never carry markup of its own.
- */
 export function NotesEditor({
   defaultValue,
   id = 'notes',

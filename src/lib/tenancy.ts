@@ -200,7 +200,6 @@ export type TenantTable =
   | 'deals'
   | 'products'
   | 'deal_products'
-  | 'contact_products'
   | 'sales_orders'
   | 'sales_order_lines'
   | 'sales_order_payments'

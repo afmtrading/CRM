@@ -13,7 +13,7 @@ import type {
   OptionFieldKey,
   UserRow,
 } from '@/lib/database.types'
-import { COMPANY_CARDS } from '@/lib/field-options'
+import { COMPANY_CARDS, optionsForField } from '@/lib/field-options'
 import {
   AddressesEditor,
   ChipGroup,
@@ -21,6 +21,7 @@ import {
   FormCard,
   LinksEditor,
   NotesEditor,
+  RadioChips,
 } from '@/components/form-fields'
 
 import type { CompanyActionState } from './actions'
@@ -46,7 +47,8 @@ export function CompanyForm({
   const [state, formAction, pending] = useActionState(action, {} as CompanyActionState)
 
   const custom = (company?.custom_fields ?? {}) as Record<string, unknown>
-  const optionsFor = (key: OptionFieldKey) => fieldOptions.filter((o) => o.field_key === key)
+  // Scoped to this record's own options, not just the key — see optionsForField.
+  const optionsFor = (key: OptionFieldKey) => optionsForField(fieldOptions, 'company', key)
   const customByCard = (card: ContactCard) => customFields.filter((field) => field.card === card)
   const links = Array.isArray(company?.links) ? (company.links as ContactLink[]) : []
   const addresses = Array.isArray(company?.addresses)
@@ -228,22 +230,18 @@ export function CompanyForm({
           deliberately changes one.
         */}
         <div>
-          <label className="label" htmlFor="priority">
-            Priority
-          </label>
-          <select
-            id="priority"
+          <span className="label">Priority</span>
+          {/*
+            Chips, like every other option field on this form and like the
+            priority on a contact. It was the one select among them, which made
+            the same question look like a different kind of question depending
+            on which record you were looking at.
+          */}
+          <RadioChips
             name="priority"
-            className="input"
-            defaultValue={company?.priority ?? ''}
-          >
-            <option value="">—</option>
-            {optionsFor('priority').map((option) => (
-              <option key={option.id} value={option.value}>
-                {option.value}
-              </option>
-            ))}
-          </select>
+            options={optionsFor('priority')}
+            selected={company?.priority ?? null}
+          />
         </div>
         <CustomFieldInputs
           fields={customByCard('rating')}

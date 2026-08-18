@@ -217,6 +217,8 @@ export const OPTION_FIELDS: {
   { key: 'product_type', label: 'Product type', card: 'details', multiple: false, entity: 'product' },
   { key: 'product_condition', label: 'Condition', card: 'details', multiple: false, entity: 'product' },
   { key: 'product_status', label: 'Product status', card: 'details', multiple: false, entity: 'product' },
+  // The same question a contact and a company are asked, asked of a line.
+  { key: 'priority', label: 'Priority', card: 'details', multiple: false, entity: 'product' },
   // Why a deal was lost. An organization's own words: "Price" and "Timing" are
   // a starting point, not a taxonomy this app is asserting.
   { key: 'loss_reason', label: 'Loss reason', card: 'details', multiple: false, entity: 'deal' },
@@ -438,12 +440,23 @@ export function optionOwners(
   return [...builtIn, ...custom]
 }
 
-/** Options for one field, in display order. */
-export function optionsForField(
-  options: { entity_type: string; field_key: string }[],
+/**
+ * Options for one field, in display order.
+ *
+ * Both halves of the key, always. A field_key is only unique within a record
+ * type — `priority` is a list on contacts, another on companies and another on
+ * products — so filtering on the key alone draws every record type's list at
+ * once. That is not hypothetical: it is what put each priority on the contact
+ * form twice, the day companies were given a list of their own.
+ *
+ * Generic so a caller keeps the row type it passed in, which is what makes this
+ * usable from the forms instead of each one writing the filter again.
+ */
+export function optionsForField<T extends { entity_type: string; field_key: string }>(
+  options: T[],
   entity: string,
   key: string,
-) {
+): T[] {
   return options.filter((option) => option.entity_type === entity && option.field_key === key)
 }
 

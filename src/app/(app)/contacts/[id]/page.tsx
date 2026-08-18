@@ -113,7 +113,6 @@ export default async function ContactDetailPage({
     { data: contactTags },
     { data: fieldOptions },
     { data: customFieldDefs },
-    { data: productInterest },
     { data: mailability },
     { data: duplicates },
   ] = await Promise.all([
@@ -137,9 +136,6 @@ export default async function ContactDetailPage({
       .select("*")
       .in("entity_type", ["contact", "company"])
       .order("order"),
-    scoped(context, "contact_products")
-      .select("product_id, products(id, name)")
-      .eq("contact_id", id),
     scoped(context, "contact_mailability")
       .select("blocked_reason")
       .eq("contact_id", id)
@@ -153,11 +149,6 @@ export default async function ContactDetailPage({
     }),
   ]);
 
-  const interests = (
-    (productInterest ?? []) as { products: { id: string; name: string } | null }[]
-  )
-    .map((row) => row.products)
-    .filter((product): product is { id: string; name: string } => product !== null);
 
   const duplicateList = (duplicates ?? []) as ContactRow[];
   const userList = (users ?? []) as UserRow[];
@@ -545,23 +536,6 @@ export default async function ContactDetailPage({
                   />
                 ) : (
                   <Empty />
-                )}
-              </Field>
-              <Field label="Interested in" wide>
-                {interests.length === 0 ? (
-                  <Empty />
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {interests.map((product) => (
-                      <Link
-                        key={product.id}
-                        href={`/products/${product.id}`}
-                        className="badge bg-brand-100 text-brand-700 hover:bg-brand-200"
-                      >
-                        {product.name}
-                      </Link>
-                    ))}
-                  </div>
                 )}
               </Field>
               <CustomFieldValues

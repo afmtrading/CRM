@@ -244,3 +244,47 @@ describe('option owners', () => {
     expect(cardLabel('deal', 'details')).toBe('Details')
   })
 })
+
+/*
+ * Priority is one question asked of three record types, and it drifted: two
+ * lists rendered as chips and one as a dropdown, and a product had none at all.
+ * These pin the shape rather than the wording — an organization owns the values,
+ * but not whether the question is a single choice.
+ */
+describe('priority, asked the same way everywhere', () => {
+  const priorities = OPTION_FIELDS.filter((field) => field.key === 'priority')
+
+  it('is offered on a contact, a company and a product', () => {
+    expect(priorities.map((field) => field.entity).sort()).toEqual([
+      'company',
+      'contact',
+      'product',
+    ])
+  })
+
+  it('is a single choice on every one of them', () => {
+    expect(priorities.every((field) => field.multiple === false)).toBe(true)
+  })
+
+  it('is labelled the same on every one of them', () => {
+    expect(new Set(priorities.map((field) => field.label))).toEqual(new Set(['Priority']))
+  })
+
+  /*
+   * A marketplace is deliberately absent: it is a company and reads the
+   * company's priority, and 20260247 dropped the one it briefly had of its own.
+   * There is no assertion for that here because there cannot be one — an
+   * OptionFieldKey of `marketplace_priority` does not typecheck, so putting the
+   * list back would fail the build before it could fail a test.
+   */
+  it('draws one record type at a time', () => {
+    const options = [
+      { entity_type: 'contact', field_key: 'priority', value: 'High' },
+      { entity_type: 'company', field_key: 'priority', value: 'High' },
+      { entity_type: 'product', field_key: 'priority', value: 'High' },
+    ]
+    for (const entity of ['contact', 'company', 'product']) {
+      expect(optionsForField(options, entity, 'priority')).toHaveLength(1)
+    }
+  })
+})

@@ -97,6 +97,7 @@ export default async function ProductsPage({
   const categoryOptions = allOptions.filter((o) => o.field_key === 'product_category')
   const statusOptions = allOptions.filter((o) => o.field_key === 'product_status')
   const typeOptions = allOptions.filter((o) => o.field_key === 'product_type')
+  const priorityOptions = allOptions.filter((o) => o.field_key === 'priority')
 
   type StockRow = {
     product_id: string
@@ -163,15 +164,16 @@ export default async function ProductsPage({
    * offers the values that exist rather than a free-text box. Custom fields
    * come with their own options through fieldsFor.
    */
-  const fields = fieldsFor('product', definitions, allOptions).map((field) =>
-    field.key === 'category'
-      ? { ...field, options: categoryOptions.map((o) => ({ value: o.value, label: o.value })) }
-      : field.key === 'status'
-        ? { ...field, options: statusOptions.map((o) => ({ value: o.value, label: o.value })) }
-        : field.key === 'product_type'
-          ? { ...field, options: typeOptions.map((o) => ({ value: o.value, label: o.value })) }
-          : field,
-  )
+  const listFor: Record<string, FieldOptionRow[]> = {
+    category: categoryOptions,
+    status: statusOptions,
+    product_type: typeOptions,
+    priority: priorityOptions,
+  }
+  const fields = fieldsFor('product', definitions, allOptions).map((field) => {
+    const list = listFor[field.key]
+    return list ? { ...field, options: list.map((o) => ({ value: o.value, label: o.value })) } : field
+  })
 
   // "Nothing matches" versus "nothing here yet" — the difference is whether
   // anything was asked for, and the retired toggle is not asking.
@@ -276,6 +278,13 @@ export default async function ProductsPage({
           <OptionBadges
             values={product.product_type ? [product.product_type] : []}
             options={typeOptions}
+          />
+        )
+      case 'priority':
+        return (
+          <OptionBadges
+            values={product.priority ? [product.priority] : []}
+            options={priorityOptions}
           />
         )
       case 'available': {
