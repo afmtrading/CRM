@@ -13,6 +13,7 @@ import {
   optionsForField,
 } from '@/lib/field-options'
 import { PageHeader, Section } from '@/components/ui'
+import { ActionForm, SubmitButton } from '@/components/action-form'
 import { PlusIcon } from '@/components/icons'
 
 import {
@@ -236,7 +237,7 @@ export default async function FieldsPage({
                 </ul>
               )}
 
-              <form
+              <ActionForm
                 action={createFieldOption}
                 className="flex flex-wrap items-end gap-2 border-t border-slate-100 pt-4"
               >
@@ -260,11 +261,11 @@ export default async function FieldsPage({
                     ))}
                   </select>
                 </div>
-                <button type="submit" className="btn-primary">
+                <SubmitButton className="btn-primary" pendingLabel="Adding…">
                   <PlusIcon className="h-4 w-4" />
                   Add
-                </button>
-              </form>
+                </SubmitButton>
+              </ActionForm>
 
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <p className="mb-2 text-xs text-slate-500">

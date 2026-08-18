@@ -887,7 +887,17 @@ export async function updateOrganization(formData: FormData) {
 // editing one never touches another's.
 // -----------------------------------------------------------------------------
 
-export async function createFieldOption(formData: FormData) {
+/**
+ * A refusal here is the administrator's to fix — the value is already on the
+ * list, or blank — so it comes back as a message under the form rather than as
+ * a thrown error. Throwing put the sentence naming the duplicate in the server
+ * log, and an "Application error" digest in front of the person who had just
+ * typed it.
+ */
+export async function createFieldOption(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
 
   const fieldKey = String(formData.get('field_key') ?? '')
@@ -907,11 +917,13 @@ export async function createFieldOption(formData: FormData) {
       .in('field_type', ['select', 'multiselect'])
       .limit(1)
 
-    if (((definition ?? []) as unknown[]).length === 0) throw new Error('Unknown field')
+    if (((definition ?? []) as unknown[]).length === 0) {
+      return { error: 'That field no longer exists — reload the page.' }
+    }
   }
 
-  if (!value) throw new Error('An option needs a value')
-  if (!OPTION_COLORS.includes(color as OptionColor)) throw new Error('Unknown colour')
+  if (!value) return { error: 'An option needs a value' }
+  if (!OPTION_COLORS.includes(color as OptionColor)) return { error: 'Unknown colour' }
 
   // Appended to the end of its own list.
   const { data: existing } = await scoped(context, 'field_options')
@@ -932,14 +944,15 @@ export async function createFieldOption(formData: FormData) {
   })
 
   if (error) {
-    throw new Error(
-      error.message.includes('duplicate key')
+    return {
+      error: error.message.includes('duplicate key')
         ? `"${value}" is already an option for that field.`
         : error.message,
-    )
+    }
   }
 
   revalidatePath('/settings/fields')
+  return { ok: `"${value}" added.` }
 }
 
 export async function updateFieldOptionColor(formData: FormData) {
