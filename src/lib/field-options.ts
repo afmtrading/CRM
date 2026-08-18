@@ -262,6 +262,13 @@ const SOCIAL_BASES: Record<string, string> = {
   instagram: 'https://instagram.com/',
   tiktok: 'https://tiktok.com/@',
   x_twitter: 'https://x.com/',
+  /*
+   * @handle, like TikTok's. A channel can also be reached by /channel/UC… or an
+   * old /c/ vanity path, and neither survives being prefixed — but both are
+   * things people copy as a whole URL, and a whole URL is passed through
+   * untouched below. So this base is for the one form that is typed bare.
+   */
+  youtube: 'https://youtube.com/@',
 }
 
 /** Accepts either a full URL or a bare handle, and returns something clickable. */

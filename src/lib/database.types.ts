@@ -228,6 +228,7 @@ export type ContactRow = {
   instagram: string | null
   tiktok: string | null
   x_twitter: string | null
+  youtube: string | null
   linkedin: string | null
   links: ContactLink[]
   /** Whether they may be sent marketing email, and on what basis. */
@@ -470,6 +471,7 @@ export type CompanyRow = {
   instagram: string | null
   tiktok: string | null
   x_twitter: string | null
+  youtube: string | null
   links: ContactLink[]
   addresses: CompanyAddress[]
   created_by: string | null
@@ -1179,6 +1181,7 @@ export interface Database {
         | 'instagram'
         | 'tiktok'
         | 'x_twitter'
+        | 'youtube'
         | 'linkedin'
         | 'links'
         | 'created_by'
@@ -1212,6 +1215,7 @@ export interface Database {
         | 'instagram'
         | 'tiktok'
         | 'x_twitter'
+        | 'youtube'
         | 'links'
         | 'addresses'
         | 'created_by'

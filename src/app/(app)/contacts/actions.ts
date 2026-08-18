@@ -37,6 +37,7 @@ const contactSchema = z.object({
   instagram: z.string().trim().max(300).default(''),
   tiktok: z.string().trim().max(300).default(''),
   x_twitter: z.string().trim().max(300).default(''),
+  youtube: z.string().trim().max(300).default(''),
   linkedin: z.string().trim().max(300).default(''),
 })
 
@@ -126,6 +127,7 @@ function contactColumns(input: z.infer<typeof contactSchema>, formData: FormData
     instagram: input.instagram || null,
     tiktok: input.tiktok || null,
     x_twitter: input.x_twitter || null,
+    youtube: input.youtube || null,
     linkedin: input.linkedin || null,
     links: readLinks(formData),
     custom_fields: readCustomFields(formData),

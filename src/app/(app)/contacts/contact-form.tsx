@@ -341,6 +341,12 @@ export function ContactForm({
           </label>
           <input id="x_twitter" name="x_twitter" className="input" placeholder="handle or URL" defaultValue={contact?.x_twitter ?? ''} />
         </div>
+        <div>
+          <label className="label" htmlFor="youtube">
+            YouTube
+          </label>
+          <input id="youtube" name="youtube" className="input" placeholder="handle or URL" defaultValue={contact?.youtube ?? ''} />
+        </div>
         <CustomFieldInputs
           fields={customByCard('digital')}
           values={custom}

@@ -587,6 +587,9 @@ export default async function ContactDetailPage({
               <Field label="X (Twitter)">
                 <ExternalLink url={socialUrl("x_twitter", contact.x_twitter)} />
               </Field>
+              <Field label="YouTube">
+                <ExternalLink url={socialUrl("youtube", contact.youtube)} />
+              </Field>
               <CustomFieldValues
                 fields={customByCard("digital")}
                 values={customValues}

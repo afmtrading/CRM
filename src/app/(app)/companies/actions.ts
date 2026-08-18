@@ -34,6 +34,7 @@ const companySchema = z.object({
   instagram: z.string().trim().max(300).default(''),
   tiktok: z.string().trim().max(300).default(''),
   x_twitter: z.string().trim().max(300).default(''),
+  youtube: z.string().trim().max(300).default(''),
   // Shape only — that it looks like a country code, not that it is one. The
   // trigger decides whether XX exists, and says so by name.
   based_in: z
@@ -118,6 +119,7 @@ function companyColumns(input: z.infer<typeof companySchema>, formData: FormData
     instagram: input.instagram || null,
     tiktok: input.tiktok || null,
     x_twitter: input.x_twitter || null,
+    youtube: input.youtube || null,
     links: readLinks(formData),
     addresses: readAddresses(formData),
     custom_fields: readCustomFields(formData),
