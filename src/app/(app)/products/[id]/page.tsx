@@ -100,6 +100,17 @@ type LineItem = DealProductRow & {
   } | null
 }
 
+/*
+ * Never served from the route cache.
+ *
+ * These read per-request, per-tenant data behind an authenticated session, and
+ * the App Router will happily hand back a previously rendered page otherwise —
+ * which shows up as a deploy that went out and a screen that did not change.
+ * The sales and invoice screens have said this since they were written; the
+ * rest of the record pages were relying on it not happening.
+ */
+export const dynamic = 'force-dynamic'
+
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const context = await requireSession()

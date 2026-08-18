@@ -5,6 +5,17 @@ import { PageHeader, Section } from '@/components/ui'
 import { createTag } from '../actions'
 import { TagRows, type TagUsage } from './tag-rows'
 
+/*
+ * Never served from the route cache.
+ *
+ * These read per-request, per-tenant data behind an authenticated session, and
+ * the App Router will happily hand back a previously rendered page otherwise —
+ * which shows up as a deploy that went out and a screen that did not change.
+ * The sales and invoice screens have said this since they were written; the
+ * rest of the record pages were relying on it not happening.
+ */
+export const dynamic = 'force-dynamic'
+
 export const metadata = { title: 'Tags · FLO CRM' }
 
 export default async function TagsPage() {
