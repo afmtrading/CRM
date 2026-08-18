@@ -48,10 +48,9 @@ export interface PlanResult {
 export async function planImport(input: PlanInput): Promise<PlanResult> {
   const context = await requireBulk()
 
-  const [{ data: countries }, { data: subdivisions }, { data: existing }, { data: options }] =
+  const [{ data: countries }, { data: existing }, { data: options }] =
     await Promise.all([
     context.supabase.from('countries').select('code, name'),
-    context.supabase.from('country_subdivisions').select('code, country_code'),
     /*
      * Every company in the organization, because matching is by domain, email
      * and name and the file gives no ids to narrow by. Two hundred rows against
@@ -59,7 +58,7 @@ export async function planImport(input: PlanInput): Promise<PlanResult> {
      * milliseconds, and doing it once beats a query per row.
      */
       scoped(context, 'companies')
-        .select('id, name, domain, email, based_in, based_in_region, phone, notes, specialty_market, stock_type, customer_type, sells_in, sources_in')
+        .select('id, name, domain, email, based_in, phone, notes, specialty_market, stock_type, customer_type, sells_in, sources_in')
         .is('deleted_at', null),
       scoped(context, 'field_options').select('field_key, value'),
     ])
@@ -78,7 +77,6 @@ export async function planImport(input: PlanInput): Promise<PlanResult> {
     input.mapping,
     {
       countries: (countries ?? []) as CountryLookup[],
-      subdivisions: (subdivisions ?? []) as { code: string; country_code: string }[],
       placeholders: new Set(input.placeholders),
     },
     (existing ?? []) as MatchCandidate[],

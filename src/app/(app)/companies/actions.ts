@@ -41,12 +41,6 @@ const companySchema = z.object({
     .toUpperCase()
     .regex(/^([A-Z]{2})?$/, 'A country is a two-letter code, like CA or US')
     .default(''),
-  based_in_region: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^([A-Z]{2}-[A-Z0-9]{1,3})?$/, 'A region looks like CA-QC or US-NY')
-    .default(''),
 })
 
 export type CompanyActionState = { ok?: boolean; error?: string }
@@ -117,7 +111,6 @@ function companyColumns(input: z.infer<typeof companySchema>, formData: FormData
      * first, and only one of them is the one that actually holds.
      */
     based_in: input.based_in || null,
-    based_in_region: input.based_in_region || null,
     sells_in: readList(formData, 'sells_in'),
     sources_in: readList(formData, 'sources_in'),
     linkedin: input.linkedin || null,

@@ -563,10 +563,10 @@ export default async function CompanyDetailPage({
                 glance on a card and is what the filters take; the full names
                 would wrap to three lines and say no more.
               */}
-              <Field label="Based in">
-                {company.based_in_region ?? company.based_in ?? <Empty />}
+              <Field label="Base Country">
+                {company.based_in ?? <Empty />}
               </Field>
-              <Field label="Sells in">
+              <Field label="Sells To">
                 {company.sells_in.length > 0 ? company.sells_in.join(" · ") : <Empty />}
               </Field>
               <Field label="Sources from" wide>

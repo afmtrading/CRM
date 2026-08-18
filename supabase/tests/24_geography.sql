@@ -98,7 +98,9 @@ begin
     v_message := sqlerrm;
   end;
 
-  perform test_assert(v_message like '%is not a country code%',
+  -- "country or region code" since the trading regions joined the list. The
+  -- name is still refused; only the code is a territory.
+  perform test_assert(v_message like '%is not a country or region code%',
     'and the message names the offending value rather than saying "invalid"');
   perform test_assert(v_message like '%ISO 3166%', 'and says what the vocabulary is');
 end;
@@ -127,37 +129,6 @@ begin
 end;
 $$;
 
--- =============================================================================
--- A region has to be inside the country it claims.
---
--- Without this, "based in Mexico, region CA-QC" is storable, and it reads on
--- screen as a successful piece of data entry.
--- =============================================================================
-do $$
-declare v_message text;
-begin
-  perform sign_in_as('admin_auth');
-
-  begin
-    insert into companies (organization_id, name, based_in, based_in_region)
-    values ((select id from fixture where key = 'org'), 'Impossible', 'MX', 'CA-QC');
-    perform test_assert(false, 'a region in the wrong country is refused');
-  exception when others then
-    v_message := sqlerrm;
-  end;
-
-  perform test_assert(v_message like '%CA-QC is not in MX%', 'and says which and where');
-
-  -- The country is implied when only the region is given, which is what a
-  -- spreadsheet with a "QC" column actually gives you.
-  insert into companies (organization_id, name, based_in_region)
-  values ((select id from fixture where key = 'org'), 'Implied', 'CA-QC');
-
-  perform test_assert(
-    (select based_in from companies where name = 'Implied') = 'CA',
-    'and a region on its own fills in the country it belongs to');
-end;
-$$;
 
 -- =============================================================================
 -- The three queries this was built for.
@@ -245,7 +216,7 @@ begin
   exception when others then
     v_message := sqlerrm;
   end;
-  perform test_assert(v_message like '%XX is not a country code%', 'naming the bad value');
+  perform test_assert(v_message like '%XX is not a country or region code%', 'naming the bad value');
 end;
 $$;
 
@@ -262,12 +233,26 @@ begin
 
   perform test_assert(
     (select name from countries where code = 'CA') = 'Canada', 'and says what CA is');
+  -- The nine trading regions share the list, coded from the ISO user-assigned
+  -- X series so they can sit behind the same foreign key as a country.
   perform test_assert(
-    (select count(*) from country_subdivisions where country_code = 'CA') = 13,
-    'with every Canadian province and territory');
+    (select count(*) from countries where kind = 'region') = 9,
+    'and the nine trading regions are in it too');
   perform test_assert(
-    (select count(*) from country_subdivisions where country_code = 'US') = 51,
-    'and every American state, the District of Columbia included');
+    (select name from countries where code = 'XN') = 'North America',
+    'named rather than coded');
+  perform test_assert(
+    (select min(sort_order) from countries where kind = 'country')
+      > (select max(sort_order) from countries where kind = 'region'),
+    'and sorted ahead of every country, which is where they were asked to be');
+
+  -- A region is a place a company can be based, because based_in references
+  -- countries and a region now lives there.
+  insert into companies (organization_id, name, based_in)
+  values ((select id from fixture where key = 'org'), 'Regional', 'XE');
+  perform test_assert(
+    (select based_in from companies where name = 'Regional') = 'XE',
+    'and a company can be based in one');
 
   perform test_assert(
     not has_table_privilege('authenticated', 'public.countries', 'INSERT'),

@@ -113,9 +113,8 @@ export const COMPANY_FIELDS: FieldDef[] = [
    * countries belongs to six groups at once, and a grouped list would either
    * repeat it or pick one arbitrarily.
    */
-  { key: 'based_in', label: 'Based in', type: 'enum', groupable: true, sortable: true },
-  { key: 'based_in_region', label: 'Region', type: 'enum', groupable: true, sortable: true },
-  { key: 'sells_in', label: 'Sells in', type: 'array' },
+  { key: 'based_in', label: 'Base Country', type: 'enum', groupable: true, sortable: true },
+  { key: 'sells_in', label: 'Sells To', type: 'array' },
   { key: 'sources_in', label: 'Sources from', type: 'array' },
   { key: 'specialty_market', label: 'Merchandise', type: 'array' },
   { key: 'stock_type', label: 'Stock type', type: 'array' },
@@ -180,10 +179,9 @@ export const MARKETPLACE_FIELDS: FieldDef[] = [
   { key: 'name', label: 'Name', type: 'text', sortable: true },
   { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
-  { key: 'based_in', label: 'Based in', type: 'enum', groupable: true, sortable: true },
-  { key: 'based_in_region', label: 'Region', type: 'enum', groupable: true },
+  { key: 'based_in', label: 'Base Country', type: 'enum', groupable: true, sortable: true },
   { key: 'domain', label: 'Website', type: 'text' },
-  { key: 'sells_in', label: 'Sells in', type: 'array' },
+  { key: 'sells_in', label: 'Sells To', type: 'array' },
   { key: 'specialty_market', label: 'Merchandise', type: 'array' },
 
   { key: 'marketplace_profiles.marketplace_type', label: 'Marketplace type', type: 'array' },
