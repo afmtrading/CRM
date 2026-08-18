@@ -26,13 +26,18 @@ import {
 } from '@/lib/filters'
 import type { SavedFilterRow } from '@/lib/database.types'
 import { placeNames, type Place } from '@/lib/geography'
-import { LayersIcon, StoreIcon, TagIcon } from '@/components/icons'
+import { AlertIcon, LayersIcon, StoreIcon } from '@/components/icons'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 import { readColumns } from '../column-actions'
 import { AddMarketplaceForm } from './add-marketplace'
 
 export const metadata = { title: 'Marketplaces · FLO CRM' }
+
+/** Filter conditions travel in the URL as a JSON `f` param (see filterToSearchParams). */
+const UNASSIGNED_VIEW = `/marketplaces?f=${encodeURIComponent(
+  JSON.stringify([{ field: 'owner_id', operator: 'is_empty', value: '' }]),
+)}`
 
 /**
  * The channels, rather than the counterparties.
@@ -174,17 +179,7 @@ export default async function MarketplacesPage({
    * the contacts list follows.
    */
   const selling = everything.filter((row) => row.marketplace_profiles.sells_through)
-  const sourcing = everything.filter((row) => row.marketplace_profiles.sources_from)
-
-  const auctions = everything.filter((row) =>
-    row.marketplace_profiles.marketplace_type?.includes('Auction'),
-  )
-  /*
-   * Counted rather than averaged. A cost band has no mean worth reporting —
-   * "Medium" is a judgement, not a number — so the headline is how many of the
-   * cheap ones there are, which is the thing worth knowing at a glance.
-   */
-  const lowCost = everything.filter((row) => row.marketplace_profiles.selling_cost === 'Low')
+  const unassigned = everything.filter((row) => !row.owner_id)
 
   /*
    * The option lists behind the conditions, so a filter on selling cost offers
@@ -436,25 +431,15 @@ export default async function MarketplacesPage({
       )}
 
       <StatGrid>
-        <StatCard label="Marketplaces" value={String(count ?? rows.length)} icon={StoreIcon} />
+        <StatCard label="Total marketplaces" value={String(count ?? rows.length)} icon={StoreIcon} />
+        {/* Sells_through: we are marketing our own products in this channel. */}
+        <StatCard label="Live" value={String(selling.length)} icon={LayersIcon} tone="brand" />
         <StatCard
-          label="Sell through"
-          value={String(selling.length)}
-          icon={LayersIcon}
-          tone="brand"
-        />
-        <StatCard
-          label="Source from"
-          value={String(sourcing.length)}
-          icon={TagIcon}
-          tone="violet"
-        />
-        <StatCard
-          label="Low selling cost"
-          value={String(lowCost.length)}
-          icon={TagIcon}
-          tone="amber"
-          hint={auctions.length > 0 ? `${auctions.length} auction` : undefined}
+          label="Unassigned"
+          value={String(unassigned.length)}
+          icon={AlertIcon}
+          tone={unassigned.length > 0 ? 'red' : 'violet'}
+          href={unassigned.length > 0 ? UNASSIGNED_VIEW : undefined}
         />
       </StatGrid>
 
