@@ -296,6 +296,26 @@ describe('cells holding several values', () => {
   it('de-duplicates', () => {
     expect(splitValues('General / General').values).toEqual(['General'])
   })
+
+  /*
+   * The separator a spreadsheet reaches for when the values themselves contain
+   * commas, and the one this importer did not know about — which made
+   * "Distributor; Wholesaler" a single option on two thirds of the rows of a
+   * real buyer list.
+   */
+  it('splits on a semicolon, however long the cell', () => {
+    expect(splitValues('Distributor; Wholesaler').values).toEqual(['Distributor', 'Wholesaler'])
+    expect(splitValues('Asset Management; Auctioneer; Brokers').values).toEqual([
+      'Asset Management',
+      'Auctioneer',
+      'Brokers',
+    ])
+    // Past the length where a comma stops separating; a semicolon still does.
+    expect(splitValues('Auctioneer & Buyer; Liquidation Wholesaler').values).toEqual([
+      'Auctioneer & Buyer',
+      'Liquidation Wholesaler',
+    ])
+  })
 })
 
 describe('diffing an existing record', () => {

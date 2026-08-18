@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildPlan, readRow, suggestTargets, type ReadContext } from '@/lib/import-plan'
+import {
+  buildPlan,
+  importTargets,
+  readRow,
+  suggestTargets,
+  type ReadContext,
+} from '@/lib/import-plan'
 
 const CONTEXT: ReadContext = {
   countries: [
@@ -53,6 +59,68 @@ describe('suggesting a mapping', () => {
     const mapping = suggestTargets(['Email', 'Backup Email'])
     expect(mapping.Email).toBe('contact.email')
     expect(mapping['Backup Email']).toBeUndefined()
+  })
+
+  /*
+   * Separators are punctuation, not part of the word. A file writing
+   * `stock_type` is naming the same field as one writing "Stock type", and
+   * matching on the literal space meant the app failed to recognise its own
+   * field names — the whole of somebody's complaint that identical names would
+   * not match.
+   */
+  it('reads a heading the same however it is punctuated', () => {
+    const mapping = suggestTargets(['stock_type', 'company_type', 'first-name'])
+    expect(mapping.stock_type).toBe('company.stock_type')
+    expect(mapping.company_type).toBe('company.customer_type')
+    expect(mapping['first-name']).toBe('contact.first_name')
+  })
+
+  // The field is called "Base Country". An anchored /^country/ did not match
+  // the app's own name for it.
+  it('finds the country column whatever qualifies it', () => {
+    expect(suggestTargets(['Base Country'])['Base Country']).toBe('company.based_in')
+    expect(suggestTargets(['Country'])['Country']).toBe('company.based_in')
+  })
+
+  /*
+   * A qualified heading beats the generic rule for its kind of value.
+   * "Company email" used to be claimed by the bare email rule and land on a
+   * person who did not exist.
+   */
+  it('keeps a company address off the contact', () => {
+    const mapping = suggestTargets(['Company email', 'Company phone'])
+    expect(mapping['Company email']).toBe('company.email')
+    expect(mapping['Company phone']).toBe('company.phone')
+  })
+
+  it('offers the fields added since it was written', () => {
+    const mapping = suggestTargets(['sells_To', 'Tags', 'notes'])
+    expect(mapping.sells_To).toBe('company.sells_in')
+    expect(mapping.Tags).toBe('company.tags')
+    expect(mapping.notes).toBe('company.notes')
+  })
+
+  /*
+   * Priority, Owner, Tags and Notes are asked of both records in the same
+   * words, so the file decides. Getting this backwards is not a cosmetic
+   * mistake: a contact list's Priority pointed at the company would rewrite
+   * the priority of every company on it.
+   */
+  describe('headings that both records share', () => {
+    it('gives them to the company when the file names no people', () => {
+      const mapping = suggestTargets(['Company name', 'priority', 'owner', 'Tags'])
+      expect(mapping.priority).toBe('company.priority')
+      expect(mapping.owner).toBe('company.owner_id')
+      expect(mapping.Tags).toBe('company.tags')
+    })
+
+    it('gives them to the person when it does', () => {
+      const mapping = suggestTargets(['first_name', 'last_name', 'company_name', 'priority', 'owner'])
+      expect(mapping.priority).toBe('contact.priority')
+      expect(mapping.owner).toBe('contact.owner_id')
+      // The company column is still the company's, which is what joins the two.
+      expect(mapping.company_name).toBe('company.name')
+    })
   })
 })
 
@@ -215,5 +283,116 @@ describe('building the plan', () => {
     const plan = buildPlan(rows, { Email: 'contact.email' }, CONTEXT, [])
     expect(plan.companies).toEqual([])
     expect(plan.counts.rows).toBe(3)
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+
+const USERS = [
+  { id: 'u-emile', name: 'Emile Tremblay', email: 'emile@flo.example' },
+  { id: 'u-sam', name: 'Sam Okafor', email: 'sam@flo.example' },
+]
+
+describe('the columns a list actually arrives with', () => {
+  const read = (mapping: Record<string, string>, values: Record<string, string>) =>
+    readRow(2, values, mapping, { ...CONTEXT, users: USERS })
+
+  describe('an owner column', () => {
+    it('resolves a first name to the one person who answers to it', () => {
+      const row = read({ owner: 'company.owner_id' }, { owner: 'Emile' })
+      expect(row.company.owner_id).toBe('u-emile')
+      expect(row.warnings).toEqual([])
+    })
+
+    it('resolves a full name and an email too', () => {
+      expect(read({ o: 'company.owner_id' }, { o: 'Emile Tremblay' }).company.owner_id).toBe('u-emile')
+      expect(read({ o: 'company.owner_id' }, { o: 'sam@flo.example' }).company.owner_id).toBe('u-sam')
+    })
+
+    /*
+     * Left unset and said out loud. Assigning somebody's accounts to the wrong
+     * rep is worse than assigning them to nobody, and it is invisible after
+     * the fact — nothing on the record says the name was a guess.
+     */
+    it('refuses a name that matches nobody, and says so', () => {
+      const row = read({ owner: 'company.owner_id' }, { owner: 'Nobody' })
+      expect(row.company.owner_id).toBeUndefined()
+      expect(row.warnings).toEqual(['No user called "Nobody" — owner left unset'])
+    })
+
+    it('refuses a first name two people share', () => {
+      const row = readRow(2, { owner: 'Emile' }, { owner: 'company.owner_id' }, {
+        ...CONTEXT,
+        users: [...USERS, { id: 'u-other', name: 'Emile Roy', email: 'roy@flo.example' }],
+      })
+      expect(row.company.owner_id).toBeUndefined()
+      expect(row.warnings[0]).toContain('More than one person')
+    })
+  })
+
+  describe('a sells-to column', () => {
+    it('reads a list of countries to codes', () => {
+      const row = read({ sells_To: 'company.sells_in' }, { sells_To: 'Canada; Mexico; USA' })
+      expect(row.company.sells_in).toEqual(['CA', 'MX', 'US'])
+    })
+
+    it('warns rather than silently dropping what it cannot place', () => {
+      const row = read({ sells_To: 'company.sells_in' }, { sells_To: 'Worldwide' })
+      expect(row.company.sells_in).toBeUndefined()
+      expect(row.warnings[0]).toContain('Worldwide')
+    })
+
+    /*
+     * A column of its own is the better statement of the fact than a territory
+     * smuggled in after a slash, so it wins. Both said different things here
+     * and the explicit one is what survives.
+     */
+    it('is not overwritten by a territory hidden in the region cell', () => {
+      const row = read(
+        { sells_To: 'company.sells_in', Region: 'company.region' },
+        { sells_To: 'Canada', Region: 'Quebec / North America' },
+      )
+      expect(row.company.sells_in).toEqual(['CA'])
+    })
+  })
+
+  describe('tags', () => {
+    it('keeps them off the value bag, which is written as columns', () => {
+      const row = read({ Tags: 'company.tags' }, { Tags: 'Orthotics; Look' })
+      expect(row.companyTags).toEqual(['Orthotics', 'Look'])
+      expect(row.company.tags).toBeUndefined()
+    })
+
+    it('gives a row with no person on it its tags as the company\'s', () => {
+      const row = read(
+        { Name: 'contact.name', Tags: 'contact.tags' },
+        { Name: 'Company intake', Tags: 'Orthotics' },
+      )
+      expect(row.contact).toBeNull()
+      expect(row.companyTags).toEqual(['Orthotics'])
+    })
+  })
+
+  it('reads a field the organization defined for itself', () => {
+    const row = readRow(
+      2,
+      { Buyer_Vendor: 'Buyer; Vendor' },
+      { Buyer_Vendor: 'company.custom_fields.buyer_vendor' },
+      {
+        ...CONTEXT,
+        targets: importTargets([
+          { key: 'buyer_vendor', label: 'Buyer / Vendor', entity_type: 'company' },
+        ]),
+      },
+    )
+    expect(row.company.custom_fields).toEqual({ buyer_vendor: 'Buyer; Vendor' })
+  })
+
+  it('takes a first and last name from two columns', () => {
+    const row = read(
+      { first_name: 'contact.first_name', last_name: 'contact.last_name' },
+      { first_name: 'Justinian', last_name: 'La Rosa' },
+    )
+    expect(row.contact).toMatchObject({ first_name: 'Justinian', last_name: 'La Rosa' })
   })
 })
