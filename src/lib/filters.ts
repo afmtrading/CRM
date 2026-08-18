@@ -115,7 +115,6 @@ export const COMPANY_FIELDS: FieldDef[] = [
    */
   { key: 'based_in', label: 'Base Country', type: 'enum', groupable: true, sortable: true },
   { key: 'sells_in', label: 'Sells To', type: 'array' },
-  { key: 'sources_in', label: 'Sources from', type: 'array' },
   { key: 'specialty_market', label: 'Merchandise', type: 'array' },
   { key: 'stock_type', label: 'Stock type', type: 'array' },
   { key: 'customer_type', label: 'Company type', type: 'array' },

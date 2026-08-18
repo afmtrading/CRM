@@ -16,6 +16,7 @@ import type {
   CompanyRow,
   CustomFieldDefinitionRow,
   SavedFilterRow,
+  TagRow,
   UserRow,
 } from "@/lib/database.types";
 import {
@@ -85,6 +86,8 @@ export default async function ContactsPage({
     { data: owners },
     { data: companies },
     { data: fieldOptionRows },
+    { data: tagRows },
+    { data: contactTagRows },
     { data: emailLists },
   ] = await Promise.all([
     scoped(context, "saved_filters").select("*").eq("entity_type", "contact"),
@@ -99,6 +102,14 @@ export default async function ContactsPage({
       .select("*")
       .in("entity_type", ["contact", "company"])
       .order("order"),
+    /*
+     * Tags are a join table, so a Tags column needs both halves. Two small
+     * queries for the whole page rather than one per row — the alternative is
+     * an embed on the contact query, which would pull the join on every request
+     * whether the column is showing or not.
+     */
+    scoped(context, "tags").select("id, name, color").order("name"),
+    scoped(context, "contact_tags").select("contact_id, tag_id"),
     // Only the fixed lists: a list that follows a filter has nothing to add to.
     scoped(context, "email_lists")
       .select("id, name")
@@ -217,6 +228,19 @@ export default async function ContactsPage({
   const ownerNames = new Map(
     ownerList.map((user) => [user.id, user.name || user.email]),
   );
+
+  /* Tag ids to the tag, and each contact to the tags on it. */
+  const tagsById = new Map(
+    ((tagRows ?? []) as Pick<TagRow, "id" | "name" | "color">[]).map((tag) => [tag.id, tag]),
+  );
+  const tagsByContact = new Map<string, Pick<TagRow, "id" | "name" | "color">[]>();
+  for (const link of (contactTagRows ?? []) as { contact_id: string; tag_id: string }[]) {
+    const tag = tagsById.get(link.tag_id);
+    if (!tag) continue;
+    const list = tagsByContact.get(link.contact_id);
+    if (list) list.push(tag);
+    else tagsByContact.set(link.contact_id, [tag]);
+  }
   /*
    * Region is not offered here. It belongs to the company, so setting it on a
    * selection of contacts would quietly edit their employers — including for
@@ -327,6 +351,29 @@ export default async function ContactsPage({
         ) : (
           <Empty />
         );
+      case "tags": {
+        /*
+         * The tag's own colour, which an admin chose in Settings → Tags, so it
+         * is an inline style rather than a class — Tailwind cannot see a hex
+         * that only exists in the database. Tinted background, solid text, the
+         * same shape every other badge on this row has.
+         */
+        const tags = tagsByContact.get(contact.id) ?? [];
+        if (tags.length === 0) return <Empty />;
+        return (
+          <span className="flex flex-wrap gap-1">
+            {tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="badge"
+                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </span>
+        );
+      }
       case "lifecycle_stage":
         // The badge the contact's own page uses. Every other column here with a
         // fixed vocabulary is a badge; this one was plain lowercase text.

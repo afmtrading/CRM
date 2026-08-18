@@ -58,7 +58,7 @@ export async function planImport(input: PlanInput): Promise<PlanResult> {
      * milliseconds, and doing it once beats a query per row.
      */
       scoped(context, 'companies')
-        .select('id, name, domain, email, based_in, phone, notes, specialty_market, stock_type, customer_type, sells_in, sources_in')
+        .select('id, name, domain, email, based_in, phone, notes, specialty_market, stock_type, customer_type, sells_in')
         .is('deleted_at', null),
       scoped(context, 'field_options').select('field_key, value'),
     ])

@@ -106,7 +106,7 @@ export default async function CompaniesPage({
     if (field.key === 'owner_id') {
       return { ...field, options: ownerList.map((u) => ({ value: u.id, label: u.name || u.email })) }
     }
-    if (field.key === 'based_in' || field.key === 'sells_in' || field.key === 'sources_in') {
+    if (field.key === 'based_in' || field.key === 'sells_in') {
       return { ...field, options: places.countryOptions }
     }
     return field
@@ -198,14 +198,6 @@ export default async function CompaniesPage({
         return company.sells_in?.length ? (
           <span className="block truncate text-slate-600">
             {company.sells_in.map((code) => places.country(code)).join(', ')}
-          </span>
-        ) : (
-          <Empty />
-        )
-      case 'sources_in':
-        return company.sources_in?.length ? (
-          <span className="block truncate text-slate-600">
-            {company.sources_in.map((code) => places.country(code)).join(', ')}
           </span>
         ) : (
           <Empty />

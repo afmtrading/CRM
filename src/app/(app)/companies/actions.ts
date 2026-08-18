@@ -112,7 +112,6 @@ function companyColumns(input: z.infer<typeof companySchema>, formData: FormData
      */
     based_in: input.based_in || null,
     sells_in: readList(formData, 'sells_in'),
-    sources_in: readList(formData, 'sources_in'),
     linkedin: input.linkedin || null,
     facebook: input.facebook || null,
     instagram: input.instagram || null,

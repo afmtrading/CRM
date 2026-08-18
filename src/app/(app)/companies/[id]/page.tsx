@@ -569,9 +569,6 @@ export default async function CompanyDetailPage({
               <Field label="Sells To">
                 {company.sells_in.length > 0 ? company.sells_in.join(" · ") : <Empty />}
               </Field>
-              <Field label="Sources from" wide>
-                {company.sources_in.length > 0 ? company.sources_in.join(" · ") : <Empty />}
-              </Field>
               <Field label="Company type" wide>
                 <OptionBadges
                   values={company.customer_type}
