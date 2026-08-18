@@ -64,6 +64,7 @@ const COMPANY_COLUMNS: TableColumn[] = [
   { key: 'stock_type', label: 'Stock type' },
   { key: 'owner', label: 'Owner' },
   { key: 'contacts', label: 'Contacts', align: 'right' },
+  { key: 'tags', label: 'Tags' },
   { key: 'size', label: 'Size' },
   { key: 'region', label: 'Region' },
   { key: 'based_in', label: 'Base Country' },

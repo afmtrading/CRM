@@ -43,6 +43,7 @@ const ENTITY_TABLES: Record<string, TenantTable> = {
   assignment_rule: 'assignment_rules',
   custom_field_definition: 'custom_field_definitions',
   contact_tag: 'contact_tags',
+  company_tag: 'company_tags',
   product: 'products',
 }
 
