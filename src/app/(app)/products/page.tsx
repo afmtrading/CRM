@@ -1,9 +1,11 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { formatNumber, formatPrice } from '@/lib/format'
+import { formatNumber, formatPrice, totalsByCurrency } from '@/lib/format'
 import type { CustomFieldDefinitionRow, FieldOptionRow, ProductRow } from '@/lib/database.types'
 import { derivePricing } from '@/lib/products'
+import { round2 } from '@/lib/sales'
+import { MoneyTotals } from '@/components/money'
 import { availableTone, formatQuantity } from '@/lib/stock'
 import { productImageUrl } from '@/lib/product-image'
 import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
@@ -75,7 +77,7 @@ export default async function ProductsPage({
     scoped(context, 'field_options')
       .select('*')
       .eq('entity_type', 'product')
-      .in('field_key', ['product_category', 'product_status'])
+      .in('field_key', ['product_category', 'product_status', 'product_type'])
       .order('order'),
     // One call for every product rather than one per row: committed comes off
     // the open deals, which no page-level query could see through its own
@@ -95,6 +97,7 @@ export default async function ProductsPage({
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
   const categoryOptions = allOptions.filter((o) => o.field_key === 'product_category')
   const statusOptions = allOptions.filter((o) => o.field_key === 'product_status')
+  const typeOptions = allOptions.filter((o) => o.field_key === 'product_type')
 
   type StockRow = {
     product_id: string
@@ -110,22 +113,35 @@ export default async function ProductsPage({
   const active = products.filter((product) => product.active)
   const categories = new Set(products.map((product) => product.category).filter(Boolean))
 
-  // Averaged within the organization's own currency only — mixing rates would
-  // produce a headline number that means nothing.
-  const base = context.organization.default_currency
-  const inBase = active.filter((product) => product.currency === base)
-  const averagePrice =
-    inBase.length > 0
-      ? inBase.reduce((sum, product) => sum + Number(product.unit_price), 0) / inBase.length
-      : 0
-  const withMargin = inBase.filter((product) => Number(product.unit_price) > 0)
-  const averageMargin =
-    withMargin.length > 0
-      ? withMargin.reduce(
-          (sum, p) => sum + (Number(p.unit_price) - Number(p.unit_cost)) / Number(p.unit_price),
-          0,
-        ) / withMargin.length
-      : 0
+  /*
+   * What the shelves are worth at each price level.
+   *
+   * Stock-weighted, not a sum of price tags: a total that added one unit of a
+   * $900 item to two hundred of a $2 one would be a number about the price
+   * list rather than about the warehouse. On hand rather than available,
+   * because goods already promised to somebody are still goods you own.
+   *
+   * Per currency and never added together — the same rule the deals board and
+   * the invoice totals follow. A catalogue priced in two currencies has two
+   * answers and no third one.
+   *
+   * Over the products actually listed, so the totals describe what is on the
+   * screen: filter to one brand and these say what that brand is worth.
+   */
+  const stockValue = (pick: (product: ProductRow) => number | null) =>
+    totalsByCurrency(
+      products.map((product) => {
+        const unit = pick(product)
+        const onHand = Number(stockByProduct.get(product.id)?.on_hand ?? 0)
+        return {
+          value: unit === null ? 0 : round2(unit * onHand),
+          currency: product.currency,
+        }
+      }),
+    )
+
+  const showroomValue = stockValue((product) => derivePricing(product).unit.showroom.value)
+  const wholesaleValue = stockValue((product) => derivePricing(product).unit.wholesale.value)
 
   const catalogue = columnCatalogue('product', definitions)
   const columns = resolveColumns('product', savedColumns, catalogue)
@@ -140,7 +156,9 @@ export default async function ProductsPage({
       ? { ...field, options: categoryOptions.map((o) => ({ value: o.value, label: o.value })) }
       : field.key === 'status'
         ? { ...field, options: statusOptions.map((o) => ({ value: o.value, label: o.value })) }
-        : field,
+        : field.key === 'product_type'
+          ? { ...field, options: typeOptions.map((o) => ({ value: o.value, label: o.value })) }
+          : field,
   )
 
   // "Nothing matches" versus "nothing here yet" — the difference is whether
@@ -218,8 +236,17 @@ export default async function ProductsPage({
               >
                 {product.name}
               </Link>
+              {/*
+                What the thing is, in the words somebody would use to ask for
+                it: the make, how many are in it, how big it is, which one it
+                is. The SKU was here and is not any of those — it is how the
+                warehouse addresses it, and it has its own column for anybody
+                who needs it.
+              */}
               <p className="text-xs text-slate-500">
-                {[product.brand, product.sku].filter(Boolean).join(' · ') || '—'}
+                {[product.brand, product.item_count, product.size, product.model]
+                  .filter(Boolean)
+                  .join(' · ') || '—'}
               </p>
             </div>
           </div>
@@ -230,6 +257,13 @@ export default async function ProductsPage({
           <OptionBadges
             values={product.status ? [product.status] : []}
             options={statusOptions}
+          />
+        )
+      case 'product_type':
+        return (
+          <OptionBadges
+            values={product.product_type ? [product.product_type] : []}
+            options={typeOptions}
           />
         )
       case 'available': {
@@ -332,16 +366,18 @@ export default async function ProductsPage({
           hint="Edit the list in Settings → Fields"
         />
         <StatCard
-          label={`Average price (${base})`}
-          value={formatPrice(averagePrice, base)}
+          label="Showroom value"
+          value={<MoneyTotals rows={showroomValue} />}
           icon={CurrencyIcon}
           tone="blue"
+          hint="On hand, at showroom prices"
         />
         <StatCard
-          label="Average margin"
-          value={`${Math.round(averageMargin * 100)}%`}
+          label="Wholesale value"
+          value={<MoneyTotals rows={wholesaleValue} />}
           icon={LayersIcon}
           tone="amber"
+          hint="On hand, at wholesale prices"
         />
       </StatGrid>
 

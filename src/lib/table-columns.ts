@@ -78,6 +78,7 @@ const COMPANY_COLUMNS: TableColumn[] = [
 
 const PRODUCT_COLUMNS: TableColumn[] = [
   { key: 'name', label: 'Product', locked: true },
+  { key: 'product_type', label: 'Product type' },
   { key: 'status', label: 'Status' },
   { key: 'available', label: 'Available', align: 'center' },
   { key: 'location', label: 'Location', align: 'center' },
@@ -132,7 +133,15 @@ const MARKETPLACE_COLUMNS: TableColumn[] = [
 const DEFAULTS: Record<TableEntity, string[]> = {
   contact: ['name', 'company', 'owner', 'priority', 'role_type', 'credibility', 'region'],
   company: ['name', 'priority', 'customer_type', 'specialty_market', 'owner', 'contacts', 'region'],
-  product: ['name', 'status', 'available', 'location', 'price_showroom', 'price_wholesale'],
+  product: [
+    'name',
+    'product_type',
+    'status',
+    'available',
+    'location',
+    'price_showroom',
+    'price_wholesale',
+  ],
   marketplace: [
     'name',
     'marketplace_type',

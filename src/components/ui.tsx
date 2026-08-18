@@ -77,7 +77,12 @@ export function StatCard({
   trend,
 }: {
   label: string
-  value: string
+  /*
+   * A node rather than a string, because some of these are money and money in
+   * this app is never one number — a total across currencies has to stand as
+   * several subtotals side by side. See <MoneyTotals>.
+   */
+  value: React.ReactNode
   hint?: string
   href?: string
   icon?: IconComponent
