@@ -16,6 +16,7 @@ import {
   COMPANY_CARDS,
   CONTACT_CARDS,
   daysUntilBirthday,
+  optionsForField,
   renderMarkdown,
   safeUrl,
   socialUrl,
@@ -163,8 +164,15 @@ export default async function ContactDetailPage({
   })[];
 
   const options = (fieldOptions ?? []) as FieldOptionRow[];
-  const optionsFor = (key: string) =>
-    options.filter((option) => option.field_key === key);
+  /*
+   * Scoped to the record the field belongs to, not just the key. This page
+   * reads both lists — the contact's own fields and the company's, which the
+   * Company card below mirrors — and `priority` is a list on contacts, another
+   * on companies and another on products. Matching the key alone drew all
+   * three, so a badge could take another record type's colour.
+   */
+  const optionsFor = (key: string) => optionsForField(options, "contact", key);
+  const companyOptionsFor = (key: string) => optionsForField(options, "company", key);
 
   const userName = (userId: string | null) => {
     if (!userId) return null;
@@ -222,6 +230,17 @@ export default async function ContactDetailPage({
         description={contact.job_title ?? undefined}
         actions={
           <>
+            {/*
+              Beside the name, as on a deal and a company. Who owns the
+              relationship is what somebody checks before acting on it, and the
+              name is louder than its label because the name is the answer.
+            */}
+            <div className="mr-2 min-w-0 text-right">
+              <p className="text-xs text-slate-500">Owner</p>
+              <p className="truncate text-base font-semibold text-slate-900">
+                {userName(contact.owner_id) ?? "—"}
+              </p>
+            </div>
             {context.canWrite && (
               <Link href={`/contacts/${id}/edit`} className="btn-secondary">
                 Edit
@@ -651,7 +670,7 @@ export default async function ContactDetailPage({
                   <Field label="Market">
                     <OptionBadges
                       values={company.specialty_market}
-                      options={optionsFor("specialty_market")}
+                      options={companyOptionsFor("specialty_market")}
                     />
                   </Field>
                 </FieldRow>
@@ -659,7 +678,7 @@ export default async function ContactDetailPage({
                   <Field label="Company type">
                     <OptionBadges
                       values={company.customer_type}
-                      options={optionsFor("customer_type")}
+                      options={companyOptionsFor("customer_type")}
                     />
                   </Field>
                 </FieldRow>
@@ -676,10 +695,8 @@ export default async function ContactDetailPage({
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label} className="order-6">
             <dl className="divide-y divide-slate-100">
-              <FieldRow>
-                <Field label="Owner">
-                  {userName(contact.owner_id) ?? <Empty />}
-                </Field>
+              {/* Owner is beside the name now, so it is not repeated here. */}
+              <FieldRow columns={1}>
                 <Field label="Lead score">
                   <ScoreMeter score={contact.lead_score} />
                 </Field>
@@ -770,7 +787,7 @@ export default async function ContactDetailPage({
                 </Field>
               </FieldRow>
               <FieldRow columns={1}>
-                <Field label="Source">{contact.consent_source || <Empty />}</Field>
+                <Field label="How it was given">{contact.consent_source || <Empty />}</Field>
               </FieldRow>
               <FieldRow columns={1}>
                 <Field label="Recorded">
