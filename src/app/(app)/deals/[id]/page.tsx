@@ -16,6 +16,8 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { ActivityComposer, ActivityTimeline } from '@/components/activity-timeline'
+import { DateTime } from '@/components/date-time'
+import { Empty, Field, FieldRow } from '@/components/contact-cards'
 import { DealStatusBadge, PageHeader, Section } from '@/components/ui'
 import { TrashIcon } from '@/components/icons'
 
@@ -80,6 +82,11 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
 
   const userList = (users ?? []) as UserRow[]
   const owner = userList.find((user) => user.id === deal.owner_id)
+  const userName = (userId: string | null) => {
+    if (!userId) return null
+    const user = userList.find((candidate) => candidate.id === userId)
+    return user ? user.name || user.email : null
+  }
   const closedOwner = userList.find((user) => user.id === deal.closed_owner_id)
 
   const lineItems = (lines ?? []) as (DealProductRow & {
@@ -111,6 +118,18 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         description={`${formatCurrency(deal.value, deal.currency)} · ${deal.stages?.name ?? 'No stage'}`}
         actions={
           <>
+            {/*
+              Beside the name rather than buried in the Details card. Who owns
+              a deal is the first thing somebody checks before acting on one,
+              and the name is louder than its label because the name is the
+              answer — the label is only there to say what the answer is to.
+            */}
+            <div className="mr-2 min-w-0 text-right">
+              <p className="text-xs text-slate-500">Owner</p>
+              <p className="truncate text-base font-semibold text-slate-900">
+                {owner ? owner.name || owner.email : '—'}
+              </p>
+            </div>
             <Link href={`/deals/${id}/edit`} className="btn-secondary">
               Edit
             </Link>
@@ -144,9 +163,17 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+      {/*
+        Ordered for a narrow screen: the deal itself, then its lines, then what
+        has been said about it. `contents` lets both groups' cards take part in
+        one flex order on mobile; from lg the wrappers come back as columns.
+        items-start is what stops the Details column stretching to the height of
+        the one beside it.
+      */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:items-start">
+        <div className="contents lg:block lg:space-y-5 lg:col-span-2">
           <Section
+            className="order-2"
             title="Line items"
             actions={
               <span className="text-xs text-slate-500">
@@ -313,7 +340,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             )}
           </Section>
 
-          <Section title="Notes">
+          <Section title="Notes" className="order-3">
             {notesHtml ? (
               <div
                 className="space-y-2 text-sm leading-relaxed text-slate-700"
@@ -333,7 +360,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             )}
           </Section>
 
-          <Section title="Activity">
+          <Section title="Activity" className="order-4">
             <ActivityComposer
               relatedToType="deal"
               relatedToId={id}
@@ -350,136 +377,165 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           </Section>
         </div>
 
-        <Section title="Details">
-          <dl className="space-y-3 text-sm">
-            <div>
-              <dt className="text-xs text-slate-500">Status</dt>
-              <dd className="mt-0.5">
-                <DealStatusBadge status={deal.status} />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Pipeline / stage</dt>
-              <dd className="mt-0.5 text-slate-800">
-                {deal.stages?.pipelines?.name ?? '—'} · {deal.stages?.name ?? '—'}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Probability</dt>
-              <dd className="mt-0.5 flex items-center gap-2 text-slate-800">
-                {formatPercent(deal.probability)}
-                {deal.probability_overridden ? (
-                  <>
-                    <span className="badge bg-amber-100 text-amber-800">manual</span>
-                    <form action={resetDealProbability}>
-                      <input type="hidden" name="id" value={id} />
-                      <button type="submit" className="text-xs text-brand-700 hover:underline">
-                        Follow stage default
-                      </button>
-                    </form>
-                  </>
-                ) : (
-                  <span className="badge bg-slate-100 text-slate-600">stage default</span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Value</dt>
-              <dd className="mt-0.5 flex flex-wrap items-center gap-2 text-slate-800">
-                {formatCurrency(deal.value, deal.currency)}
-                {followsProducts ? (
-                  <span className="badge bg-slate-100 text-slate-600">from line items</span>
-                ) : (
-                  <span className="badge bg-amber-100 text-amber-800">entered by hand</span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Weighted value</dt>
-              <dd className="mt-0.5 text-slate-800">
-                {formatCurrency(deal.value * deal.probability, deal.currency)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Contact</dt>
-              <dd className="mt-0.5">
-                {deal.contacts ? (
-                  <Link href={`/contacts/${deal.contacts.id}`} className="text-brand-700 hover:underline">
-                    {contactName(deal.contacts)}
-                  </Link>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Company</dt>
-              <dd className="mt-0.5">
-                {deal.companies ? (
-                  <Link href={`/companies/${deal.companies.id}`} className="text-brand-700 hover:underline">
-                    {deal.companies.name}
-                  </Link>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Owner</dt>
-              <dd className="mt-0.5 text-slate-800">{owner ? owner.name || owner.email : '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Expected close</dt>
-              <dd className="mt-0.5 text-slate-800">{formatDay(deal.expected_close_date)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Actual close</dt>
-              <dd className="mt-0.5 text-slate-800">{formatDay(deal.actual_close_date)}</dd>
-            </div>
+        <div className="contents lg:block lg:space-y-5">
+          {/*
+            Status sits beside the card's own title rather than as the first
+            row inside it: it is what the card is about, not one of the facts
+            on it, and it is the thing somebody looks for first.
+          */}
+          <Section
+            title="Details"
+            className="order-1"
+            actions={<DealStatusBadge status={deal.status} />}
+          >
             {/*
-              Only once the deal has closed, and only when it says something the
-              Owner row above does not. Reporting reads closed_owner_id, so the
-              day the two disagree — an account handed over after the win — is
-              the day it matters that the record shows both.
+              Ordered the way somebody reads a deal: who it is with, then what
+              it is worth, then where it is, then when it lands. Separated by
+              rules, because a column of label/value pairs with nothing between
+              them makes the value under one label look like it belongs to the
+              next.
             */}
-            {deal.closed_owner_id && deal.closed_owner_id !== deal.owner_id && (
-              <div>
-                <dt className="text-xs text-slate-500">Closed by owner</dt>
-                <dd className="mt-0.5 text-slate-800">
-                  {closedOwner ? closedOwner.name || closedOwner.email : 'Someone since removed'}
-                  <span className="mt-0.5 block text-xs text-slate-400">
-                    Who this counts for in reporting. The account has changed hands since.
-                  </span>
-                </dd>
-              </div>
-            )}
-            {/* Whatever an admin put on this card, after the built-in rows. */}
-            {detailFields.map((field) => {
-              const shown = displayValue(customValues[field.key])
-              if (!shown) return null
-              return (
-                <div key={field.id}>
-                  <dt className="text-xs text-slate-500">{field.label}</dt>
-                  <dd className="mt-0.5">
-                    <CustomValue field={field} value={customValues[field.key]} options={options} />
-                  </dd>
-                </div>
-              )
-            })}
-            {deal.status === 'lost' && (
-              <div>
-                <dt className="text-xs text-slate-500">Why it was lost</dt>
-                <dd className="mt-0.5 text-slate-800">
-                  {deal.loss_reason ?? (
-                    <Link href={`/deals/${id}/edit`} className="text-brand-700 hover:underline">
-                      Not recorded — say why
+            <dl className="divide-y divide-slate-100 text-sm">
+              <FieldRow columns={1}>
+                <Field label="Company">
+                  {deal.companies ? (
+                    <Link
+                      href={`/companies/${deal.companies.id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {deal.companies.name}
                     </Link>
+                  ) : (
+                    <Empty />
                   )}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </Section>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Contact">
+                  {deal.contacts ? (
+                    <Link
+                      href={`/contacts/${deal.contacts.id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {contactName(deal.contacts)}
+                    </Link>
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Value">
+                  <span className="flex flex-wrap items-center gap-2">
+                    {formatCurrency(deal.value, deal.currency)}
+                    {followsProducts ? (
+                      <span className="badge bg-slate-100 text-slate-600">from line items</span>
+                    ) : (
+                      <span className="badge bg-amber-100 text-amber-800">entered by hand</span>
+                    )}
+                  </span>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Weighted value">
+                  {formatCurrency(deal.value * deal.probability, deal.currency)}
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Probability">
+                  <span className="flex flex-wrap items-center gap-2">
+                    {formatPercent(deal.probability)}
+                    {deal.probability_overridden ? (
+                      <>
+                        <span className="badge bg-amber-100 text-amber-800">manual</span>
+                        <form action={resetDealProbability}>
+                          <input type="hidden" name="id" value={id} />
+                          <button type="submit" className="text-xs text-brand-700 hover:underline">
+                            Follow stage default
+                          </button>
+                        </form>
+                      </>
+                    ) : (
+                      <span className="badge bg-slate-100 text-slate-600">stage default</span>
+                    )}
+                  </span>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Pipeline / stage">
+                  {deal.stages?.pipelines?.name ?? '—'} · {deal.stages?.name ?? '—'}
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Expected close">{formatDay(deal.expected_close_date)}</Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Actual close">{formatDay(deal.actual_close_date)}</Field>
+              </FieldRow>
+              {/*
+                Only once the deal has closed, and only when it says something
+                the Owner beside the deal name does not. Reporting reads
+                closed_owner_id, so the day the two disagree — an account handed
+                over after the win — is the day it matters that both are shown.
+              */}
+              {deal.closed_owner_id && deal.closed_owner_id !== deal.owner_id && (
+                <FieldRow columns={1}>
+                  <Field label="Closed by owner">
+                    {closedOwner ? closedOwner.name || closedOwner.email : 'Someone since removed'}
+                    <span className="mt-0.5 block text-xs text-slate-400">
+                      Who this counts for in reporting. The account has changed hands since.
+                    </span>
+                  </Field>
+                </FieldRow>
+              )}
+              {/* Whatever an admin put on this card, after the built-in rows. */}
+              {detailFields.map((field) => {
+                const shown = displayValue(customValues[field.key])
+                if (!shown) return null
+                return (
+                  <FieldRow key={field.id} columns={1}>
+                    <Field label={field.label}>
+                      <CustomValue field={field} value={customValues[field.key]} options={options} />
+                    </Field>
+                  </FieldRow>
+                )
+              })}
+              {deal.status === 'lost' && (
+                <FieldRow columns={1}>
+                  <Field label="Why it was lost">
+                    {deal.loss_reason ?? (
+                      <Link href={`/deals/${id}/edit`} className="text-brand-700 hover:underline">
+                        Not recorded — say why
+                      </Link>
+                    )}
+                  </Field>
+                </FieldRow>
+              )}
+            </dl>
+          </Section>
+
+          {/* Last on a narrow screen: it is the card you go looking for. */}
+          <Section title="Record history" className="order-5">
+            <dl className="divide-y divide-slate-100 text-sm">
+              <FieldRow columns={1}>
+                <Field label="Created by">
+                  <span className="block">{userName(deal.created_by) ?? 'Unknown'}</span>
+                  <span className="text-xs text-slate-500">
+                    <DateTime value={deal.created_at} />
+                  </span>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Updated by">
+                  <span className="block">{userName(deal.updated_by) ?? 'Unknown'}</span>
+                  <span className="text-xs text-slate-500">
+                    <DateTime value={deal.updated_at} />
+                  </span>
+                </Field>
+              </FieldRow>
+            </dl>
+          </Section>
+        </div>
       </div>
 
       {/*

@@ -45,7 +45,7 @@ export default async function NewDealPage({
     scoped(context, 'pipelines').select('*').is('archived_at', null).order('name'),
     scoped(context, 'stages').select('*').is('archived_at', null).order('order'),
     scoped(context, 'contacts')
-      .select('id, first_name, last_name, email')
+      .select('id, first_name, last_name, email, company_id, companies(name)')
       .is('duplicate_of_id', null)
       .order('last_name')
       .limit(500),
@@ -72,10 +72,14 @@ export default async function NewDealPage({
         action={createDeal}
         pipelines={(pipelines ?? []) as PipelineRow[]}
         stages={(stages ?? []) as StageRow[]}
-        contacts={((contacts ?? []) as ContactRow[]).map((contact) => ({
-          id: contact.id,
-          label: contactName(contact),
-        }))}
+        contacts={((contacts ?? []) as (ContactRow & { companies: { name: string } | null })[]).map(
+          (contact) => ({
+            id: contact.id,
+            label: contactName(contact),
+            companyId: contact.company_id,
+            companyName: contact.companies?.name ?? null,
+          }),
+        )}
         companies={(companies ?? []) as { id: string; name: string }[]}
         owners={(owners ?? []) as UserRow[]}
         lossReasons={((reasons ?? []) as { value: string }[]).map((row) => row.value)}

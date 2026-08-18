@@ -429,5 +429,46 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Who made the deal, and who touched it last
+--
+-- Deals carried only their timestamps until 20260256, so the Record history
+-- card on a deal could say when and never who. Stamped by a trigger rather
+-- than sent by the caller, for the reason contacts and companies are: the one
+-- place that always knows who is writing is the write itself.
+-- =============================================================================
+do $$
+declare
+  v_org   uuid := (select id from fixture where key = 'org');
+  v_user  uuid := (select id from fixture where key = 'user');
+  v_stage uuid;
+  v_deal  uuid;
+begin
+  raise notice 'Deal record history:';
+
+  select id into v_stage from stages where organization_id = v_org order by "order" limit 1;
+
+  insert into deals (organization_id, name, stage_id, value)
+  values (v_org, 'Stamped deal', v_stage, 100) returning id into v_deal;
+
+  perform test_assert(
+    (select created_by from deals where id = v_deal) = v_user,
+    'creating a deal records who created it'
+  );
+
+  perform test_assert(
+    (select updated_by from deals where id = v_deal) = v_user,
+    'and who last touched it'
+  );
+
+  update deals set value = 200 where id = v_deal;
+
+  perform test_assert(
+    (select created_by from deals where id = v_deal) = v_user,
+    'editing a deal leaves created_by alone'
+  );
+end;
+$$;
+
 reset role;
 rollback;
