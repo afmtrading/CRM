@@ -30,7 +30,7 @@ import { formatDay } from '@/lib/format'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 import { readColumns } from '../column-actions'
-import { CurrencyIcon, LayersIcon, ProductsIcon, TagIcon } from '@/components/icons'
+import { CurrencyIcon, LayersIcon, ProductsIcon, TrendingUpIcon } from '@/components/icons'
 
 export const metadata = { title: 'Products · FLO CRM' }
 
@@ -142,7 +142,13 @@ export default async function ProductsPage({
   )
 
   const active = products.filter((product) => product.active)
-  const categories = new Set(products.map((product) => product.category).filter(Boolean))
+
+  // Scoped to what is actually on screen, like the two value totals below —
+  // filter to one brand and this says how many of that brand are new.
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+  const newThisMonth = products.filter((product) => new Date(product.created_at) >= monthStart)
 
   /*
    * What the shelves are worth at each price level.
@@ -428,13 +434,17 @@ export default async function ProductsPage({
       />
 
       <StatGrid>
-        <StatCard label="Products" value={formatNumber(active.length)} icon={ProductsIcon} />
+        <StatCard label="Total products" value={formatNumber(active.length)} icon={ProductsIcon} />
         <StatCard
-          label="Categories"
-          value={formatNumber(categories.size)}
-          icon={TagIcon}
-          tone="violet"
-          hint="Edit the list in Settings → Fields"
+          label="New this month"
+          value={formatNumber(newThisMonth.length)}
+          icon={TrendingUpIcon}
+          tone="brand"
+          trend={
+            newThisMonth.length > 0
+              ? { label: `+${newThisMonth.length}`, direction: 'up' }
+              : undefined
+          }
         />
         <StatCard
           label={`Showroom value (${base})`}

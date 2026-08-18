@@ -22,17 +22,23 @@ import { placeNames, type Place } from '@/lib/geography'
 import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
 import { FilterBar } from '@/components/filter-bar'
-import { EmptyState, PageHeader, SubGroupRow } from '@/components/ui'
+import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
 import { CustomCell, Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
 import { formatDay } from '@/lib/format'
+import { AlertIcon, AwardIcon, CompaniesIcon, TrendingUpIcon } from '@/components/icons'
 
 import { readColumns } from '../column-actions'
 
 import { deleteSavedFilter, saveFilter } from '../contacts/actions'
 
 export const metadata = { title: 'Companies · FLO CRM' }
+
+/** Filter conditions travel in the URL as a JSON `f` param (see filterToSearchParams). */
+const UNASSIGNED_VIEW = `/companies?f=${encodeURIComponent(
+  JSON.stringify([{ field: 'owner_id', operator: 'is_empty', value: '' }]),
+)}`
 
 export default async function CompaniesPage({
   searchParams,
@@ -41,6 +47,48 @@ export default async function CompaniesPage({
 }) {
   const params = await searchParams
   const context = await requireSession()
+
+  // Headline counts describe the whole book of companies, not the filtered
+  // view, so they stay put while somebody narrows the list below — the same
+  // rule the contacts list follows. Started here and awaited after the list
+  // query so everything runs concurrently.
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+
+  const live = () => scoped(context, 'companies').select('id', { count: 'exact', head: true }).is('deleted_at', null)
+
+  /*
+   * "Customer" has no column of its own the way a contact's lifecycle stage
+   * does — a company counts if either half is true: one of its contacts is a
+   * Customer, or the company has actually transacted (a won deal, or a sales
+   * order/invoice that got past draft). Four id lists, unioned in memory
+   * rather than one query, because that OR spans three unrelated tables and
+   * PostgREST has no way to ask for it in one round trip.
+   */
+  const customerSignals = Promise.all([
+    scoped(context, 'contacts')
+      .select('company_id')
+      .eq('lifecycle_stage', 'customer')
+      .not('company_id', 'is', null),
+    scoped(context, 'deals').select('company_id').eq('status', 'won').not('company_id', 'is', null),
+    // Reserved and past: draft is a working order, and cancelled never happened.
+    scoped(context, 'sales_orders')
+      .select('company_id')
+      .in('status', ['reserved', 'confirmed', 'fulfilled'])
+      .not('company_id', 'is', null),
+    // Sent and past: draft has not gone out, and void never happened either.
+    scoped(context, 'invoices')
+      .select('company_id')
+      .in('status', ['sent', 'partial', 'paid'])
+      .not('company_id', 'is', null),
+  ])
+
+  const statsPromise = Promise.all([
+    live(),
+    live().gte('created_at', monthStart.toISOString()),
+    live().is('owner_id', null),
+  ])
 
   const [
     { data: savedFilters },
@@ -129,6 +177,13 @@ export default async function CompaniesPage({
   query = applyFilter(query as any, config, 'company') as any
 
   const { data, count } = await query.limit(200)
+  const [totalStat, newThisMonth, unassigned] = await statsPromise
+  const customerRows = await customerSignals
+  const customers = new Set(
+    customerRows.flatMap(({ data: rows }) =>
+      ((rows ?? []) as { company_id: string }[]).map((row) => row.company_id),
+    ),
+  ).size
   const savedColumns = await readColumns('company')
   const rows = (data ?? []) as (CompanyRow & { contacts: { count: number }[] })[]
 
@@ -320,6 +375,34 @@ export default async function CompaniesPage({
           </>
         }
       />
+
+      <StatGrid>
+        <StatCard
+          label="Total companies"
+          value={String(totalStat.count ?? 0)}
+          icon={CompaniesIcon}
+          tone="blue"
+        />
+        <StatCard
+          label="New this month"
+          value={String(newThisMonth.count ?? 0)}
+          icon={TrendingUpIcon}
+          tone="brand"
+          trend={
+            (newThisMonth.count ?? 0) > 0
+              ? { label: `+${newThisMonth.count}`, direction: 'up' }
+              : undefined
+          }
+        />
+        <StatCard label="Customers" value={String(customers)} icon={AwardIcon} tone="amber" />
+        <StatCard
+          label="Unassigned"
+          value={String(unassigned.count ?? 0)}
+          icon={AlertIcon}
+          tone={(unassigned.count ?? 0) > 0 ? 'red' : 'violet'}
+          href={(unassigned.count ?? 0) > 0 ? UNASSIGNED_VIEW : undefined}
+        />
+      </StatGrid>
 
       <FilterBar
         fields={fields}
