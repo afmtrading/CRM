@@ -47,7 +47,6 @@ export default async function CompaniesPage({
     { data: owners },
     { data: fieldOptions },
     { data: countryRows },
-    { data: subdivisionRows },
   ] = await Promise.all([
     scoped(context, 'saved_filters').select('*').eq('entity_type', 'company'),
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company'),
@@ -58,11 +57,14 @@ export default async function CompaniesPage({
      * codes, so without these the list reads "CA" where it means Canada — in
      * the cells, and in a group heading, which is worse.
      */
-    context.supabase.from('countries').select('code, name').order('name'),
-    context.supabase.from('country_subdivisions').select('code, name').order('name'),
+    context.supabase
+      .from('countries')
+      .select('code, name, kind')
+      .order('sort_order')
+      .order('name'),
   ])
 
-  const places = placeNames((countryRows ?? []) as Place[], (subdivisionRows ?? []) as Place[])
+  const places = placeNames((countryRows ?? []) as Place[])
 
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
 
@@ -106,9 +108,6 @@ export default async function CompaniesPage({
     }
     if (field.key === 'based_in' || field.key === 'sells_in' || field.key === 'sources_in') {
       return { ...field, options: places.countryOptions }
-    }
-    if (field.key === 'based_in_region') {
-      return { ...field, options: places.regionOptions }
     }
     return field
   })
@@ -192,12 +191,6 @@ export default async function CompaniesPage({
       case 'based_in':
         return company.based_in ? (
           <span className="text-slate-600">{places.country(company.based_in)}</span>
-        ) : (
-          <Empty />
-        )
-      case 'based_in_region':
-        return company.based_in_region ? (
-          <span className="text-slate-600">{places.region(company.based_in_region)}</span>
         ) : (
           <Empty />
         )

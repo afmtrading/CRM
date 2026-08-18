@@ -32,7 +32,6 @@ export function CompanyForm({
   customFields,
   fieldOptions,
   countries,
-  subdivisions,
   submitLabel,
 }: {
   action: (state: CompanyActionState, formData: FormData) => Promise<CompanyActionState>
@@ -41,8 +40,7 @@ export function CompanyForm({
   customFields: CustomFieldDefinitionRow[]
   fieldOptions: FieldOptionRow[]
   /** ISO 3166, from the database rather than a second copy in the bundle. */
-  countries: { code: string; name: string }[]
-  subdivisions: { code: string; country_code: string; name: string }[]
+  countries: { code: string; name: string; kind?: string }[]
   submitLabel: string
 }) {
   const [state, formAction, pending] = useActionState(action, {} as CompanyActionState)
@@ -153,7 +151,7 @@ export function CompanyForm({
         */}
         <div>
           <label className="label" htmlFor="company-based-in">
-            Based in
+            Base Country
           </label>
           <select
             id="company-based-in"
@@ -162,36 +160,37 @@ export function CompanyForm({
             className="input"
           >
             <option value="">Not known</option>
-            {countries.map((country) => (
-              <option key={country.code} value={country.code}>
-                {country.name}
-              </option>
-            ))}
+            {/*
+              The nine trading regions lead, under their own heading. They are
+              already first in the list because the query orders them that way;
+              the heading is what stops "North America" reading as a country
+              somebody has not heard of.
+            */}
+            <optgroup label="Regions">
+              {countries
+                .filter((country) => country.kind === 'region')
+                .map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.name}
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="Countries">
+              {countries
+                .filter((country) => country.kind !== 'region')
+                .map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.name}
+                  </option>
+                ))}
+            </optgroup>
           </select>
         </div>
 
-        <div>
-          <label className="label" htmlFor="company-region">
-            Region
-          </label>
-          <select
-            id="company-region"
-            name="based_in_region"
-            defaultValue={company?.based_in_region ?? ''}
-            className="input"
-          >
-            <option value="">Not known</option>
-            {subdivisions.map((subdivision) => (
-              <option key={subdivision.code} value={subdivision.code}>
-                {subdivision.name} ({subdivision.country_code})
-              </option>
-            ))}
-          </select>
-        </div>
 
         <div>
           <label className="label" htmlFor="company-sells-in">
-            Sells in
+            Sells To
           </label>
           <select
             id="company-sells-in"

@@ -8,11 +8,6 @@ const CONTEXT: ReadContext = {
     { code: 'US', name: 'United States' },
     { code: 'MX', name: 'Mexico' },
   ],
-  subdivisions: [
-    { code: 'CA-QC', country_code: 'CA' },
-    { code: 'CA-ON', country_code: 'CA' },
-    { code: 'US-IL', country_code: 'US' },
-  ],
   placeholders: new Set(['Company intake']),
 }
 
@@ -64,15 +59,21 @@ describe('suggesting a mapping', () => {
 describe('reading a row', () => {
   const row = (values: Record<string, string>) => readRow(5, values, MAPPING, CONTEXT)
 
-  it('splits the region cell into where they are and where they sell', () => {
+  /*
+   * The file still puts two facts in one cell. Only the second half has a home
+   * now that the subdivision column is gone, so the province is read and
+   * dropped rather than warned about — the spreadsheet did not change, the app
+   * stopped asking.
+   */
+  it('takes the territory out of the region cell and lets the province go', () => {
     const read = row({
       'Company / Channel': 'C3',
       Country: 'Canada',
       Region: 'QC - Montreal / North America',
     })
     expect(read.company.based_in).toBe('CA')
-    expect(read.company.based_in_region).toBe('CA-QC')
     expect(read.company.sells_in).toEqual(['CA', 'MX', 'US'])
+    expect(read.warnings.some((warning) => warning.includes('QC'))).toBe(false)
   })
 
   it('reads "national" as the company own country', () => {

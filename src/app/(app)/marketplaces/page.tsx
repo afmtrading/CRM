@@ -81,7 +81,6 @@ export default async function MarketplacesPage({
     { data: pickable },
     { data: savedFilterRows },
     { data: countryRows },
-    { data: subdivisionRows },
   ] = await Promise.all([
       query.order('name').limit(500),
       scoped(context, 'users').select('*').order('name'),
@@ -119,8 +118,11 @@ export default async function MarketplacesPage({
        * without these the page shows "CA" where it means Canada, and the
        * filter is a box you have to know to type a code into.
        */
-      context.supabase.from('countries').select('code, name').order('name'),
-      context.supabase.from('country_subdivisions').select('code, name').order('name'),
+      context.supabase
+        .from('countries')
+        .select('code, name, kind')
+        .order('sort_order')
+        .order('name'),
     ])
 
   type Row = CompanyRow & {
@@ -129,7 +131,7 @@ export default async function MarketplacesPage({
   }
 
   const savedFilters = (savedFilterRows ?? []) as SavedFilterRow[]
-  const places = placeNames((countryRows ?? []) as Place[], (subdivisionRows ?? []) as Place[])
+  const places = placeNames((countryRows ?? []) as Place[])
 
   // A ?view=<id> link replays a saved filter; anything else comes from the URL.
   const savedView =
@@ -218,9 +220,6 @@ export default async function MarketplacesPage({
      */
     if (field.key === 'based_in' || field.key === 'sells_in') {
       return { ...field, options: places.countryOptions }
-    }
-    if (field.key === 'based_in_region') {
-      return { ...field, options: places.regionOptions }
     }
 
     const optionKey = fieldOptionsByKey[field.key]

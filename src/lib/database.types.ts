@@ -453,7 +453,7 @@ export type CompanyRow = {
   /**
    * Where the company is, and where it trades — three separate facts.
    *
-   * ISO 3166: `based_in` is alpha-2, `based_in_region` is a subdivision like
+   * ISO 3166: `based_in` is alpha-2 — a country, or one of the trading regions from the
    * CA-QC, and the two territories are lists of alpha-2 codes. Deliberately not
    * an organization-editable option list, because a list somebody can edit ends
    * up holding "USA", "U.S.A." and "United States" as three separate countries.
@@ -462,7 +462,6 @@ export type CompanyRow = {
    * makes `sells_in = ['CA','US']` mean "exactly these two".
    */
   based_in: string | null
-  based_in_region: string | null
   sells_in: string[]
   sources_in: string[]
   customer_type: string[]
@@ -1203,7 +1202,6 @@ export interface Database {
         | 'specialty_market'
         | 'stock_type'
         | 'based_in'
-        | 'based_in_region'
         | 'sells_in'
         | 'sources_in'
         | 'customer_type'

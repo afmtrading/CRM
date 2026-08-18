@@ -4,7 +4,6 @@ import {
   matchCompany,
   normaliseCountry,
   normalisePhones,
-  resolveRegion,
   resolveTerritory,
   splitRegionCell,
   splitValues,
@@ -133,7 +132,6 @@ export function suggestTargets(headers: string[]): Record<string, string> {
 
 export interface ReadContext {
   countries: CountryLookup[]
-  subdivisions: { code: string; country_code: string }[]
   /** Values in the contact-name column that are not people. */
   placeholders: Set<string>
 }
@@ -248,15 +246,17 @@ export function readRow(
     }
   }
 
+  /*
+   * One column still arrives holding two facts — "Ontario / sells across North
+   * America" — and only the second half has anywhere to go now that the
+   * subdivision column is gone. The region half is read and dropped rather
+   * than warned about: the file has not changed, and telling somebody their
+   * spreadsheet is wrong when the app is what stopped asking would be a lie.
+   */
   const regionCell = cellFor('company.region')
   if (regionCell) {
     const parts = splitRegionCell(regionCell)
     const country = (company.based_in as string | undefined) ?? null
-
-    const region = resolveRegion(parts.region, country, context.subdivisions)
-    if (region) company.based_in_region = region
-    else if (parts.region)
-      warnings.push(`"${parts.region}" is not a region of ${country ?? 'anywhere known'}`)
 
     const territory = resolveTerritory(parts.territory, country, context.countries)
     if (territory.codes.length > 0) company.sells_in = territory.codes
@@ -401,7 +401,7 @@ export function buildPlan(
     // Where two rows for one company give different single values, that is
     // worth a person's eye rather than a silent first-wins.
     const conflicts: { field: string; values: string[] }[] = []
-    for (const field of ['based_in', 'based_in_region', 'domain', 'phone']) {
+    for (const field of ['based_in', 'domain', 'phone']) {
       const seen = [
         ...new Set(
           read
