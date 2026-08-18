@@ -330,6 +330,12 @@ export function CompanyForm({
           </label>
           <input id="x_twitter" name="x_twitter" className="input" placeholder="handle or URL" defaultValue={company?.x_twitter ?? ''} />
         </div>
+        <div>
+          <label className="label" htmlFor="youtube">
+            YouTube
+          </label>
+          <input id="youtube" name="youtube" className="input" placeholder="handle or URL" defaultValue={company?.youtube ?? ''} />
+        </div>
         <CustomFieldInputs
           fields={customByCard('digital')}
           values={custom}

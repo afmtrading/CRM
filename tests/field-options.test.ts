@@ -59,6 +59,18 @@ describe('socialUrl', () => {
     expect(socialUrl('tiktok', 'afmtrading')).toBe('https://tiktok.com/@afmtrading')
   })
 
+  it('does the same for a youtube handle', () => {
+    expect(socialUrl('youtube', 'afmtrading')).toBe('https://youtube.com/@afmtrading')
+  })
+
+  // A channel is also reached by /channel/UC… or an old /c/ path, neither of
+  // which fits the @handle base — so a full URL has to pass through untouched.
+  it('leaves a youtube channel url alone', () => {
+    expect(socialUrl('youtube', 'https://youtube.com/channel/UC123')).toBe(
+      'https://youtube.com/channel/UC123',
+    )
+  })
+
   it('leaves a full url alone', () => {
     expect(socialUrl('facebook', 'https://facebook.com/afm/about')).toBe(
       'https://facebook.com/afm/about',
