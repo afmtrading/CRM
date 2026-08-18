@@ -211,26 +211,6 @@ export function CompanyForm({
           </p>
         </div>
 
-        <div>
-          <label className="label" htmlFor="company-sources-in">
-            Sources from
-          </label>
-          <select
-            id="company-sources-in"
-            name="sources_in"
-            multiple
-            size={7}
-            defaultValue={company?.sources_in ?? []}
-            className="input h-auto"
-          >
-            {countries.map((country) => (
-              <option key={country.code} value={country.code}>
-                {country.name}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">Where they buy or manufacture.</p>
-        </div>
 
         <div className="sm:col-span-2">
           <span className="label">Company type</span>
