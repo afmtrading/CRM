@@ -26,8 +26,8 @@ import {
   FormSection,
   NotesEditor,
   RadioChips,
-  TagChecklist,
 } from '@/components/form-fields'
+import { TagPicker } from '@/components/tag-picker'
 
 import { productImageUrl } from '@/lib/product-image'
 
@@ -463,7 +463,7 @@ export function ProductForm({
         <div className="sm:col-span-2">
           <span className="label">Tags</span>
           <input type="hidden" name="tags_present" value="1" />
-          <TagChecklist tags={tags} selected={selectedTagIds} canManage={canManage} />
+          <TagPicker tags={tags} selected={selectedTagIds} canManage={canManage} />
         </div>
       </FormCard>
 

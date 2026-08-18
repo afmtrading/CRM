@@ -35,7 +35,7 @@ import {
   Section,
 } from "@/components/ui";
 import { MailIcon, PhoneIcon } from "@/components/icons";
-import { TagChecklist } from "@/components/form-fields";
+import { TagPicker } from "@/components/tag-picker";
 import {
   ContactMethod,
   CustomFieldValues,
@@ -670,17 +670,20 @@ export default async function CompanyDetailPage({
 
           <Section title="Tags" className="order-4">
             {/* The same control the company form carries — see the contact page. */}
-            {tagList.length === 0 ? (
-              <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
-            ) : (
-              <form action={setCompanyTags} className="space-y-3">
-                <input type="hidden" name="company_id" value={id} />
-                <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
+            <form action={setCompanyTags} className="space-y-3">
+              <input type="hidden" name="company_id" value={id} />
+              <TagPicker
+                tags={tagList}
+                selected={selectedTagIds}
+                canManage={context.isAdmin}
+                canCreate={context.canWrite}
+              />
+              {context.canWrite && (
                 <button type="submit" className="btn-secondary">
                   Save tags
                 </button>
-              </form>
-            )}
+              )}
+            </form>
           </Section>
 
           <Section title={COMPANY_CARDS[1].label} className="order-7">

@@ -2,50 +2,49 @@ import { requireSession, scoped } from '@/lib/tenancy'
 import type { TagRow } from '@/lib/database.types'
 import { PageHeader, Section } from '@/components/ui'
 
-import { createTag, deleteTag } from '../actions'
+import { createTag } from '../actions'
+import { TagRows, type TagUsage } from './tag-rows'
 
 export const metadata = { title: 'Tags · FLO CRM' }
 
 export default async function TagsPage() {
   const context = await requireSession()
 
-  const { data: tags } = await scoped(context, 'tags').select('*, contact_tags(count)').order('name')
-  const tagList = (tags ?? []) as (TagRow & { contact_tags: { count: number }[] })[]
+  /*
+   * Counted across all three joins. The page used to ask only for
+   * contact_tags, so a tag used on forty companies and no contacts read as
+   * "0 contacts" — which is what somebody deletes.
+   */
+  const { data: tags } = await scoped(context, 'tags')
+    .select('*, contact_tags(count), company_tags(count), product_tags(count)')
+    .order('name')
+
+  const tagList = (tags ?? []) as (TagRow & {
+    contact_tags: { count: number }[]
+    company_tags: { count: number }[]
+    product_tags: { count: number }[]
+  })[]
+
+  const usage: TagUsage[] = tagList.map((tag) => ({
+    id: tag.id,
+    name: tag.name,
+    color: tag.color,
+    contacts: tag.contact_tags?.[0]?.count ?? 0,
+    companies: tag.company_tags?.[0]?.count ?? 0,
+    products: tag.product_tags?.[0]?.count ?? 0,
+  }))
 
   return (
     <>
-      <PageHeader title="Tags" description="Free-form segmentation on top of lifecycle stage." />
+      <PageHeader
+        title="Tags"
+        description="Free-form segmentation, shared by contacts, companies and products. Renaming one keeps it on every record that carries it."
+      />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Section title={`${tagList.length} tag${tagList.length === 1 ? '' : 's'}`}>
-            {tagList.length === 0 ? (
-              <p className="text-sm text-slate-500">No tags yet.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {tagList.map((tag) => (
-                  <li key={tag.id} className="flex items-center justify-between py-2">
-                    <span className="flex items-center gap-2 text-sm text-slate-800">
-                      <span
-                        className="inline-block h-3 w-3 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                        aria-hidden
-                      />
-                      {tag.name}
-                      <span className="text-xs text-slate-400">
-                        {tag.contact_tags?.[0]?.count ?? 0} contacts
-                      </span>
-                    </span>
-                    <form action={deleteTag}>
-                      <input type="hidden" name="id" value={tag.id} />
-                      <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                        Delete
-                      </button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <Section title={`${usage.length} tag${usage.length === 1 ? '' : 's'}`}>
+            <TagRows tags={usage} />
           </Section>
         </div>
 
@@ -73,6 +72,9 @@ export default async function TagsPage() {
               Add tag
             </button>
           </form>
+          <p className="mt-3 text-xs text-slate-400">
+            You can also add one while tagging a record — search for it and pick &ldquo;Create&rdquo;.
+          </p>
         </Section>
       </div>
     </>
