@@ -14,6 +14,7 @@ import type {
   CustomFieldDefinitionRow,
   FieldOptionRow,
   SavedFilterRow,
+  TagRow,
   UserRow,
 } from '@/lib/database.types'
 import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
@@ -47,6 +48,8 @@ export default async function CompaniesPage({
     { data: owners },
     { data: fieldOptions },
     { data: countryRows },
+    { data: tagRows },
+    { data: companyTagRows },
   ] = await Promise.all([
     scoped(context, 'saved_filters').select('*').eq('entity_type', 'company'),
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company'),
@@ -62,6 +65,13 @@ export default async function CompaniesPage({
       .select('code, name, kind')
       .order('sort_order')
       .order('name'),
+    /*
+     * Both halves of the join, once for the page. An embed on the company query
+     * would fetch it on every request whether the Tags column is showing or
+     * not; these two are small and only cost the page that asked.
+     */
+    scoped(context, 'tags').select('id, name, color').order('name'),
+    scoped(context, 'company_tags').select('company_id, tag_id'),
   ])
 
   const places = placeNames((countryRows ?? []) as Place[])
@@ -124,6 +134,19 @@ export default async function CompaniesPage({
 
   const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
 
+  /* Tag ids to the tag, and each company to the tags on it. */
+  const tagsById = new Map(
+    ((tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]).map((tag) => [tag.id, tag]),
+  )
+  const tagsByCompany = new Map<string, Pick<TagRow, 'id' | 'name' | 'color'>[]>()
+  for (const link of (companyTagRows ?? []) as { company_id: string; tag_id: string }[]) {
+    const tag = tagsById.get(link.tag_id)
+    if (!tag) continue
+    const list = tagsByCompany.get(link.company_id)
+    if (list) list.push(tag)
+    else tagsByCompany.set(link.company_id, [tag])
+  }
+
   const bulkFields = bulkFieldsFor('company', {
     owners: ownerList.map((user) => ({ value: user.id, label: user.name || user.email })),
     customFields: definitions,
@@ -179,6 +202,28 @@ export default async function CompaniesPage({
         ) : (
           <Empty />
         )
+      case 'tags': {
+        /*
+         * The tag's own colour, which an admin chose in Settings → Tags, so it
+         * is an inline style rather than a class — Tailwind cannot see a hex
+         * that only exists in the database.
+         */
+        const tags = tagsByCompany.get(company.id) ?? []
+        if (tags.length === 0) return <Empty />
+        return (
+          <span className="flex flex-wrap gap-1">
+            {tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="badge"
+                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </span>
+        )
+      }
       case 'contacts':
         return <span className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</span>
       case 'size':
