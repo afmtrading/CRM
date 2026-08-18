@@ -732,6 +732,38 @@ export async function createTag(formData: FormData) {
   revalidatePath('/settings/tags')
 }
 
+/**
+ * Renames or recolours a tag, keeping everything attached to it.
+ *
+ * The alternative people were left with was deleting and re-adding, which
+ * takes the tag off every record that carried it — a rename should not cost
+ * you the segmentation you built with it. The rows in contact_tags,
+ * company_tags and product_tags point at the id, so none of them move.
+ */
+export async function updateTag(formData: FormData) {
+  const context = await requireSession()
+  const id = String(formData.get('id') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  if (!id) throw new Error('Which tag?')
+  if (!name) throw new Error('A tag needs a name')
+
+  const { error } = await scoped(context, 'tags')
+    .update({ name, color: String(formData.get('color') ?? '#64748b') })
+    .eq('id', id)
+
+  if (error) {
+    throw new Error(
+      error.message.includes('duplicate key') ? `The tag "${name}" already exists.` : error.message,
+    )
+  }
+
+  // Every list that shows a tag name, not just the settings page.
+  revalidatePath('/settings/tags')
+  revalidatePath('/contacts')
+  revalidatePath('/companies')
+  revalidatePath('/products')
+}
+
 export async function deleteTag(formData: FormData) {
   const context = await requireSession()
   const id = String(formData.get('id') ?? '')
@@ -740,6 +772,68 @@ export async function deleteTag(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/settings/tags')
+}
+
+/**
+ * Creates a tag from wherever somebody is tagging, and hands it straight back.
+ *
+ * Tagging a record and defining a tag were two screens apart: you had to leave
+ * what you were doing, go to Settings, add the tag, come back and find your
+ * place. The name is all this asks for — the colour is picked from the palette
+ * and can be changed in Settings, which is where colour belongs.
+ *
+ * Returns the existing tag when the name is already taken rather than failing.
+ * Somebody typing a name that exists means the same thing either way, and an
+ * error there would be the app being pedantic about something it can resolve.
+ */
+export async function createTagNamed(
+  name: string,
+): Promise<{ id: string; name: string; color: string }> {
+  const context = await requireSession()
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('A tag needs a name')
+
+  const { data: existing } = await scoped(context, 'tags')
+    .select('id, name, color')
+    .ilike('name', trimmed)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) return existing as { id: string; name: string; color: string }
+
+  const { data, error } = await scoped(context, 'tags')
+    .insert({ name: trimmed, color: nextTagColor(trimmed) })
+    .select('id, name, color')
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/settings/tags')
+  return data as { id: string; name: string; color: string }
+}
+
+/**
+ * A colour for a tag nobody chose one for.
+ *
+ * Derived from the name rather than random or sequential, so the same word
+ * gets the same colour every time — including across two people creating it
+ * at once, and in a preview before the row exists. All from the same palette
+ * the option badges use, so a tag never arrives fluorescent.
+ */
+function nextTagColor(name: string): string {
+  const palette = [
+    '#0f766e',
+    '#1d4ed8',
+    '#b45309',
+    '#be123c',
+    '#7c3aed',
+    '#0e7490',
+    '#4d7c0f',
+    '#a21caf',
+  ]
+  let hash = 0
+  for (const character of name.toLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) % 100000
+  return palette[hash % palette.length]
 }
 
 // -----------------------------------------------------------------------------

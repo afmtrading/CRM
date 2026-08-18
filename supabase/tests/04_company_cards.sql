@@ -201,6 +201,38 @@ begin
 end;
 $$;
 
+/*
+ * Renaming a tag keeps it on everything that carries it.
+ *
+ * The only way to change a tag used to be deleting it and adding a new one,
+ * which is a different operation: the new tag is a new row and every record
+ * loses the old one. The join points at the id, so a rename moves nothing —
+ * this is what makes editing worth having rather than a convenience.
+ */
+do $$
+declare
+  v_company uuid := (select id from fixture where key = 'company');
+  v_tag     uuid := (select id from fixture where key = 'tag_a');
+begin
+  raise notice 'Renaming a tag:';
+
+  update tags set name = 'Strategic account', color = '#1d4ed8' where id = v_tag;
+
+  perform test_assert(
+    (select count(*) from company_tags where company_id = v_company and tag_id = v_tag) = 1,
+    'the company still carries the tag after it is renamed'
+  );
+
+  perform test_assert(
+    (select name from tags where id = v_tag) = 'Strategic account',
+    'and the tag answers to its new name'
+  );
+
+  -- Put it back, so the tests after this one see the fixture they expect.
+  update tags set name = 'Key account', color = '#10b981' where id = v_tag;
+end;
+$$;
+
 -- Deleting a company takes its tag links with it, rather than leaving rows
 -- pointing at nothing.
 do $$

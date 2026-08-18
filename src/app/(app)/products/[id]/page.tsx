@@ -40,7 +40,7 @@ import {
   Section,
 } from '@/components/ui'
 import { DateTime } from '@/components/date-time'
-import { TagChecklist } from '@/components/form-fields'
+import { TagPicker } from '@/components/tag-picker'
 
 import { deleteProduct, setProductTags } from '../actions'
 import { StockNote } from '../stock-note'
@@ -730,17 +730,20 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {/* The organization's tags, the same ones a contact and a company carry. */}
           <Section title="Tags" className="order-6">
-            {tagList.length === 0 || !context.canManage ? (
-              <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
-            ) : (
-              <form action={setProductTags} className="space-y-3">
-                <input type="hidden" name="product_id" value={id} />
-                <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
+            <form action={setProductTags} className="space-y-3">
+              <input type="hidden" name="product_id" value={id} />
+              <TagPicker
+                tags={tagList}
+                selected={selectedTagIds}
+                canManage={context.isAdmin}
+                canCreate={context.canManage}
+              />
+              {context.canManage && (
                 <button type="submit" className="btn-secondary">
                   Save tags
                 </button>
-              </form>
-            )}
+              )}
+            </form>
           </Section>
 
           <Section title="In the Market" className="order-7">

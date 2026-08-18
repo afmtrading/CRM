@@ -23,8 +23,8 @@ import {
   LinksEditor,
   NotesEditor,
   RadioChips,
-  TagChecklist,
 } from '@/components/form-fields'
+import { TagPicker } from '@/components/tag-picker'
 
 import type { CompanyActionState } from './actions'
 
@@ -270,7 +270,7 @@ export function CompanyForm({
       <FormCard title="Tags" description="Shared with contacts and products. Managed in Settings → Tags.">
         <div className="sm:col-span-2">
           <input type="hidden" name="tags_present" value="1" />
-          <TagChecklist tags={tags} selected={selectedTagIds} canManage={canManage} />
+          <TagPicker tags={tags} selected={selectedTagIds} canManage={canManage} />
         </div>
       </FormCard>
 

@@ -43,7 +43,7 @@ import {
   Section,
 } from "@/components/ui";
 import { CalendarIcon } from "@/components/icons";
-import { TagChecklist } from "@/components/form-fields";
+import { TagPicker } from "@/components/tag-picker";
 import {
   CardLink,
   ContactMethod,
@@ -547,17 +547,20 @@ export default async function ContactDetailPage({
               same wherever it is done. Here it posts on its own; there it rides
               along with the record's other fields.
             */}
-            {tagList.length === 0 ? (
-              <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
-            ) : (
-              <form action={setContactTags} className="space-y-3">
-                <input type="hidden" name="contact_id" value={id} />
-                <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
+            <form action={setContactTags} className="space-y-3">
+              <input type="hidden" name="contact_id" value={id} />
+              <TagPicker
+                tags={tagList}
+                selected={selectedTagIds}
+                canManage={context.isAdmin}
+                canCreate={context.canWrite}
+              />
+              {context.canWrite && (
                 <button type="submit" className="btn-secondary">
                   Save tags
                 </button>
-              </form>
-            )}
+              )}
+            </form>
           </Section>
 
           {/* ---------------------------------------------------------------- */}
