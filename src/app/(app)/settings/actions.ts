@@ -19,10 +19,13 @@ import type { OptionColor, StageOutcome } from '@/lib/database.types'
 // Pipelines and stages (PRD 6.3)
 // -----------------------------------------------------------------------------
 
-export async function createPipeline(formData: FormData) {
+export async function createPipeline(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
   const name = String(formData.get('name') ?? '').trim()
-  if (!name) throw new Error('A pipeline needs a name')
+  if (!name) return { error: 'A pipeline needs a name' }
 
   const { data: pipeline, error } = await scoped(context, 'pipelines')
     .insert({ name, is_default: false })
@@ -37,6 +40,7 @@ export async function createPipeline(formData: FormData) {
   ])
 
   revalidatePath('/settings/pipelines')
+  return { ok: `${name} added, with a New and a Won stage to start from.` }
 }
 
 /**
@@ -47,13 +51,16 @@ export async function createPipeline(formData: FormData) {
  * exactly why it should be editable — "Trading desk" outliving the desk is
  * silly when the fix is one word.
  */
-export async function renamePipeline(formData: FormData) {
+export async function renamePipeline(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
 
-  if (!name) throw new Error('A pipeline needs a name')
-  if (name.length > 120) throw new Error('That name is too long')
+  if (!name) return { error: 'A pipeline needs a name' }
+  if (name.length > 120) return { error: 'That name is too long' }
 
   const { error } = await scoped(context, 'pipelines').update({ name }).eq('id', id)
   if (error) throw new Error(error.message)
@@ -61,6 +68,7 @@ export async function renamePipeline(formData: FormData) {
   revalidatePath('/settings/pipelines')
   // The board and its picker are named from this too.
   revalidatePath('/deals')
+  return { ok: `Renamed to ${name}.` }
 }
 
 /**
@@ -148,13 +156,16 @@ export async function restorePipeline(
   return {}
 }
 
-export async function createStage(formData: FormData) {
+export async function createStage(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
   const pipelineId = String(formData.get('pipeline_id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   const probability = Number(formData.get('default_probability') ?? 50) / 100
 
-  if (!name) throw new Error('A stage needs a name')
+  if (!name) return { error: 'A stage needs a name' }
 
   const last = await firstRow<{ order: number }>(
     scoped(context, 'stages')
@@ -174,6 +185,7 @@ export async function createStage(formData: FormData) {
 
   if (error) throw new Error(error.message)
   revalidatePath('/settings/pipelines')
+  return { ok: `${name} added.` }
 }
 
 /**
@@ -185,7 +197,10 @@ export async function createStage(formData: FormData) {
  * reorder_stage, which renumbers the whole pipeline so the number typed is the
  * position taken.
  */
-export async function updateStage(formData: FormData) {
+export async function updateStage(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
@@ -193,7 +208,7 @@ export async function updateStage(formData: FormData) {
   const position = Number(formData.get('order') ?? 0)
   const rawOutcome = String(formData.get('outcome') ?? '')
 
-  if (!name) throw new Error('A stage needs a name')
+  if (!name) return { error: 'A stage needs a name' }
 
   /*
    * What reaching this stage means. Only ever set from the three the database
@@ -225,6 +240,7 @@ export async function updateStage(formData: FormData) {
 
   revalidatePath('/settings/pipelines')
   revalidatePath('/deals')
+  return { ok: 'Saved.' }
 }
 
 /** One place up or down — what an arrow means, resolved in one transaction. */

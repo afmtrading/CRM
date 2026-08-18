@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped, firstRow } from '@/lib/tenancy'
+import type { ActionState } from '@/components/action-form'
 import { readCustomFields } from '@/lib/custom-fields'
 
 const dealSchema = z.object({
@@ -324,11 +325,14 @@ const VIEW_KEYS = ['pipeline', 'owner', 'product', 'status'] as const
  * survives the day somebody adds a fourth filter or renames a parameter — a
  * saved string would then replay a URL that no longer means what it did.
  */
-export async function saveDealView(formData: FormData) {
+export async function saveDealView(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
 
   const name = String(formData.get('name') ?? '').trim()
-  if (!name) throw new Error('A view needs a name')
+  if (!name) return { error: 'A view needs a name' }
 
   const params = new URLSearchParams(String(formData.get('params') ?? ''))
   const filter: Record<string, string> = {}
@@ -349,6 +353,7 @@ export async function saveDealView(formData: FormData) {
 
   if (error) throw new Error(error.message)
   revalidatePath('/deals')
+  return { ok: `Saved as ${name.slice(0, 80)}.` }
 }
 
 /** Your own views only, shared or not — deleting a colleague's is not offered. */

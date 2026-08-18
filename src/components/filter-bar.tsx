@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+import { ActionForm, SubmitButton, type ActionState } from '@/components/action-form'
+
 import {
   OPERATOR_LABELS,
   filterToSearchParams,
@@ -38,7 +40,7 @@ export function FilterBar({
   currentUserId: string
   /** Export can pull the whole book, so it is a manager's action. */
   canExport?: boolean
-  saveAction: (formData: FormData) => void
+  saveAction: (state: ActionState, formData: FormData) => Promise<ActionState>
   deleteAction: (formData: FormData) => void
 }) {
   const router = useRouter()
@@ -313,7 +315,10 @@ export function FilterBar({
       )}
 
       {saving && (
-        <form action={saveAction} className="flex flex-wrap items-end gap-2 border-t border-slate-100 p-3">
+        <ActionForm
+          action={saveAction}
+          className="flex flex-wrap items-end gap-2 border-t border-slate-100 p-3"
+        >
           <input type="hidden" name="entity_type" value={entityType} />
           <input type="hidden" name="return_to" value={pathname} />
           <input type="hidden" name="filter_json" value={JSON.stringify(config)} />
@@ -327,10 +332,10 @@ export function FilterBar({
             <input type="checkbox" name="is_shared" className="rounded border-slate-300" />
             Share with the whole organization
           </label>
-          <button type="submit" className="btn-primary mb-0.5">
+          <SubmitButton className="btn-primary mb-0.5" pendingLabel="Saving…">
             Save
-          </button>
-        </form>
+          </SubmitButton>
+        </ActionForm>
       )}
 
       {savedFilters.length > 0 && (

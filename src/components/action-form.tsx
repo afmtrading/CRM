@@ -27,17 +27,19 @@ export type ActionState = { error?: string; ok?: string }
 export function ActionForm({
   action,
   className,
+  id,
   children,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   className?: string
+  id?: string
   children: React.ReactNode
 }) {
   const [state, formAction] = useActionState(action, {})
 
   return (
     <div>
-      <form action={formAction} className={className}>
+      <form action={formAction} className={className} id={id}>
         {children}
       </form>
       {(state.error ?? state.ok) && (
