@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 
 import { deleteTag, updateTag } from '../actions'
+import type { ActionState } from '@/components/action-form'
 
 export interface TagUsage {
   id: string
@@ -24,6 +25,83 @@ export interface TagUsage {
  * One row at a time is editable. A page of open inputs invites somebody to
  * change four things and save one.
  */
+/**
+ * One tag being edited.
+ *
+ * Its own component because useActionState is a hook, and the row it belongs to
+ * is produced inside a map. Extracting it is what lets the refusal — "The tag
+ * \"VIP\" already exists." — have somewhere to land.
+ *
+ * The editor closes on success rather than on submit. Closing on submit is what
+ * it used to do, which threw the message away at the moment it was written.
+ */
+function TagEditRow({
+  tag,
+  used,
+  setEditing,
+}: {
+  tag: TagUsage
+  used: number
+  setEditing: (id: string | null) => void
+}) {
+  const [state, formAction, pending] = useActionState(updateTag, {} as ActionState)
+
+  useEffect(() => {
+    if (state.ok) setEditing(null)
+  }, [state.ok, setEditing])
+
+  return (
+    <li className="py-3">
+      <form action={formAction} className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="id" value={tag.id} />
+        <div className="min-w-40 flex-1">
+          <label className="label" htmlFor={`tag-name-${tag.id}`}>
+            Name
+          </label>
+          <input
+            id={`tag-name-${tag.id}`}
+            name="name"
+            required
+            autoFocus
+            defaultValue={tag.name}
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor={`tag-color-${tag.id}`}>
+            Colour
+          </label>
+          <input
+            id={`tag-color-${tag.id}`}
+            name="color"
+            type="color"
+            defaultValue={tag.color}
+            className="input h-9 w-16 py-1"
+          />
+        </div>
+        <button type="submit" className="btn-primary" disabled={pending}>
+          {pending ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>
+          Cancel
+        </button>
+      </form>
+
+      {state.error && (
+        <p role="status" className="mt-2 text-xs text-red-700">
+          {state.error}
+        </p>
+      )}
+
+      {used > 0 && (
+        <p className="mt-2 text-xs text-slate-500">
+          Renaming keeps this tag on all {used} record{used === 1 ? '' : 's'} that carry it.
+        </p>
+      )}
+    </li>
+  )
+}
+
 export function TagRows({ tags }: { tags: TagUsage[] }) {
   const [editing, setEditing] = useState<string | null>(null)
 
@@ -37,53 +115,7 @@ export function TagRows({ tags }: { tags: TagUsage[] }) {
         const used = tag.contacts + tag.companies + tag.products
 
         if (editing === tag.id) {
-          return (
-            <li key={tag.id} className="py-3">
-              <form
-                action={updateTag}
-                onSubmit={() => setEditing(null)}
-                className="flex flex-wrap items-end gap-2"
-              >
-                <input type="hidden" name="id" value={tag.id} />
-                <div className="min-w-40 flex-1">
-                  <label className="label" htmlFor={`tag-name-${tag.id}`}>
-                    Name
-                  </label>
-                  <input
-                    id={`tag-name-${tag.id}`}
-                    name="name"
-                    required
-                    autoFocus
-                    defaultValue={tag.name}
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor={`tag-color-${tag.id}`}>
-                    Colour
-                  </label>
-                  <input
-                    id={`tag-color-${tag.id}`}
-                    name="color"
-                    type="color"
-                    defaultValue={tag.color}
-                    className="input h-9 w-16 py-1"
-                  />
-                </div>
-                <button type="submit" className="btn-primary">
-                  Save
-                </button>
-                <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>
-                  Cancel
-                </button>
-              </form>
-              {used > 0 && (
-                <p className="mt-2 text-xs text-slate-500">
-                  Renaming keeps this tag on all {used} record{used === 1 ? '' : 's'} that carry it.
-                </p>
-              )}
-            </li>
-          )
+          return <TagEditRow key={tag.id} tag={tag} used={used} setEditing={setEditing} />
         }
 
         return (

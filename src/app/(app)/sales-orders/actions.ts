@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import type { ActionState } from '@/components/action-form'
 import { CURRENCIES } from '@/lib/format'
 import { canTransition, isEditable } from '@/lib/sales'
 import type { RevisedRateType, SalesOrderStatus } from '@/lib/database.types'
@@ -116,7 +117,10 @@ export async function updateSalesOrder(formData: FormData) {
  * that *are* invariants — no invoicing before confirmation, no deposits on a
  * cancelled order — live in SQL where they cannot be gone around.
  */
-export async function setSalesOrderStatus(formData: FormData) {
+export async function setSalesOrderStatus(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
@@ -129,10 +133,10 @@ export async function setSalesOrderStatus(formData: FormData) {
     .maybeSingle()
 
   if (readError) throw new Error(readError.message)
-  if (!order) throw new Error('Sales order not found')
+  if (!order) return { error: 'Sales order not found' }
 
   if (!canTransition(order.status, next)) {
-    throw new Error(`A ${order.status} order cannot become ${next}.`)
+    return { error: `A ${order.status} order cannot become ${next}.` }
   }
 
   const { error } = await scoped(context, 'sales_orders')
@@ -148,6 +152,7 @@ export async function setSalesOrderStatus(formData: FormData) {
 
   revalidatePath('/sales-orders')
   revalidatePath(`/sales-orders/${id}`)
+  return { ok: `Marked ${next}.` }
 }
 
 export async function deleteSalesOrder(formData: FormData) {

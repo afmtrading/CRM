@@ -2,6 +2,7 @@ import { requireSession, scoped } from '@/lib/tenancy'
 import type { StockBinRow, StockLocationRow } from '@/lib/database.types'
 import { formatQuantity } from '@/lib/stock'
 import { PageHeader, Section } from '@/components/ui'
+import { ActionForm, SubmitButton } from '@/components/action-form'
 
 import {
   createStockBin,
@@ -107,7 +108,7 @@ export default async function LocationsPage() {
                         ))}
 
                         {context.canManage && (
-                          <form action={createStockBin} className="flex items-center gap-2">
+                          <ActionForm action={createStockBin} className="flex items-center gap-2">
                             <input type="hidden" name="location_id" value={location.id} />
                             <input
                               name="name"
@@ -115,10 +116,13 @@ export default async function LocationsPage() {
                               placeholder="Add a bin…"
                               aria-label={`New bin in ${location.name}`}
                             />
-                            <button type="submit" className="text-xs text-brand-700 hover:underline">
+                            <SubmitButton
+                              className="text-xs text-brand-700 hover:underline"
+                              pendingLabel="Adding…"
+                            >
                               Add
-                            </button>
-                          </form>
+                            </SubmitButton>
+                          </ActionForm>
                         )}
                       </div>
                     </li>
@@ -136,7 +140,7 @@ export default async function LocationsPage() {
 
         {context.canManage && (
           <Section title="Add a location">
-            <form action={createStockLocation} className="space-y-3">
+            <ActionForm action={createStockLocation} className="space-y-3">
               <div>
                 <label className="label" htmlFor="location-name">
                   Name
@@ -173,10 +177,10 @@ export default async function LocationsPage() {
                 />
               </div>
 
-              <button type="submit" className="btn-primary">
+              <SubmitButton className="btn-primary" pendingLabel="Adding…">
                 Add location
-              </button>
-            </form>
+              </SubmitButton>
+            </ActionForm>
           </Section>
         )}
       </div>

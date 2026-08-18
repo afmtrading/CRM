@@ -660,7 +660,10 @@ export async function deleteAssignmentRule(formData: FormData) {
 // Custom field definitions
 // -----------------------------------------------------------------------------
 
-export async function createCustomField(formData: FormData) {
+export async function createCustomField(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
 
   const label = String(formData.get('label') ?? '').trim()
@@ -671,7 +674,7 @@ export async function createCustomField(formData: FormData) {
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_|_$/g, '')
 
-  if (!label || !key) throw new Error('A custom field needs a label')
+  if (!label || !key) return { error: 'A custom field needs a label' }
 
   const options = String(formData.get('options') ?? '')
     .split(',')
@@ -689,14 +692,15 @@ export async function createCustomField(formData: FormData) {
   })
 
   if (error) {
-    throw new Error(
-      error.message.includes('duplicate key')
+    return {
+      error: error.message.includes('duplicate key')
         ? `A "${key}" field already exists for that record type.`
         : error.message,
-    )
+    }
   }
 
   revalidatePath('/settings/fields')
+  return { ok: `${label} added.` }
 }
 
 export async function deleteCustomField(formData: FormData) {
@@ -713,10 +717,13 @@ export async function deleteCustomField(formData: FormData) {
 // Tags (PRD 5.9)
 // -----------------------------------------------------------------------------
 
-export async function createTag(formData: FormData) {
+export async function createTag(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   const name = String(formData.get('name') ?? '').trim()
-  if (!name) throw new Error('A tag needs a name')
+  if (!name) return { error: 'A tag needs a name' }
 
   const { error } = await scoped(context, 'tags').insert({
     name,
@@ -724,12 +731,15 @@ export async function createTag(formData: FormData) {
   })
 
   if (error) {
-    throw new Error(
-      error.message.includes('duplicate key') ? `The tag "${name}" already exists.` : error.message,
-    )
+    return {
+      error: error.message.includes('duplicate key')
+        ? `The tag "${name}" already exists.`
+        : error.message,
+    }
   }
 
   revalidatePath('/settings/tags')
+  return { ok: `${name} added.` }
 }
 
 /**
@@ -740,21 +750,26 @@ export async function createTag(formData: FormData) {
  * you the segmentation you built with it. The rows in contact_tags,
  * company_tags and product_tags point at the id, so none of them move.
  */
-export async function updateTag(formData: FormData) {
+export async function updateTag(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
-  if (!id) throw new Error('Which tag?')
-  if (!name) throw new Error('A tag needs a name')
+  if (!id) return { error: 'Which tag?' }
+  if (!name) return { error: 'A tag needs a name' }
 
   const { error } = await scoped(context, 'tags')
     .update({ name, color: String(formData.get('color') ?? '#64748b') })
     .eq('id', id)
 
   if (error) {
-    throw new Error(
-      error.message.includes('duplicate key') ? `The tag "${name}" already exists.` : error.message,
-    )
+    return {
+      error: error.message.includes('duplicate key')
+        ? `The tag "${name}" already exists.`
+        : error.message,
+    }
   }
 
   // Every list that shows a tag name, not just the settings page.
@@ -762,6 +777,7 @@ export async function updateTag(formData: FormData) {
   revalidatePath('/contacts')
   revalidatePath('/companies')
   revalidatePath('/products')
+  return { ok: `Saved.` }
 }
 
 export async function deleteTag(formData: FormData) {
@@ -1048,12 +1064,15 @@ export async function restoreProduct(formData: FormData) {
 // than the enforcing one.
 // -----------------------------------------------------------------------------
 
-export async function createStockLocation(formData: FormData) {
+export async function createStockLocation(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanManage(context)
 
   const name = String(formData.get('name') ?? '').trim()
-  if (!name) throw new Error('A location needs a name')
+  if (!name) return { error: 'A location needs a name' }
 
   const { error } = await scoped(context, 'stock_locations').insert({
     name,
@@ -1063,14 +1082,15 @@ export async function createStockLocation(formData: FormData) {
   })
 
   if (error) {
-    throw new Error(
-      error.message.includes('duplicate key')
+    return {
+      error: error.message.includes('duplicate key')
         ? `There is already a location called "${name}".`
         : error.message,
-    )
+    }
   }
 
   revalidatePath('/settings/locations')
+  return { ok: `${name} added.` }
 }
 
 /**
@@ -1092,25 +1112,29 @@ export async function setStockLocationActive(formData: FormData) {
   revalidatePath('/settings/locations')
 }
 
-export async function createStockBin(formData: FormData) {
+export async function createStockBin(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanManage(context)
 
   const locationId = String(formData.get('location_id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
-  if (!locationId || !name) throw new Error('A bin needs a location and a name')
+  if (!locationId || !name) return { error: 'A bin needs a location and a name' }
 
   const { error } = await scoped(context, 'stock_bins').insert({ location_id: locationId, name })
 
   if (error) {
-    throw new Error(
-      error.message.includes('duplicate key')
+    return {
+      error: error.message.includes('duplicate key')
         ? `That location already has a bin called "${name}".`
         : error.message,
-    )
+    }
   }
 
   revalidatePath('/settings/locations')
+  return { ok: `${name} added.` }
 }
 
 /**

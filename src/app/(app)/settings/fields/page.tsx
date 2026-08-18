@@ -110,7 +110,7 @@ export default async function FieldsPage({
           </Section>
 
           <Section title="Add a field">
-            <form action={createCustomField} className="space-y-3">
+            <ActionForm action={createCustomField} className="space-y-3">
               <div>
                 <label className="label" htmlFor="field-entity">
                   Record type
@@ -171,11 +171,11 @@ export default async function FieldsPage({
                 values.
               </p>
 
-              <button type="submit" className="btn-primary w-full">
+              <SubmitButton className="btn-primary w-full" pendingLabel="Adding…">
                 <PlusIcon className="h-4 w-4" />
                 Add field
-              </button>
-            </form>
+              </SubmitButton>
+            </ActionForm>
           </Section>
         </div>
 
