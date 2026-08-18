@@ -140,6 +140,71 @@ export function RadioChips({
   )
 }
 
+/**
+ * The organization's tags, as checkboxes.
+ *
+ * One control for every record that can be tagged, and for both places a tag is
+ * set: the create and edit forms, where it posts alongside the record's own
+ * fields, and the record page, where it posts on its own. That is why it takes
+ * a name rather than assuming one — nothing here knows which record it is
+ * attached to, and it does not need to.
+ *
+ * A tag is defined once in Settings and shared across contacts, companies and
+ * products, so the empty state points there rather than offering to invent one.
+ */
+export function TagChecklist({
+  tags,
+  selected,
+  name = 'tag_ids',
+  canManage = false,
+}: {
+  tags: { id: string; name: string; color: string }[]
+  selected: Set<string> | string[]
+  name?: string
+  /** Only an admin is offered the link; for everybody else it is a dead end. */
+  canManage?: boolean
+}) {
+  const chosen = selected instanceof Set ? selected : new Set(selected)
+
+  if (tags.length === 0) {
+    return (
+      <p className="text-xs text-slate-500">
+        No tags defined yet.{' '}
+        {canManage && (
+          <Link href="/settings/tags" className="text-brand-700 hover:underline">
+            Create some
+          </Link>
+        )}
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tags.map((tag) => (
+        <label
+          key={tag.id}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-xs hover:bg-slate-50"
+        >
+          <input
+            type="checkbox"
+            name={name}
+            value={tag.id}
+            defaultChecked={chosen.has(tag.id)}
+            className="rounded border-slate-300"
+          />
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ backgroundColor: tag.color }}
+            aria-hidden
+          />
+          {tag.name}
+        </label>
+      ))}
+    </div>
+  )
+}
+
 export function NotesEditor({
   defaultValue,
   id = 'notes',

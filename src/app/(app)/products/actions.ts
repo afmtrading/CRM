@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { assertCanManage, requireSession, scoped } from '@/lib/tenancy'
 import { readCustomFields } from '@/lib/custom-fields'
+import { syncTags, tagIdsFrom } from '@/lib/tags'
 import type { SessionContext } from '@/lib/tenancy'
 import { PRODUCT_ACTIVE_STATUS } from '@/lib/products'
 import { type StockEntry, normaliseEntries, placeKey } from '@/lib/stock'
@@ -296,6 +297,10 @@ export async function createProduct(
   const stockError = await applyStock(context, data.id, formData)
   if (stockError) return { error: stockError }
 
+  // Same reason as the image above: the tag hangs off the product's id.
+  const tagIds = tagIdsFrom(formData)
+  if (tagIds) await syncTags(context, 'product', data.id, tagIds)
+
   revalidatePath('/products')
   redirect(`/products/${data.id}`)
 }
@@ -336,9 +341,23 @@ export async function updateProduct(
 
   const stockError = await applyStock(context, id, formData)
 
+  const tagIds = tagIdsFrom(formData)
+  if (tagIds) await syncTags(context, 'product', id, tagIds)
+
   revalidatePath('/products')
   revalidatePath(`/products/${id}`)
   return stockError ? { error: stockError } : { ok: true }
+}
+
+/** The record page's own tag form. The create and edit forms carry one too. */
+export async function setProductTags(formData: FormData) {
+  const context = await requireSession()
+  assertCanManage(context)
+  const productId = String(formData.get('product_id') ?? '')
+
+  await syncTags(context, 'product', productId, formData.getAll('tag_ids').map(String).filter(Boolean))
+
+  revalidatePath(`/products/${productId}`)
 }
 
 /**

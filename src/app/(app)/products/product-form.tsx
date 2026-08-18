@@ -9,6 +9,7 @@ import type {
   ProductRow,
   StockBinRow,
   StockLocationRow,
+  TagRow,
 } from '@/lib/database.types'
 import type { StockEntry } from '@/lib/stock'
 import { CURRENCIES, formatPrice } from '@/lib/format'
@@ -25,6 +26,7 @@ import {
   FormSection,
   NotesEditor,
   RadioChips,
+  TagChecklist,
 } from '@/components/form-fields'
 
 import { productImageUrl } from '@/lib/product-image'
@@ -183,6 +185,9 @@ export function ProductForm({
   bins,
   stock,
   committed = 0,
+  tags,
+  selectedTagIds = [],
+  canManage = false,
 }: {
   action: (state: ProductActionState, formData: FormData) => Promise<ProductActionState>
   product?: ProductRow
@@ -194,6 +199,12 @@ export function ProductForm({
   bins: StockBinRow[]
   stock: StockEntry[]
   committed?: number
+  /** The organization's tags, shared with contacts and companies. */
+  tags: TagRow[]
+  /** Empty on a new product, which is the point — it can be tagged as it is created. */
+  selectedTagIds?: string[]
+  /** Only an admin is offered the link to Settings → Tags. */
+  canManage?: boolean
 }) {
   const [state, formAction, pending] = useActionState(action, {} as ProductActionState)
 
@@ -439,6 +450,21 @@ export function ProductForm({
           values={product?.custom_fields ?? {}}
           fieldOptions={fieldOptions}
         />
+
+        {/*
+          The same tags a contact and a company carry, not a catalogue-only
+          vocabulary — "Q4 push" is worth nothing if it means one thing on an
+          account and another on the line being pushed.
+
+          The marker field tells the action this form asked the question: an
+          empty checklist posts nothing, and without it an untagged save would
+          be indistinguishable from a screen that never offered it.
+        */}
+        <div className="sm:col-span-2">
+          <span className="label">Tags</span>
+          <input type="hidden" name="tags_present" value="1" />
+          <TagChecklist tags={tags} selected={selectedTagIds} canManage={canManage} />
+        </div>
       </FormCard>
 
       <FormSection>Pricing</FormSection>

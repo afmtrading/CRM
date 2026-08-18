@@ -35,8 +35,8 @@ import {
   Section,
 } from "@/components/ui";
 import { MailIcon, PhoneIcon } from "@/components/icons";
+import { TagChecklist } from "@/components/form-fields";
 import {
-  CardLink,
   ContactMethod,
   CustomFieldValues,
   Empty,
@@ -632,38 +632,13 @@ export default async function CompanyDetailPage({
           </Section>
 
           <Section title="Tags" className="order-4">
+            {/* The same control the company form carries — see the contact page. */}
             {tagList.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No tags defined yet.{" "}
-                {context.isAdmin && (
-                  <CardLink href="/settings/tags">Create some</CardLink>
-                )}
-              </p>
+              <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
             ) : (
               <form action={setCompanyTags} className="space-y-3">
                 <input type="hidden" name="company_id" value={id} />
-                <div className="flex flex-wrap gap-2">
-                  {tagList.map((tag) => (
-                    <label
-                      key={tag.id}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-xs hover:bg-slate-50"
-                    >
-                      <input
-                        type="checkbox"
-                        name="tag_ids"
-                        value={tag.id}
-                        defaultChecked={selectedTagIds.has(tag.id)}
-                        className="rounded border-slate-300"
-                      />
-                      <span
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                        aria-hidden
-                      />
-                      {tag.name}
-                    </label>
-                  ))}
-                </div>
+                <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
                 <button type="submit" className="btn-secondary">
                   Save tags
                 </button>

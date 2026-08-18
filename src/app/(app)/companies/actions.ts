@@ -9,6 +9,7 @@ import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 // forms, whose shape is different.
 import type { ActionState as ButtonState } from '@/components/action-form'
 import { readCustomFields } from '@/lib/custom-fields'
+import { syncTags, tagIdsFrom } from '@/lib/tags'
 import { safeUrl } from '@/lib/field-options'
 import type { CompanyAddress, ContactLink } from '@/lib/database.types'
 
@@ -143,6 +144,11 @@ export async function createCompany(
 
   if (error) return { error: error.message }
 
+  // After the insert: a tag hangs off the company's id, and there is no id
+  // until the row exists. See syncTags.
+  const tagIds = tagIdsFrom(formData)
+  if (tagIds) await syncTags(context, 'company', data.id, tagIds)
+
   revalidatePath('/companies')
   redirect(`/companies/${data.id}`)
 }
@@ -165,6 +171,9 @@ export async function updateCompany(
 
   if (error) return { error: error.message }
 
+  const tagIds = tagIdsFrom(formData)
+  if (tagIds) await syncTags(context, 'company', id, tagIds)
+
   revalidatePath('/companies')
   revalidatePath(`/companies/${id}`)
   return { ok: true }
@@ -183,25 +192,16 @@ export async function deleteCompany(formData: FormData) {
   redirect('/companies')
 }
 
+/** The record page's own tag form. The create and edit forms carry one too. */
 export async function setCompanyTags(formData: FormData) {
   const context = await requireSession()
   assertCanWrite(context)
   const companyId = String(formData.get('company_id') ?? '')
-  const tagIds = formData.getAll('tag_ids').map(String).filter(Boolean)
 
-  await context.supabase
-    .from('company_tags')
-    .delete()
-    .eq('organization_id', context.organizationId)
-    .eq('company_id', companyId)
-
-  if (tagIds.length > 0) {
-    await scoped(context, 'company_tags').insert(
-      tagIds.map((tagId) => ({ company_id: companyId, tag_id: tagId })),
-    )
-  }
+  await syncTags(context, 'company', companyId, formData.getAll('tag_ids').map(String).filter(Boolean))
 
   revalidatePath(`/companies/${companyId}`)
+  revalidatePath(`/marketplaces/${companyId}`)
 }
 
 /** The same as setContactHidden, one table over. */

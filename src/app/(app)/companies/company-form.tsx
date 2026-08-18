@@ -11,6 +11,7 @@ import type {
   CustomFieldDefinitionRow,
   FieldOptionRow,
   OptionFieldKey,
+  TagRow,
   UserRow,
 } from '@/lib/database.types'
 import { COMPANY_CARDS, optionsForField } from '@/lib/field-options'
@@ -22,6 +23,7 @@ import {
   LinksEditor,
   NotesEditor,
   RadioChips,
+  TagChecklist,
 } from '@/components/form-fields'
 
 import type { CompanyActionState } from './actions'
@@ -33,6 +35,9 @@ export function CompanyForm({
   customFields,
   fieldOptions,
   countries,
+  tags,
+  selectedTagIds = [],
+  canManage = false,
   submitLabel,
 }: {
   action: (state: CompanyActionState, formData: FormData) => Promise<CompanyActionState>
@@ -42,6 +47,12 @@ export function CompanyForm({
   fieldOptions: FieldOptionRow[]
   /** ISO 3166, from the database rather than a second copy in the bundle. */
   countries: { code: string; name: string; kind?: string }[]
+  /** The organization's tags, shared with contacts and products. */
+  tags: TagRow[]
+  /** Empty on a new company, which is the point — it can be tagged as it is created. */
+  selectedTagIds?: string[]
+  /** Only an admin is offered the link to Settings → Tags. */
+  canManage?: boolean
   submitLabel: string
 }) {
   const [state, formAction, pending] = useActionState(action, {} as CompanyActionState)
@@ -248,6 +259,19 @@ export function CompanyForm({
           values={custom}
           fieldOptions={fieldOptions}
         />
+      </FormCard>
+
+      {/*
+        Asked while the company is being created, not only afterwards. The
+        marker field is what tells the action this form asked at all — an empty
+        checklist posts nothing, and without it an untagged save would look the
+        same as a screen that never offered the question.
+      */}
+      <FormCard title="Tags" description="Shared with contacts and products. Managed in Settings → Tags.">
+        <div className="sm:col-span-2">
+          <input type="hidden" name="tags_present" value="1" />
+          <TagChecklist tags={tags} selected={selectedTagIds} canManage={canManage} />
+        </div>
       </FormCard>
 
       <FormCard title={COMPANY_CARDS[1].label} description={COMPANY_CARDS[1].description}>

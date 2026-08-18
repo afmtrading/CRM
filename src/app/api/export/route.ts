@@ -45,6 +45,10 @@ const ENTITY_TABLES: Record<string, TenantTable> = {
   contact_tag: 'contact_tags',
   company_tag: 'company_tags',
   product: 'products',
+  // The third tag join. Missing here, a full export would come back with the
+  // catalogue's tags silently dropped — and this route's whole claim is that an
+  // organization can be reconstructed from the file.
+  product_tag: 'product_tags',
 }
 
 export async function GET(request: NextRequest) {

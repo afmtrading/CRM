@@ -43,6 +43,7 @@ import {
   Section,
 } from "@/components/ui";
 import { CalendarIcon } from "@/components/icons";
+import { TagChecklist } from "@/components/form-fields";
 import {
   CardLink,
   ContactMethod,
@@ -547,43 +548,17 @@ export default async function ContactDetailPage({
           </Section>
 
           <Section title="Tags" className="order-3">
+            {/*
+              The same control the contact form carries, so tagging looks the
+              same wherever it is done. Here it posts on its own; there it rides
+              along with the record's other fields.
+            */}
             {tagList.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No tags defined yet.{" "}
-                {context.isAdmin && (
-                  <Link
-                    href="/settings/tags"
-                    className="text-brand-700 hover:underline"
-                  >
-                    Create some
-                  </Link>
-                )}
-              </p>
+              <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
             ) : (
               <form action={setContactTags} className="space-y-3">
                 <input type="hidden" name="contact_id" value={id} />
-                <div className="flex flex-wrap gap-2">
-                  {tagList.map((tag) => (
-                    <label
-                      key={tag.id}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-xs hover:bg-slate-50"
-                    >
-                      <input
-                        type="checkbox"
-                        name="tag_ids"
-                        value={tag.id}
-                        defaultChecked={selectedTagIds.has(tag.id)}
-                        className="rounded border-slate-300"
-                      />
-                      <span
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                        aria-hidden
-                      />
-                      {tag.name}
-                    </label>
-                  ))}
-                </div>
+                <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
                 <button type="submit" className="btn-secondary">
                   Save tags
                 </button>

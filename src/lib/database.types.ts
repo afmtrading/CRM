@@ -535,6 +535,13 @@ export type CompanyTagRow = {
   created_at: string
 }
 
+export type ProductTagRow = {
+  organization_id: string
+  product_id: string
+  tag_id: string
+  created_at: string
+}
+
 export type PipelineRow = {
   id: string
   organization_id: string
@@ -1234,6 +1241,7 @@ export interface Database {
         | 'updated_at'
       >
       company_tags: TableDef<CompanyTagRow, 'organization_id' | 'created_at'>
+      product_tags: TableDef<ProductTagRow, 'organization_id' | 'created_at'>
       pipelines: TableDef<PipelineRow, 'id' | 'is_default' | 'order' | 'archived_at' | 'created_at'>
       stages: TableDef<
         StageRow,

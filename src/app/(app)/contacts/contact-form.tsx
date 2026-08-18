@@ -11,6 +11,7 @@ import type {
   FieldOptionRow,
   LifecycleStage,
   OptionFieldKey,
+  TagRow,
   UserRow,
 } from '@/lib/database.types'
 import { contactName } from '@/lib/format'
@@ -23,6 +24,7 @@ import {
   LinksEditor,
   NotesEditor,
   RadioChips,
+  TagChecklist,
 } from '@/components/form-fields'
 
 import type { ActionState } from './actions'
@@ -36,6 +38,8 @@ export function ContactForm({
   owners,
   customFields,
   fieldOptions,
+  tags,
+  selectedTagIds = [],
   prefillCompanyId,
   canManage = true,
   submitLabel,
@@ -46,7 +50,10 @@ export function ContactForm({
   owners: UserRow[]
   customFields: CustomFieldDefinitionRow[]
   fieldOptions: FieldOptionRow[]
-  /** The catalogue, for "what have they asked about". */
+  /** The organization's tags, shared with companies and products. */
+  tags: TagRow[]
+  /** Empty on a new contact, which is the point — it can be tagged as it is created. */
+  selectedTagIds?: string[]
   /** Preselects the company when arriving from a company page. */
   prefillCompanyId?: string
   /** Only a manager may set the owner; a rep hands records over instead. */
@@ -204,6 +211,22 @@ export function ContactForm({
           values={custom}
           fieldOptions={fieldOptions}
         />
+      </FormCard>
+
+      {/*
+        Third, where the record shows them. Asked here rather than only on the
+        saved record because "Q4 push" is generally known at the moment somebody
+        is typed in, and going back for it is a step people skip.
+
+        The marker field is what tells the action this form asked the question
+        at all — an empty checklist posts nothing, and without it an untagged
+        save would be indistinguishable from a screen that never asked.
+      */}
+      <FormCard title="Tags" description="Shared with companies and products. Managed in Settings → Tags.">
+        <div className="sm:col-span-2">
+          <input type="hidden" name="tags_present" value="1" />
+          <TagChecklist tags={tags} selected={selectedTagIds} canManage={canManage} />
+        </div>
       </FormCard>
 
       <FormCard title={CONTACT_CARDS[2].label} description={CONTACT_CARDS[2].description}>

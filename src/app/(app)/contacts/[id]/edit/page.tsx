@@ -1,7 +1,13 @@
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import type { ContactRow, CustomFieldDefinitionRow, FieldOptionRow, UserRow } from '@/lib/database.types'
+import type {
+  ContactRow,
+  CustomFieldDefinitionRow,
+  FieldOptionRow,
+  TagRow,
+  UserRow,
+} from '@/lib/database.types'
 import { contactName } from '@/lib/format'
 import { PageHeader } from '@/components/ui'
 
@@ -23,11 +29,15 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
     { data: owners },
     { data: customFields },
     { data: fieldOptions },
+    { data: tags },
+    { data: contactTags },
   ] = await Promise.all([
     scoped(context, 'companies').select('id, name').order('name'),
     scoped(context, 'users').select('*').eq('status', 'active').order('name'),
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
     scoped(context, 'field_options').select('*').order('order'),
+    scoped(context, 'tags').select('*').order('name'),
+    scoped(context, 'contact_tags').select('tag_id').eq('contact_id', id),
   ])
 
   return (
@@ -40,6 +50,8 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
         fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
+        tags={(tags ?? []) as TagRow[]}
+        selectedTagIds={((contactTags ?? []) as { tag_id: string }[]).map((row) => row.tag_id)}
         canManage={context.canManage}
         submitLabel="Save changes"
       />

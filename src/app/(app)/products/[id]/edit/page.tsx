@@ -8,6 +8,7 @@ import type {
   StockBinRow,
   StockLevelRow,
   StockLocationRow,
+  TagRow,
 } from '@/lib/database.types'
 import { PageHeader } from '@/components/ui'
 
@@ -32,6 +33,8 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
     { data: bins },
     { data: levels },
     { data: summary },
+    { data: tags },
+    { data: productTags },
   ] = await Promise.all([
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'product').order('order'),
     scoped(context, 'field_options').select('*').order('order'),
@@ -41,6 +44,8 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
     // Committed is a fact about open deals rather than about this form, so it
     // is read where it lives instead of being recomputed here.
     context.supabase.rpc('product_stock_summary', { p_product_id: id }),
+    scoped(context, 'tags').select('*').order('name'),
+    scoped(context, 'product_tags').select('tag_id').eq('product_id', id),
   ])
 
   const stockLevels = (levels ?? []) as StockLevelRow[]
@@ -65,6 +70,9 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           note: level.note ?? '',
         }))}
         committed={Number(totals?.committed ?? 0)}
+        tags={(tags ?? []) as TagRow[]}
+        selectedTagIds={((productTags ?? []) as { tag_id: string }[]).map((row) => row.tag_id)}
+        canManage={context.isAdmin}
         submitLabel="Save changes"
       />
     </>

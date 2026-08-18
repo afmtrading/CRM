@@ -214,6 +214,7 @@ export type TenantTable =
   | 'tags'
   | 'contact_tags'
   | 'company_tags'
+  | 'product_tags'
   | 'saved_filters'
   | 'import_jobs'
   | 'import_profiles'
