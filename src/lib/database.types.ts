@@ -617,6 +617,9 @@ export type DealRow = {
   /** Set means the deal is in the recycle bin: only an admin sees it. */
   deleted_at: string | null
   deleted_by: string | null
+  /** Stamped by the database on write — see stamp_deal_actor in 20260256. */
+  created_by: string | null
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -1267,6 +1270,8 @@ export interface Database {
         | 'status'
         | 'owner_id'
         | 'position'
+        | 'created_by'
+        | 'updated_by'
         | 'created_at'
         | 'updated_at'
       >
