@@ -68,6 +68,17 @@ import {
   setMailableOverride,
 } from "../actions";
 
+/*
+ * Never served from the route cache.
+ *
+ * These read per-request, per-tenant data behind an authenticated session, and
+ * the App Router will happily hand back a previously rendered page otherwise —
+ * which shows up as a deploy that went out and a screen that did not change.
+ * The sales and invoice screens have said this since they were written; the
+ * rest of the record pages were relying on it not happening.
+ */
+export const dynamic = 'force-dynamic'
+
 export default async function ContactDetailPage({
   params,
   searchParams,
@@ -230,17 +241,6 @@ export default async function ContactDetailPage({
         description={contact.job_title ?? undefined}
         actions={
           <>
-            {/*
-              Beside the name, as on a deal and a company. Who owns the
-              relationship is what somebody checks before acting on it, and the
-              name is louder than its label because the name is the answer.
-            */}
-            <div className="mr-2 min-w-0 text-right">
-              <p className="text-xs text-slate-500">Owner</p>
-              <p className="truncate text-base font-semibold text-slate-900">
-                {userName(contact.owner_id) ?? "—"}
-              </p>
-            </div>
             {context.canWrite && (
               <Link href={`/contacts/${id}/edit`} className="btn-secondary">
                 Edit
@@ -382,7 +382,24 @@ export default async function ContactDetailPage({
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:items-start">
         {/* Contact details leads — it is what someone opened the page for. */}
         <div className="contents lg:block lg:col-span-2 lg:col-start-1 lg:row-start-1">
-          <Section title={CONTACT_CARDS[0].label} className="order-1">
+          {/*
+            Owner sits in this card's header rather than beside the page title
+            or down in Additional info. Who owns the relationship belongs with
+            who the person is, and the name is louder than its label because the
+            name is the answer — the label only says what it answers.
+          */}
+          <Section
+            title={CONTACT_CARDS[0].label}
+            className="order-1"
+            actions={
+              <div className="min-w-0 text-right">
+                <p className="text-xs text-slate-500">Owner</p>
+                <p className="truncate text-sm font-semibold text-slate-900">
+                  {userName(contact.owner_id) ?? "—"}
+                </p>
+              </div>
+            }
+          >
             <div className="mb-4">
               <div className="min-w-0">
                 <p className="truncate font-semibold text-slate-900">{name}</p>
@@ -695,7 +712,7 @@ export default async function ContactDetailPage({
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label} className="order-6">
             <dl className="divide-y divide-slate-100">
-              {/* Owner is beside the name now, so it is not repeated here. */}
+              {/* Owner is in the Contact details header now, not repeated here. */}
               <FieldRow columns={1}>
                 <Field label="Lead score">
                   <ScoreMeter score={contact.lead_score} />
