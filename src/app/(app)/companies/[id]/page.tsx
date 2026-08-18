@@ -42,6 +42,7 @@ import {
   Empty,
   ExternalLink,
   Field,
+  FieldRow,
   OptionBadges,
 } from "@/components/contact-cards";
 
@@ -291,29 +292,35 @@ export default async function CompanyDetailPage({
             does on a contact: the record is what someone opened the page for. */}
         <div className="contents lg:block lg:col-span-2 lg:col-start-1 lg:row-start-1">
           <Section title={COMPANY_CARDS[0].label} className="order-1">
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Company name">{company.name}</Field>
-              <Field label="Website">
-                <ExternalLink url={website} />
-              </Field>
-              <Field label="Owner">
-                {userName(company.owner_id) ?? <Empty />}
-              </Field>
-              <Field label="Company phone">
-                <ContactMethod
-                  value={company.phone}
-                  kind="phone"
-                  label={company.name}
-                />
-              </Field>
-              <Field label="Company email">
-                <ContactMethod
-                  value={company.email}
-                  kind="email"
-                  label={company.name}
-                />
-              </Field>
-              <Field label="Contacts">{contactRows.length}</Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow>
+                <Field label="Company name">{company.name}</Field>
+                <Field label="Website">
+                  <ExternalLink url={website} />
+                </Field>
+              </FieldRow>
+              <FieldRow>
+                <Field label="Owner">
+                  {userName(company.owner_id) ?? <Empty />}
+                </Field>
+                <Field label="Contacts">{contactRows.length}</Field>
+              </FieldRow>
+              <FieldRow>
+                <Field label="Company phone">
+                  <ContactMethod
+                    value={company.phone}
+                    kind="phone"
+                    label={company.name}
+                  />
+                </Field>
+                <Field label="Company email">
+                  <ContactMethod
+                    value={company.email}
+                    kind="email"
+                    label={company.name}
+                  />
+                </Field>
+              </FieldRow>
               {/* Specialty market and company type moved to Company Rating —
                   what a business is, rather than how to reach it. */}
               <CustomFieldValues
@@ -323,26 +330,28 @@ export default async function CompanyDetailPage({
               />
 
               {addresses.length > 0 && (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs font-medium text-slate-500">
-                    Addresses
-                  </dt>
-                  <dd className="mt-1 grid gap-3 sm:grid-cols-2">
-                    {addresses.map((entry, index) => (
-                      <div
-                        key={`${entry.label}-${index}`}
-                        className="rounded-xl bg-slate-50 p-3"
-                      >
-                        <p className="text-xs font-medium text-slate-500">
-                          {entry.label || `Address ${index + 1}`}
-                        </p>
-                        <p className="mt-0.5 text-sm whitespace-pre-line text-slate-800">
-                          {entry.address}
-                        </p>
-                      </div>
-                    ))}
-                  </dd>
-                </div>
+                <FieldRow columns={1}>
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">
+                      Addresses
+                    </dt>
+                    <dd className="mt-1 grid gap-3 sm:grid-cols-2">
+                      {addresses.map((entry, index) => (
+                        <div
+                          key={`${entry.label}-${index}`}
+                          className="rounded-xl bg-slate-50 p-3"
+                        >
+                          <p className="text-xs font-medium text-slate-500">
+                            {entry.label || `Address ${index + 1}`}
+                          </p>
+                          <p className="mt-0.5 text-sm whitespace-pre-line text-slate-800">
+                            {entry.address}
+                          </p>
+                        </div>
+                      ))}
+                    </dd>
+                  </div>
+                </FieldRow>
               )}
             </dl>
           </Section>
@@ -533,48 +542,58 @@ export default async function CompanyDetailPage({
             the first thing worth knowing after which business it is.
           */}
           <Section title={COMPANY_CARDS[3].label} className="order-2">
-            <dl className="grid gap-3 sm:grid-cols-2">
+            <dl className="divide-y divide-slate-100">
               {/* First on the card, because how much an account matters is the
                   thing somebody scans a record for before anything else. */}
-              <Field label="Priority" wide>
-                {company.priority ? (
+              <FieldRow columns={1}>
+                <Field label="Priority">
+                  {company.priority ? (
+                    <OptionBadges
+                      values={[company.priority]}
+                      options={optionsFor("priority")}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Merchandise">
                   <OptionBadges
-                    values={[company.priority]}
-                    options={optionsFor("priority")}
+                    values={company.specialty_market}
+                    options={optionsFor("specialty_market")}
                   />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-              <Field label="Merchandise" wide>
-                <OptionBadges
-                  values={company.specialty_market}
-                  options={optionsFor("specialty_market")}
-                />
-              </Field>
-              <Field label="Stock type" wide>
-                <OptionBadges
-                  values={company.stock_type}
-                  options={optionsFor("stock_type")}
-                />
-              </Field>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Stock type">
+                  <OptionBadges
+                    values={company.stock_type}
+                    options={optionsFor("stock_type")}
+                  />
+                </Field>
+              </FieldRow>
               {/*
                 Codes rather than names, deliberately. "CA · US · MX" reads at a
                 glance on a card and is what the filters take; the full names
                 would wrap to three lines and say no more.
               */}
-              <Field label="Base Country">
-                {company.based_in ?? <Empty />}
-              </Field>
-              <Field label="Sells To">
-                {company.sells_in.length > 0 ? company.sells_in.join(" · ") : <Empty />}
-              </Field>
-              <Field label="Company type" wide>
-                <OptionBadges
-                  values={company.customer_type}
-                  options={optionsFor("customer_type")}
-                />
-              </Field>
+              <FieldRow>
+                <Field label="Base Country">
+                  {company.based_in ?? <Empty />}
+                </Field>
+                <Field label="Sells To">
+                  {company.sells_in.length > 0 ? company.sells_in.join(" · ") : <Empty />}
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Company type">
+                  <OptionBadges
+                    values={company.customer_type}
+                    options={optionsFor("customer_type")}
+                  />
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("rating")}
                 values={customValues}
@@ -589,47 +608,62 @@ export default async function CompanyDetailPage({
               a value repeated in two cards is a value that can look like it
               disagrees with itself. This card is the social profiles.
             */}
-            <dl className="grid gap-3">
-              <Field label="LinkedIn">
-                <ExternalLink url={socialUrl("linkedin", company.linkedin)} />
-              </Field>
-              <Field label="Facebook">
-                <ExternalLink url={socialUrl("facebook", company.facebook)} />
-              </Field>
-              <Field label="Instagram">
-                <ExternalLink url={socialUrl("instagram", company.instagram)} />
-              </Field>
-              <Field label="TikTok">
-                <ExternalLink url={socialUrl("tiktok", company.tiktok)} />
-              </Field>
-              <Field label="X (Twitter)">
-                <ExternalLink url={socialUrl("x_twitter", company.x_twitter)} />
-              </Field>
-              <Field label="YouTube">
-                <ExternalLink url={socialUrl("youtube", company.youtube)} />
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="LinkedIn">
+                  <ExternalLink url={socialUrl("linkedin", company.linkedin)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Facebook">
+                  <ExternalLink url={socialUrl("facebook", company.facebook)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Instagram">
+                  <ExternalLink url={socialUrl("instagram", company.instagram)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="TikTok">
+                  <ExternalLink url={socialUrl("tiktok", company.tiktok)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="X (Twitter)">
+                  <ExternalLink url={socialUrl("x_twitter", company.x_twitter)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="YouTube">
+                  <ExternalLink url={socialUrl("youtube", company.youtube)} />
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("digital")}
                 values={customValues}
                 fieldOptions={options}
+                columns={1}
               />
 
               {extraLinks.length > 0 && (
-                <div>
-                  <dt className="text-xs font-medium text-slate-500">
-                    Other links
-                  </dt>
-                  <dd className="mt-1 space-y-1 text-sm">
-                    {extraLinks.map((link, index) => (
-                      <div key={`${link.url}-${index}`}>
-                        <ExternalLink
-                          url={safeUrl(link.url)}
-                          label={link.label || undefined}
-                        />
-                      </div>
-                    ))}
-                  </dd>
-                </div>
+                <FieldRow columns={1}>
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">
+                      Other links
+                    </dt>
+                    <dd className="mt-1 space-y-1 text-sm">
+                      {extraLinks.map((link, index) => (
+                        <div key={`${link.url}-${index}`}>
+                          <ExternalLink
+                            url={safeUrl(link.url)}
+                            label={link.label || undefined}
+                          />
+                        </div>
+                      ))}
+                    </dd>
+                  </div>
+                </FieldRow>
               )}
             </dl>
           </Section>
@@ -650,27 +684,32 @@ export default async function CompanyDetailPage({
           </Section>
 
           <Section title={COMPANY_CARDS[1].label} className="order-7">
-            <dl className="space-y-3">
-              <Field label="Owner">
-                {userName(company.owner_id) ?? <Empty />}
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="Owner">
+                  {userName(company.owner_id) ?? <Empty />}
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("additional")}
                 values={customValues}
                 fieldOptions={options}
+                columns={1}
               />
-              <Field label="Notes">
-                {notesHtml ? (
-                  <div
-                    className="space-y-2 leading-relaxed text-slate-700"
-                    // Safe by construction: renderMarkdown escapes the stored
-                    // text before applying formatting.
-                    dangerouslySetInnerHTML={{ __html: notesHtml }}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
+              <FieldRow columns={1}>
+                <Field label="Notes">
+                  {notesHtml ? (
+                    <div
+                      className="space-y-2 leading-relaxed text-slate-700"
+                      // Safe by construction: renderMarkdown escapes the stored
+                      // text before applying formatting.
+                      dangerouslySetInnerHTML={{ __html: notesHtml }}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
             </dl>
           </Section>
 
@@ -714,23 +753,27 @@ export default async function CompanyDetailPage({
           </Section>
 
           <Section title="Record history" className="order-8">
-            <dl className="space-y-3">
-              <Field label="Created by">
-                <span className="block">
-                  {userName(company.created_by) ?? "Unknown"}
-                </span>
-                <span className="text-xs text-slate-500">
-                  <DateTime value={company.created_at} />
-                </span>
-              </Field>
-              <Field label="Updated by">
-                <span className="block">
-                  {userName(company.updated_by) ?? "Unknown"}
-                </span>
-                <span className="text-xs text-slate-500">
-                  <DateTime value={company.updated_at} />
-                </span>
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="Created by">
+                  <span className="block">
+                    {userName(company.created_by) ?? "Unknown"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    <DateTime value={company.created_at} />
+                  </span>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Updated by">
+                  <span className="block">
+                    {userName(company.updated_by) ?? "Unknown"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    <DateTime value={company.updated_at} />
+                  </span>
+                </Field>
+              </FieldRow>
             </dl>
           </Section>
         </div>

@@ -13,7 +13,19 @@ import type {
   TagRow,
 } from '@/lib/database.types'
 import { ActionForm, SubmitButton } from '@/components/action-form'
-import { Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
+/*
+ * Aliased: this file already has a local `Field`, the editable name/value
+ * input on the form below — a different component for a different job that
+ * happened to want the same name first.
+ */
+import {
+  Empty,
+  Field as InfoField,
+  FieldRow,
+  OptionBadge,
+  OptionBadges,
+  optionColor,
+} from '@/components/contact-cards'
 import { PageHeader, Section } from '@/components/ui'
 import { TagChecklist } from '@/components/form-fields'
 
@@ -156,85 +168,94 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
 
           {/* -------------------------------------------------------------- */}
           <Section title="How it works">
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <Fact label="Marketplace type">
-                <OptionBadges
-                  values={profile.marketplace_type}
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.type)}
-                />
-              </Fact>
-              <Fact label="Fulfilment">
-                <OptionBadges
-                  values={profile.fulfilment}
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.fulfilment)}
-                />
-              </Fact>
-              <Fact label="Payment">
-                {profile.payment ? (
-                  <OptionBadge
-                    value={profile.payment}
-                    color={optionColor(
-                      optionsFor(MARKETPLACE_OPTION_FIELDS.payment),
-                      profile.payment,
-                    )}
+            <dl className="divide-y divide-slate-100">
+              <FieldRow>
+                <InfoField label="Marketplace type">
+                  <OptionBadges
+                    values={profile.marketplace_type}
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.type)}
                   />
-                ) : (
-                  <Empty />
-                )}
-              </Fact>
-              <Fact label="Buyer's premium">
-                {/* Three states: yes, no, and nobody has said. */}
-                {premium ?? <span className="text-xs text-slate-400">Not recorded</span>}
-              </Fact>
-              <Fact label="Audience">
-                <OptionBadges
-                  values={profile.audience}
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.audience)}
-                />
-              </Fact>
-              <Fact label="Inventory type">
-                <OptionBadges
-                  values={profile.inventory_type}
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
-                />
-              </Fact>
+                </InfoField>
+                <InfoField label="Fulfilment">
+                  <OptionBadges
+                    values={profile.fulfilment}
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.fulfilment)}
+                  />
+                </InfoField>
+              </FieldRow>
+              <FieldRow>
+                <InfoField label="Payment">
+                  {profile.payment ? (
+                    <OptionBadge
+                      value={profile.payment}
+                      color={optionColor(
+                        optionsFor(MARKETPLACE_OPTION_FIELDS.payment),
+                        profile.payment,
+                      )}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </InfoField>
+                <InfoField label="Buyer's premium">
+                  {/* Three states: yes, no, and nobody has said. */}
+                  {premium ?? <span className="text-xs text-slate-400">Not recorded</span>}
+                </InfoField>
+              </FieldRow>
+              <FieldRow>
+                <InfoField label="Audience">
+                  <OptionBadges
+                    values={profile.audience}
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.audience)}
+                  />
+                </InfoField>
+                <InfoField label="Inventory type">
+                  <OptionBadges
+                    values={profile.inventory_type}
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
+                  />
+                </InfoField>
+              </FieldRow>
               {/* The company's, like Sells in below it — a marketplace has no
                   priority of its own to disagree with the account's. */}
-              <Fact label="Priority" hint="From the company record">
-                {business.priority ? (
-                  <OptionBadge
-                    value={business.priority}
-                    color={optionColor(
-                      optionsFor(MARKETPLACE_OPTION_FIELDS.priority),
-                      business.priority,
-                    )}
-                  />
-                ) : (
-                  <Link
-                    href={`/companies/${business.id}/edit`}
-                    className="text-xs text-brand-700 hover:underline"
-                  >
-                    Set on the company
-                  </Link>
-                )}
-              </Fact>
-              {/*
-                The company's, not a copy. companies.sells_in already normalises
-                to sorted ISO codes and is what the territory filters read; a
-                second copy here would be a second thing to keep true.
-              */}
-              <Fact label="Sells in" hint="From the company record">
-                {business.sells_in?.length ? (
-                  <span className="text-slate-700">{business.sells_in.join(', ')}</span>
-                ) : (
-                  <Link
-                    href={`/companies/${business.id}/edit`}
-                    className="text-xs text-brand-700 hover:underline"
-                  >
-                    Set on the company
-                  </Link>
-                )}
-              </Fact>
+              <FieldRow>
+                <InfoField label="Priority" hint="From the company record">
+                  {business.priority ? (
+                    <OptionBadge
+                      value={business.priority}
+                      color={optionColor(
+                        optionsFor(MARKETPLACE_OPTION_FIELDS.priority),
+                        business.priority,
+                      )}
+                    />
+                  ) : (
+                    <Link
+                      href={`/companies/${business.id}/edit`}
+                      className="text-xs text-brand-700 hover:underline"
+                    >
+                      Set on the company
+                    </Link>
+                  )}
+                </InfoField>
+                {/*
+                  The company's, not a copy. companies.sells_in already
+                  normalises to sorted ISO codes and is what the territory
+                  filters read; a second copy here would be a second thing to
+                  keep true.
+                */}
+                <InfoField label="Sells in" hint="From the company record">
+                  {business.sells_in?.length ? (
+                    <span className="text-slate-700">{business.sells_in.join(', ')}</span>
+                  ) : (
+                    <Link
+                      href={`/companies/${business.id}/edit`}
+                      className="text-xs text-brand-700 hover:underline"
+                    >
+                      Set on the company
+                    </Link>
+                  )}
+                </InfoField>
+              </FieldRow>
             </dl>
           </Section>
 
@@ -570,26 +591,6 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
 }
 
 /* -------------------------------------------------------------------------- */
-
-function Fact({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <dt className="text-xs text-slate-500">
-        {label}
-        {hint && <span className="ml-1 text-slate-400">· {hint}</span>}
-      </dt>
-      <dd className="mt-1 text-sm text-slate-800">{children}</dd>
-    </div>
-  )
-}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
