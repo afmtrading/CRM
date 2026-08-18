@@ -1,11 +1,10 @@
 import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { formatNumber, formatPrice, totalsByCurrency } from '@/lib/format'
+import { formatCurrency, formatNumber, formatPrice } from '@/lib/format'
 import type { CustomFieldDefinitionRow, FieldOptionRow, ProductRow } from '@/lib/database.types'
 import { derivePricing } from '@/lib/products'
 import { round2 } from '@/lib/sales'
-import { MoneyTotals } from '@/components/money'
 import { availableTone, formatQuantity } from '@/lib/stock'
 import { productImageUrl } from '@/lib/product-image'
 import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
@@ -121,27 +120,40 @@ export default async function ProductsPage({
    * list rather than about the warehouse. On hand rather than available,
    * because goods already promised to somebody are still goods you own.
    *
-   * Per currency and never added together — the same rule the deals board and
-   * the invoice totals follow. A catalogue priced in two currencies has two
-   * answers and no third one.
+   * One currency, asked for and taken literally: the organization's own. Not
+   * because currencies add up — they do not, which is why every other total in
+   * this app stands as one subtotal per currency — but because a headline is a
+   * single number or it is not a headline, and a catalogue priced mostly in one
+   * currency does not need four.
+   *
+   * What that costs is said out loud rather than hidden. The card carries the
+   * currency in its label, and if anything was left out it says how much, so a
+   * warehouse full of CAD stock cannot read as a small number without
+   * explaining itself. The card this replaced excluded the same products and
+   * mentioned none of it.
    *
    * Over the products actually listed, so the totals describe what is on the
    * screen: filter to one brand and these say what that brand is worth.
    */
+  const base = context.organization.default_currency
+  const inBase = products.filter((product) => product.currency === base)
+  const setAside = products.length - inBase.length
+
   const stockValue = (pick: (product: ProductRow) => number | null) =>
-    totalsByCurrency(
-      products.map((product) => {
-        const unit = pick(product)
-        const onHand = Number(stockByProduct.get(product.id)?.on_hand ?? 0)
-        return {
-          value: unit === null ? 0 : round2(unit * onHand),
-          currency: product.currency,
-        }
-      }),
-    )
+    inBase.reduce((total, product) => {
+      const unit = pick(product)
+      if (unit === null) return total
+      return round2(total + unit * Number(stockByProduct.get(product.id)?.on_hand ?? 0))
+    }, 0)
 
   const showroomValue = stockValue((product) => derivePricing(product).unit.showroom.value)
   const wholesaleValue = stockValue((product) => derivePricing(product).unit.wholesale.value)
+
+  /** Said on both cards, because a total that quietly skipped rows is a wrong total. */
+  const priced = (what: string) =>
+    setAside > 0
+      ? `On hand, at ${what} prices · ${formatNumber(setAside)} not in ${base}`
+      : `On hand, at ${what} prices`
 
   const catalogue = columnCatalogue('product', definitions)
   const columns = resolveColumns('product', savedColumns, catalogue)
@@ -366,18 +378,18 @@ export default async function ProductsPage({
           hint="Edit the list in Settings → Fields"
         />
         <StatCard
-          label="Showroom value"
-          value={<MoneyTotals rows={showroomValue} />}
+          label={`Showroom value (${base})`}
+          value={formatCurrency(showroomValue, base)}
           icon={CurrencyIcon}
           tone="blue"
-          hint="On hand, at showroom prices"
+          hint={priced('showroom')}
         />
         <StatCard
-          label="Wholesale value"
-          value={<MoneyTotals rows={wholesaleValue} />}
+          label={`Wholesale value (${base})`}
+          value={formatCurrency(wholesaleValue, base)}
           icon={LayersIcon}
           tone="amber"
-          hint="On hand, at wholesale prices"
+          hint={priced('wholesale')}
         />
       </StatGrid>
 
