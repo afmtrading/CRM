@@ -422,15 +422,20 @@ export function splitValues(
   if (!trimmed) return { values: [], prose: null }
 
   /*
-   * Pipe and slash are always separators — nobody writes prose with them. A
-   * comma is only a separator in a short cell: "Electronics, brand-name
+   * Pipe, slash and semicolon are always separators — nobody writes prose with
+   * them in a category cell, and the semicolon is what a spreadsheet export
+   * uses when the values themselves contain commas. Leaving it out made
+   * "Distributor; Wholesaler" a single option on two thirds of the rows of a
+   * real file.
+   *
+   * A comma is only a separator in a short cell: "Electronics, brand-name
    * closeouts" is two categories, while "Food, health and beauty, cleaning, pet
    * supplies, closeouts and excess inventory" is a sentence, and splitting the
    * second one produces six options that are not options.
    */
   const commaSeparates = trimmed.length <= 40
   const parts = trimmed
-    .split(commaSeparates ? /[|/,]/ : /[|/]/)
+    .split(commaSeparates ? /[|/,;]/ : /[|/;]/)
     .map((part) => part.trim())
     .filter(Boolean)
 

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 
 import { detectPlaceholders, headerSignature, readTable, writableChanges } from '@/lib/import-analysis'
-import { IMPORT_TARGETS, suggestTargets, type ImportPlan } from '@/lib/import-plan'
+import { importTargets, suggestTargets, type ImportPlan } from '@/lib/import-plan'
 import { runChecks, type Check } from '@/lib/import-checks'
 import { clusterValues, type OptionProposal, type ValueCluster } from '@/lib/import-vocabulary'
 import type { ImportProfileRow } from '@/lib/database.types'
@@ -23,7 +23,13 @@ import { applyImport, findProfile, planImport, saveProfile, type ApplyResult } f
 
 type Step = 'upload' | 'map' | 'review' | 'done'
 
-export function ImportBuyers() {
+export function ImportBuyers({
+  customFields = [],
+}: {
+  /** This organization's own fields, so they can be mapped to like any other. */
+  customFields?: { key: string; label: string; entity_type: string }[]
+}) {
+  const targets = useMemo(() => importTargets(customFields), [customFields])
   const [step, setStep] = useState<Step>('upload')
   const [fileName, setFileName] = useState('')
   const [headers, setHeaders] = useState<string[]>([])
@@ -48,6 +54,24 @@ export function ImportBuyers() {
   const nameHeader = useMemo(
     () => Object.keys(mapping).find((key) => mapping[key] === 'contact.name'),
     [mapping],
+  )
+
+  /*
+   * The columns worth asking about.
+   *
+   * A spreadsheet saved with trailing commas arrives with a run of nameless
+   * columns — fourteen of them on the file that prompted this — and each one
+   * used to get its own row here, pushing the real columns off the screen.
+   * Nameless *and* empty is not a column somebody forgot to name; it is
+   * punctuation. A nameless column that does hold values is kept, because that
+   * is a heading somebody forgot to write and the data is real.
+   */
+  const mappableHeaders = useMemo(
+    () =>
+      headers.filter(
+        (header) => header.trim() !== '' || rows.some((row) => (row.values[header] ?? '').trim()),
+      ),
+    [headers, rows],
   )
 
   async function onFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -266,7 +290,7 @@ export function ImportBuyers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {headers.map((header) => (
+                  {mappableHeaders.map((header) => (
                     <tr key={header}>
                       <td className="font-medium text-slate-700">{header}</td>
                       <td className="max-w-56 truncate text-slate-500">
@@ -285,7 +309,7 @@ export function ImportBuyers() {
                           className="input w-full py-1"
                         >
                           <option value="">Not imported</option>
-                          {IMPORT_TARGETS.map((target) => (
+                          {targets.map((target) => (
                             <option key={target.key} value={target.key}>
                               {target.on === 'company' ? 'Company' : 'Contact'} · {target.label}
                             </option>

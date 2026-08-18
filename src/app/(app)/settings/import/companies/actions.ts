@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireBulk, scoped } from '@/lib/tenancy'
-import { buildPlan, type ImportPlan, type PlannedCompany } from '@/lib/import-plan'
+import { buildPlan, importTargets, type ImportPlan, type PlannedCompany } from '@/lib/import-plan'
 import { writableChanges, type CountryLookup, type MatchCandidate } from '@/lib/import-analysis'
 import { applyMerges, proposeOptions, type OptionProposal } from '@/lib/import-vocabulary'
 import { OPTION_FIELDS } from '@/lib/field-options'
@@ -37,6 +37,13 @@ const OPTION_TARGETS: { target: string; field: string }[] = [
   { target: 'company.specialty_market', field: 'specialty_market' },
   { target: 'company.stock_type', field: 'stock_type' },
   { target: 'company.customer_type', field: 'customer_type' },
+  /*
+   * Single-valued, unlike the three above, and here for the same reason they
+   * are: a list that still says "Standard" where the option list now says
+   * "Medium" should be offered the correction once and have it remembered,
+   * rather than quietly writing a value no filter will ever match.
+   */
+  { target: 'company.priority', field: 'priority' },
 ]
 
 export interface PlanResult {
@@ -48,8 +55,13 @@ export interface PlanResult {
 export async function planImport(input: PlanInput): Promise<PlanResult> {
   const context = await requireBulk()
 
-  const [{ data: countries }, { data: existing }, { data: options }] =
-    await Promise.all([
+  const [
+    { data: countries },
+    { data: existing },
+    { data: options },
+    { data: users },
+    { data: definitions },
+  ] = await Promise.all([
     context.supabase.from('countries').select('code, name'),
     /*
      * Every company in the organization, because matching is by domain, email
@@ -61,7 +73,13 @@ export async function planImport(input: PlanInput): Promise<PlanResult> {
         .select('id, name, domain, email, based_in, phone, notes, specialty_market, stock_type, customer_type, sells_in')
         .is('deleted_at', null),
       scoped(context, 'field_options').select('field_key, value'),
+      // For an owner column, which arrives as "Emile" rather than as a uuid.
+      scoped(context, 'users').select('id, name, email').eq('status', 'active'),
+      // So a field this organization defined for itself can be mapped to.
+      scoped(context, 'custom_field_definitions').select('key, label, entity_type'),
     ])
+
+  const customFields = (definitions ?? []) as { key: string; label: string; entity_type: string }[]
 
   /*
    * Merges are applied to the cells before anything reads them, so the plan,
@@ -78,6 +96,8 @@ export async function planImport(input: PlanInput): Promise<PlanResult> {
     {
       countries: (countries ?? []) as CountryLookup[],
       placeholders: new Set(input.placeholders),
+      users: (users ?? []) as { id: string; name: string; email: string }[],
+      targets: importTargets(customFields),
     },
     (existing ?? []) as MatchCandidate[],
   )
@@ -87,9 +107,13 @@ export async function planImport(input: PlanInput): Promise<PlanResult> {
   const proposals = OPTION_TARGETS.filter(({ target }) =>
     Object.values(input.mapping).includes(target),
   ).map(({ target, field }) => {
-    const values = plan.companies.flatMap(
-      (company) => (company.values[target.split('.')[1]] as string[] | undefined) ?? [],
-    )
+    const values = plan.companies.flatMap((company) => {
+      // Most of these columns hold a list; priority holds one value. Both end
+      // up as a list of what the file said, which is all proposeOptions wants.
+      const held = company.values[target.split('.')[1]]
+      if (Array.isArray(held)) return held as string[]
+      return typeof held === 'string' && held ? [held] : []
+    })
     return proposeOptions(
       field,
       OPTION_FIELDS.find((option) => option.key === field)?.label ?? field,
@@ -236,7 +260,10 @@ async function writeCompany(
 
     if (error) throw new Error(error.message)
     result.companiesCreated += 1
-    return (data as { id: string }).id
+
+    const id = (data as { id: string }).id
+    if (company.tags.length > 0) await attachTags(context, 'company', id, company.tags)
+    return id
   }
 
   /*
@@ -248,6 +275,12 @@ async function writeCompany(
   const changes = writableChanges(company.changes).filter(
     (change) => allowReplace || change.kind === 'fill',
   )
+
+  // Tags are added whether or not a column changed: a file whose only new
+  // information is a tag still carries information.
+  if (company.tags.length > 0) {
+    await attachTags(context, 'company', company.matchId, company.tags)
+  }
 
   if (changes.length === 0) return company.matchId
 
@@ -287,12 +320,86 @@ async function writeContacts(
       }
     }
 
-    const { error } = await scoped(context, 'contacts').insert({
-      ...(contact.values as Record<string, unknown>),
-      company_id: companyId,
-    } as never)
+    const { data, error } = await scoped(context, 'contacts')
+      .insert({
+        ...(contact.values as Record<string, unknown>),
+        company_id: companyId,
+      } as never)
+      .select('id')
+      .single()
 
     if (error) throw new Error(error.message)
     result.contactsCreated += 1
+
+    if (contact.tags.length > 0) {
+      await attachTags(context, 'contact', (data as { id: string }).id, contact.tags)
+    }
   }
+}
+
+/**
+ * Attaches tag names to a record, creating the ones this organization does not
+ * have yet.
+ *
+ * Created rather than refused, because a tag is the organization's own word and
+ * a list arriving with a word they have not typed into Settings yet is the
+ * ordinary case, not an error. Matched case-insensitively so "Orthotics" and
+ * "orthotics" stay one tag rather than becoming two.
+ */
+async function attachTags(
+  context: Context,
+  entity: 'company' | 'contact',
+  recordId: string,
+  names: string[],
+): Promise<void> {
+  const { data: existing } = await scoped(context, 'tags').select('id, name')
+  const byName = new Map(
+    ((existing ?? []) as { id: string; name: string }[]).map((tag) => [
+      tag.name.trim().toLowerCase(),
+      tag.id,
+    ]),
+  )
+
+  const ids: string[] = []
+  for (const raw of names) {
+    const name = raw.trim()
+    if (!name) continue
+
+    const known = byName.get(name.toLowerCase())
+    if (known) {
+      ids.push(known)
+      continue
+    }
+
+    const { data: made } = await scoped(context, 'tags')
+      .insert({ name } as never)
+      .select('id')
+      .single()
+
+    if (made) {
+      const id = (made as { id: string }).id
+      byName.set(name.toLowerCase(), id)
+      ids.push(id)
+    }
+  }
+
+  if (ids.length === 0) return
+
+  /*
+   * Added, never replaced.
+   *
+   * The obvious call here is syncTags, and it would be wrong: it makes a
+   * record's tags exactly what it is handed, which for a file that mentions
+   * one tag would strip every other tag the record already carries. An import
+   * says what it knows, not what is true of everything else.
+   */
+  const { table, column } =
+    entity === 'company'
+      ? ({ table: 'company_tags', column: 'company_id' } as const)
+      : ({ table: 'contact_tags', column: 'contact_id' } as const)
+
+  await scoped(context, table).upsert(
+    ids.map((tagId) => ({ [column]: recordId, tag_id: tagId })),
+    { onConflict: `${column},tag_id` },
+  )
 }
