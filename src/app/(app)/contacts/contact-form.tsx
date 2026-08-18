@@ -14,7 +14,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { contactName } from '@/lib/format'
-import { CONTACT_CARDS } from '@/lib/field-options'
+import { CONTACT_CARDS, optionsForField } from '@/lib/field-options'
 import { CompanyPicker } from '@/components/company-picker'
 import {
   ChipGroup,
@@ -22,7 +22,6 @@ import {
   FormCard,
   LinksEditor,
   NotesEditor,
-  ProductChips,
   RadioChips,
 } from '@/components/form-fields'
 
@@ -37,8 +36,6 @@ export function ContactForm({
   owners,
   customFields,
   fieldOptions,
-  products,
-  productInterest = [],
   prefillCompanyId,
   canManage = true,
   submitLabel,
@@ -50,8 +47,6 @@ export function ContactForm({
   customFields: CustomFieldDefinitionRow[]
   fieldOptions: FieldOptionRow[]
   /** The catalogue, for "what have they asked about". */
-  products: { id: string; name: string }[]
-  productInterest?: string[]
   /** Preselects the company when arriving from a company page. */
   prefillCompanyId?: string
   /** Only a manager may set the owner; a rep hands records over instead. */
@@ -62,7 +57,8 @@ export function ContactForm({
   const [force, setForce] = useState(false)
 
   const custom = (contact?.custom_fields ?? {}) as Record<string, unknown>
-  const optionsFor = (key: OptionFieldKey) => fieldOptions.filter((o) => o.field_key === key)
+  // Scoped to this record's own options, not just the key — see optionsForField.
+  const optionsFor = (key: OptionFieldKey) => optionsForField(fieldOptions, 'contact', key)
   const customByCard = (card: ContactCard) => customFields.filter((field) => field.card === card)
   const links = Array.isArray(contact?.links) ? (contact.links as ContactLink[]) : []
 
@@ -202,13 +198,6 @@ export function ContactForm({
             options={optionsFor('credibility')}
             selected={contact?.credibility ?? null}
           />
-        </div>
-        <div className="sm:col-span-2">
-          <span className="label">Interested in</span>
-          <ProductChips products={products} selected={productInterest} />
-          <p className="mt-1 text-xs text-slate-400">
-            What they have asked about. What they have actually bought comes from won deals.
-          </p>
         </div>
         <CustomFieldInputs
           fields={customByCard('influence')}

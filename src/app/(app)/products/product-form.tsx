@@ -12,7 +12,7 @@ import type {
 } from '@/lib/database.types'
 import type { StockEntry } from '@/lib/stock'
 import { CURRENCIES, formatPrice } from '@/lib/format'
-import { PRODUCT_CARDS } from '@/lib/field-options'
+import { PRODUCT_CARDS, optionsForField } from '@/lib/field-options'
 import {
   PRODUCT_ACTIVE_STATUS,
   derivePricing,
@@ -238,8 +238,8 @@ export function ProductForm({
   const showroom = showroomMargin(prices)
   const wholesale = wholesaleMargin(prices)
 
-  const optionsFor = (key: string) =>
-    fieldOptions.filter((option) => option.entity_type === 'product' && option.field_key === key)
+  // Scoped to this record's own options, not just the key — see optionsForField.
+  const optionsFor = (key: string) => optionsForField(fieldOptions, 'product', key)
 
   const forCard = (card: string) => customFields.filter((field) => field.card === card)
   const cardDescription = (key: string) =>
@@ -404,6 +404,21 @@ export function ProductForm({
             name="category"
             options={optionsFor('product_category')}
             selected={product?.category ?? null}
+          />
+        </div>
+
+        {/*
+          Chips, the same control the question gets on a contact and on a
+          company. It is one question about how much something matters, and it
+          should not look like three different questions depending on which
+          record is open.
+        */}
+        <div className="sm:col-span-2">
+          <span className="label">Priority</span>
+          <RadioChips
+            name="priority"
+            options={optionsFor('priority')}
+            selected={product?.priority ?? null}
           />
         </div>
 

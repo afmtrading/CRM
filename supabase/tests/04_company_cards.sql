@@ -332,10 +332,18 @@ begin
     'specialty market options belong to the company'
   );
 
+  /*
+   * Priority was the contact's alone when this was written. It is now asked of
+   * three record types, each with a list of its own — a Critical account can
+   * hold a Standard line, and one shared list would make those the same
+   * statement. What matters is still that every option names a record type.
+   */
   perform test_assert(
-    (select distinct entity_type::text from field_options
-      where organization_id = v_org_a and field_key = 'priority') = 'contact',
-    'priority options belong to the contact'
+    (select array_agg(distinct entity_type::text order by entity_type::text)
+       from field_options
+      where organization_id = v_org_a and field_key = 'priority')
+      = array['company', 'contact', 'product'],
+    'priority is asked of a contact, a company and a product, each from its own list'
   );
 end;
 $$;

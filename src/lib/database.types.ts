@@ -654,6 +654,8 @@ export type ProductRow = {
   product_type: string | null
   product_condition: string | null
   status: string
+  /** Drawn from the product priority list, the same question a contact and a company are asked. */
+  priority: string | null
 
   /*
    * Prices nobody typed. Null means "derive it" — 70% and 30% of retail for the
@@ -951,13 +953,6 @@ export type StockAdjustmentRow = {
   reason: string | null
   note: string | null
   created_by: string | null
-  created_at: string
-}
-
-export type ContactProductRow = {
-  organization_id: string
-  contact_id: string
-  product_id: string
   created_at: string
 }
 
@@ -1281,6 +1276,7 @@ export interface Database {
         | 'id'
         | 'sku'
         | 'category'
+        | 'priority'
         | 'unit'
         | 'unit_price'
         | 'unit_cost'
@@ -1308,7 +1304,6 @@ export interface Database {
         | 'created_at'
         | 'updated_at'
       >
-      contact_products: TableDef<ContactProductRow, 'organization_id' | 'created_at'>
       sales_orders: TableDef<
         SalesOrderRow,
         | 'id'

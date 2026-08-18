@@ -131,32 +131,6 @@ function contactColumns(input: z.infer<typeof contactSchema>, formData: FormData
   }
 }
 
-/**
- * What the contact has asked about, from the Influence card.
- *
- * Replace-in-full rather than diff: the form always posts the complete set, and
- * the join table has no other columns worth preserving.
- */
-async function syncProductInterest(
-  context: Awaited<ReturnType<typeof requireSession>>,
-  contactId: string,
-  formData: FormData,
-) {
-  const productIds = [...new Set(formData.getAll('product_ids').map(String).filter(Boolean))]
-
-  await context.supabase
-    .from('contact_products')
-    .delete()
-    .eq('organization_id', context.organizationId)
-    .eq('contact_id', contactId)
-
-  if (productIds.length > 0) {
-    await scoped(context, 'contact_products').insert(
-      productIds.map((productId) => ({ contact_id: contactId, product_id: productId })),
-    )
-  }
-}
-
 export type ActionState = { ok?: boolean; error?: string; duplicates?: ContactRow[]; id?: string }
 
 /**
@@ -209,8 +183,6 @@ export async function createContact(_prev: ActionState, formData: FormData): Pro
 
   if (error) return { error: error.message }
 
-  await syncProductInterest(context, data.id, formData)
-
   revalidatePath('/contacts')
   revalidatePath('/companies')
   redirect(`/contacts/${data.id}`)
@@ -246,8 +218,6 @@ export async function updateContact(_prev: ActionState, formData: FormData): Pro
     .eq('id', id)
 
   if (error) return { error: error.message }
-
-  await syncProductInterest(context, id, formData)
 
   revalidatePath('/contacts')
   revalidatePath(`/contacts/${id}`)

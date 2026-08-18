@@ -21,17 +21,11 @@ export default async function NewContactPage({
     { data: owners },
     { data: customFields },
     { data: fieldOptions },
-    { data: products },
   ] = await Promise.all([
     scoped(context, 'companies').select('id, name').order('name'),
     scoped(context, 'users').select('*').eq('status', 'active').order('name'),
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'contact').order('order'),
     scoped(context, 'field_options').select('*').order('order'),
-    scoped(context, 'products')
-      .select('id, name')
-      .is('deleted_at', null)
-      .eq('active', true)
-      .order('name'),
   ])
 
   return (
@@ -44,7 +38,6 @@ export default async function NewContactPage({
         owners={(owners ?? []) as UserRow[]}
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
         fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
-        products={(products ?? []) as { id: string; name: string }[]}
         canManage={context.canManage}
         submitLabel="Create contact"
       />

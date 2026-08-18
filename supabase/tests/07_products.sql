@@ -502,38 +502,6 @@ end;
 $$;
 
 -- =============================================================================
--- What a contact has asked about.
--- =============================================================================
-do $$
-declare
-  v_org     uuid := (select id from fixture where key = 'org');
-  v_shea    uuid := (select id from fixture where key = 'shea');
-  v_rep     uuid := (select id from fixture where key = 'rep');
-  v_contact uuid;
-begin
-  raise notice 'Product interest:';
-
-  perform sign_in_as('rep_auth');
-  insert into contacts (organization_id, first_name, owner_id)
-  values (v_org, 'Interested', v_rep) returning id into v_contact;
-
-  insert into contact_products (organization_id, contact_id, product_id)
-  values (v_org, v_contact, v_shea);
-
-  perform test_assert(
-    (select count(*) from contact_products where contact_id = v_contact) = 1,
-    'a rep records what their own contact asked about'
-  );
-
-  perform sign_in_as('rep2_auth');
-  perform test_assert(
-    (select count(*) from contact_products where contact_id = v_contact) = 0,
-    'and another rep sees neither the contact nor its interests'
-  );
-end;
-$$;
-
--- =============================================================================
 -- Status is what people set; `active` is what the rest of the app reads.
 --
 -- The two can disagree only if something writes `active` directly, which is
@@ -691,6 +659,58 @@ begin
       where entity_type = 'product' and field_key = 'product_status'
         and organization_id = v_org) = 0,
     'another organization edits its own list and never sees this one'
+  );
+end;
+$$;
+
+-- =============================================================================
+-- Priority
+--
+-- The same question a contact and a company are asked. What is checked here is
+-- that it is a list of the product's own — a shared list would make "a Critical
+-- account" and "a Critical line" the same statement.
+-- =============================================================================
+do $$
+declare
+  v_org  uuid := (select id from fixture where key = 'org');
+  v_shea uuid := (select id from fixture where key = 'shea');
+begin
+  raise notice 'Product priority:';
+
+  perform sign_in_as('admin_auth');
+
+  perform test_assert(
+    (select count(*) from field_options
+      where entity_type = 'product' and field_key = 'priority'
+        and organization_id = v_org) = 4,
+    'a product priority list is seeded'
+  );
+
+  perform test_assert(
+    exists (select 1 from field_options
+             where entity_type = 'product' and field_key = 'priority'
+               and organization_id = v_org and value = 'Medium'),
+    'with Medium rather than the Standard that was renamed away'
+  );
+
+  update products set priority = 'Critical' where id = v_shea;
+  perform test_assert(
+    (select priority from products where id = v_shea) = 'Critical',
+    'and a product records one'
+  );
+
+  -- Free text at the column, like type and condition: the list is the
+  -- organization's, so a constraint here would outlaw its own vocabulary.
+  update products set priority = 'Whenever' where id = v_shea;
+  perform test_assert(
+    (select priority from products where id = v_shea) = 'Whenever',
+    'a value an admin added is not second-guessed by the column'
+  );
+
+  update products set priority = null where id = v_shea;
+  perform test_assert(
+    (select priority from products where id = v_shea) is null,
+    'and no answer is a state it can go back to'
   );
 end;
 $$;

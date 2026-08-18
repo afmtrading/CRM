@@ -72,6 +72,7 @@ const productSchema = z.object({
   product_type: text(80),
   product_condition: text(80),
   status: text(80),
+  priority: text(80),
 
   price_showroom: optionalMoney,
   price_wholesale: optionalMoney,
@@ -111,6 +112,7 @@ function productColumns(input: z.infer<typeof productSchema>, formData: FormData
     item_notes: input.item_notes.trim() || null,
     product_type: input.product_type || null,
     product_condition: input.product_condition || null,
+    priority: input.priority || null,
     // `active` is deliberately absent: a trigger derives it from the status, so
     // sending one would be sending a second opinion the database throws away.
     status: input.status || PRODUCT_ACTIVE_STATUS,

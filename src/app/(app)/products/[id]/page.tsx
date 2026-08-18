@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import { contactName, formatCurrency, formatNumber, formatPrice } from '@/lib/format'
+import { formatCurrency, formatNumber, formatPrice } from '@/lib/format'
 import { PRODUCT_CARDS, renderMarkdown, safeUrl } from '@/lib/field-options'
 import type {
   CustomFieldDefinitionRow,
@@ -109,7 +109,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   const [
     { data: lines },
-    { data: interest },
     { data: customFields },
     { data: fieldOptions },
     { data: levels },
@@ -122,10 +121,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         .eq('product_id', id)
         .order('created_at', { ascending: false })
         .limit(200),
-      scoped(context, 'contact_products')
-        .select('contact_id, contacts(id, first_name, last_name, email)')
-        .eq('product_id', id)
-        .limit(100),
       scoped(context, 'custom_field_definitions')
         .select('*')
         .eq('entity_type', 'product')
@@ -144,13 +139,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     ])
 
   const lineItems = ((lines ?? []) as LineItem[]).filter((line) => line.deals !== null)
-  const interestedContacts = (
-    (interest ?? []) as {
-      contacts: { id: string; first_name: string; last_name: string; email: string | null } | null
-    }[]
-  )
-    .map((row) => row.contacts)
-    .filter((contact): contact is NonNullable<typeof contact> => contact !== null)
 
   const fields = (customFields ?? []) as CustomFieldDefinitionRow[]
   const options = (fieldOptions ?? []) as FieldOptionRow[]
@@ -300,6 +288,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 <OptionBadges
                   values={product.status ? [product.status] : []}
                   options={options.filter((option) => option.field_key === 'product_status')}
+                />
+              </Field>
+              <Field label="Priority">
+                <OptionBadges
+                  values={product.priority ? [product.priority] : []}
+                  options={options.filter((option) => option.field_key === 'priority')}
                 />
               </Field>
               <Field label="Category" wide>
@@ -823,30 +817,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </dl>
           </Section>
 
-          <Section title="Interested contacts" className="order-10">
-            {interestedContacts.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Nobody has been marked as interested. Set it on a contact&rsquo;s Influence card.
-              </p>
-            ) : (
-              <ul className="flex flex-wrap gap-2">
-                {interestedContacts.map((contact) => (
-                  <li key={contact.id}>
-                    <Link
-                      href={`/contacts/${contact.id}`}
-                      className="badge bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    >
-                      {contactName(contact)}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
         </div>
       </div>
 
-      {lineItems.length === 0 && interestedContacts.length === 0 && !product.active && (
+      {lineItems.length === 0 && !product.active && (
         <div className="mt-5">
           <EmptyState
             title="Nothing refers to this product"

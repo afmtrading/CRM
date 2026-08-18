@@ -149,6 +149,7 @@ export const PRODUCT_FIELDS: FieldDef[] = [
   { key: 'brand', label: 'Brand', type: 'text', groupable: true, sortable: true },
   { key: 'category', label: 'Category', type: 'text', groupable: true, sortable: true },
   { key: 'product_type', label: 'Product type', type: 'enum', groupable: true, sortable: true },
+  { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'status', label: 'Status', type: 'enum', groupable: true, sortable: true },
   { key: 'currency', label: 'Currency', type: 'text', groupable: true },
   { key: 'unit_price', label: 'Retail price', type: 'number', sortable: true },

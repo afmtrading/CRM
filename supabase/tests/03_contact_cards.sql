@@ -66,9 +66,34 @@ declare
 begin
   raise notice 'Select field options:';
 
+  /*
+   * Per record type, because a field_key is only unique within one. Priority is
+   * asked of a contact, a company and a product, and counting the key alone
+   * would call twelve options four — which is the same mistake that put every
+   * priority on the contact form twice.
+   */
   perform test_assert(
-    (select count(*) from field_options where organization_id = v_org_a and field_key = 'priority') = 4,
-    'a new organization is seeded with the priority options'
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'contact' and field_key = 'priority') = 4,
+    'a new organization is seeded with the contact priority options'
+  );
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'company' and field_key = 'priority') = 4,
+    'and with the company''s own list, which it was not getting before'
+  );
+
+  perform test_assert(
+    (select count(*) from field_options
+      where organization_id = v_org_a and entity_type = 'product' and field_key = 'priority') = 4,
+    'and the product''s'
+  );
+
+  perform test_assert(
+    not exists (select 1 from field_options
+                where organization_id = v_org_a and field_key = 'priority' and value = 'Standard'),
+    'seeded with Medium rather than the Standard that was renamed away'
   );
 
   -- Six for people and businesses — market, company type, stock type, role
@@ -94,22 +119,35 @@ begin
 
   perform test_assert(
     (select color from field_options
-      where organization_id = v_org_a and field_key = 'priority' and value = 'Critical') = 'red',
+      where organization_id = v_org_a and entity_type = 'contact'
+        and field_key = 'priority' and value = 'Critical') = 'red',
     'an option carries its own colour'
   );
 
-  -- Editing one organization's list must not touch another's.
+  -- Editing one organization's list must not touch another's. Scoped to the
+  -- contact list as well, because renaming a contact priority must not rename
+  -- the company's or the product's either — separate lists is the whole point.
   update field_options set value = 'Urgent'
-  where organization_id = v_org_a and field_key = 'priority' and value = 'Critical';
+  where organization_id = v_org_a and entity_type = 'contact'
+    and field_key = 'priority' and value = 'Critical';
 
   perform test_assert(
     exists (select 1 from field_options
-      where organization_id = v_org_b and field_key = 'priority' and value = 'Critical'),
+      where organization_id = v_org_b and entity_type = 'contact'
+        and field_key = 'priority' and value = 'Critical'),
     'renaming an option in one organization leaves the other untouched'
   );
 
+  perform test_assert(
+    exists (select 1 from field_options
+      where organization_id = v_org_a and entity_type = 'company'
+        and field_key = 'priority' and value = 'Critical'),
+    'and leaves the same organization''s company list alone'
+  );
+
   update field_options set value = 'Critical'
-  where organization_id = v_org_a and field_key = 'priority' and value = 'Urgent';
+  where organization_id = v_org_a and entity_type = 'contact'
+    and field_key = 'priority' and value = 'Urgent';
 end;
 $$;
 
