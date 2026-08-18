@@ -208,33 +208,47 @@ const lineSchema = z
     message: 'A revised rate needs both a kind and a value',
   })
 
-/** Refuses to touch an order that is finished with, before writing anything. */
-async function assertLinesEditable(
+/**
+ * Refuses to touch an order that is finished with, before writing anything.
+ *
+ * Returns the refusal rather than throwing it, and null when the lines are
+ * open, so each caller can hand it back to the form it came from. The screen
+ * hides these controls on an order that is closed, which means the refusal is
+ * mostly reached the way it actually happens: two tabs, where the order was
+ * marked shipped in one while a line was being edited in the other. Thrown,
+ * that arrived as "Application error" on top of losing the edit.
+ */
+async function lineEditRefusal(
   context: Awaited<ReturnType<typeof requireSession>>,
   orderId: string,
-) {
+): Promise<ActionState | null> {
   const { data: order, error } = await scoped(context, 'sales_orders')
     .select('status')
     .eq('id', orderId)
     .maybeSingle()
 
   if (error) throw new Error(error.message)
-  if (!order) throw new Error('Sales order not found')
+  if (!order) return { error: 'Sales order not found' }
   if (!isEditable(order.status)) {
-    throw new Error(`A ${order.status} order cannot have its lines changed.`)
+    return { error: `A ${order.status} order cannot have its lines changed.` }
   }
+  return null
 }
 
-export async function addSalesOrderLine(formData: FormData) {
+export async function addSalesOrderLine(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const orderId = formData.get('sales_order_id') as string
-  await assertLinesEditable(context, orderId)
+  const refusal = await lineEditRefusal(context, orderId)
+  if (refusal) return refusal
 
   const parsed = lineSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? 'That line is not valid')
+    return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
   }
 
   // Appended, so a line lands where the person who added it will look for it.
@@ -258,19 +272,24 @@ export async function addSalesOrderLine(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/sales-orders/${orderId}`)
+  return { ok: 'Line added.' }
 }
 
-export async function updateSalesOrderLine(formData: FormData) {
+export async function updateSalesOrderLine(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const id = formData.get('id') as string
   const orderId = formData.get('sales_order_id') as string
-  await assertLinesEditable(context, orderId)
+  const refusal = await lineEditRefusal(context, orderId)
+  if (refusal) return refusal
 
   const parsed = lineSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? 'That line is not valid')
+    return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
   }
 
   const { error } = await scoped(context, 'sales_order_lines')
@@ -285,20 +304,26 @@ export async function updateSalesOrderLine(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/sales-orders/${orderId}`)
+  return { ok: 'Line saved.' }
 }
 
-export async function removeSalesOrderLine(formData: FormData) {
+export async function removeSalesOrderLine(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const id = formData.get('id') as string
   const orderId = formData.get('sales_order_id') as string
-  await assertLinesEditable(context, orderId)
+  const refusal = await lineEditRefusal(context, orderId)
+  if (refusal) return refusal
 
   const { error } = await scoped(context, 'sales_order_lines').delete().eq('id', id)
   if (error) throw new Error(error.message)
 
   revalidatePath(`/sales-orders/${orderId}`)
+  return { ok: 'Line removed.' }
 }
 
 // -----------------------------------------------------------------------------

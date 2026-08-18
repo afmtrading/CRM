@@ -270,16 +270,16 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                           </td>
                           {editable && (
                             <td className="text-right">
-                              <form action={removeSalesOrderLine}>
+                              <ActionForm action={removeSalesOrderLine}>
                                 <input type="hidden" name="id" value={line.id} />
                                 <input type="hidden" name="sales_order_id" value={id} />
-                                <button
-                                  type="submit"
+                                <SubmitButton
                                   className="text-xs text-slate-400 hover:text-red-600"
+                                  pendingLabel="Removing…"
                                 >
                                   Remove
-                                </button>
-                              </form>
+                                </SubmitButton>
+                              </ActionForm>
                             </td>
                           )}
                         </tr>
@@ -291,7 +291,10 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             )}
 
             {editable && (
-              <form action={addSalesOrderLine} className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-6">
+              <ActionForm
+                action={addSalesOrderLine}
+                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-6"
+              >
                 <input type="hidden" name="sales_order_id" value={id} />
 
                 <div className="sm:col-span-2">
@@ -396,11 +399,11 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 </div>
 
                 <div className="flex items-end sm:col-span-6">
-                  <button type="submit" className="btn-primary">
+                  <SubmitButton className="btn-primary" pendingLabel="Adding…">
                     Add line
-                  </button>
+                  </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             )}
           </Section>
 
