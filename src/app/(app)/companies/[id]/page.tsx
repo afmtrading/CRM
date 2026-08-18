@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 
 import { requireSession, scoped, firstRow } from "@/lib/tenancy";
 import { contactName, formatDay } from "@/lib/format";
+import { companyFieldValues, findCompanyField } from "@/lib/company-fields";
 import { DateTime } from "@/components/date-time";
 import { Money } from "@/components/money";
 import {
   COMPANY_CARDS,
+  optionsForField,
   renderMarkdown,
   safeUrl,
   socialUrl,
@@ -30,7 +32,6 @@ import {
 } from "@/components/activity-timeline";
 import {
   DealStatusBadge,
-  LifecycleBadge,
   PageHeader,
   Section,
 } from "@/components/ui";
@@ -74,7 +75,6 @@ export default async function CompanyDetailPage({
     { data: companyTags },
     { data: fieldOptions },
     { data: customFieldDefs },
-    { data: lineItems },
     { data: marketplace },
   ] = await Promise.all([
     scoped(context, "contacts")
@@ -84,7 +84,7 @@ export default async function CompanyDetailPage({
       .is("deleted_at", null)
       .order("last_name"),
     scoped(context, "deals")
-      .select("*, stages(name)")
+      .select("*, stages(name), contacts(id, first_name, last_name)")
       .eq("company_id", id)
       .order("created_at", { ascending: false }),
     scoped(context, "activities")
@@ -101,11 +101,6 @@ export default async function CompanyDetailPage({
       .select("*")
       .eq("entity_type", "company")
       .order("order"),
-    // Line items reached through their deals: !inner turns the join into a
-    // filter, so this returns only what this company's deals are for.
-    scoped(context, "deal_products")
-      .select("*, products(id, name), deals!inner(id, company_id, status, currency)")
-      .eq("deals.company_id", id),
     // Whether this company is also a channel. A profile row is the whole
     // answer; its absence is the other half of it.
     scoped(context, "marketplace_profiles")
@@ -121,46 +116,20 @@ export default async function CompanyDetailPage({
   );
   const dealRows = (deals ?? []) as (DealRow & {
     stages: { name: string } | null;
+    contacts: { id: string; first_name: string; last_name: string } | null;
   })[];
   const contactRows = (contacts ?? []) as ContactRow[];
 
-  /*
-   * What this client buys, derived rather than stored: a company_products table
-   * would be a second copy of something the won deals already say, and the two
-   * would disagree the first time a deal was edited.
-   */
-  type CompanyLine = {
-    line_total: number;
-    quantity: number;
-    products: { id: string; name: string } | null;
-    deals: { status: string; currency: string } | null;
-  };
-
-  const purchases = new Map<
-    string,
-    { id: string; name: string; won: number; open: number; currency: string }
-  >();
-
-  for (const line of (lineItems ?? []) as CompanyLine[]) {
-    if (!line.products || !line.deals) continue;
-    const key = `${line.products.id}:${line.deals.currency}`;
-    const entry = purchases.get(key) ?? {
-      id: line.products.id,
-      name: line.products.name,
-      won: 0,
-      open: 0,
-      currency: line.deals.currency,
-    };
-    if (line.deals.status === "won") entry.won += Number(line.line_total);
-    if (line.deals.status === "open") entry.open += Number(line.line_total);
-    purchases.set(key, entry);
-  }
-
-  const purchaseRows = [...purchases.values()].sort((a, b) => b.won - a.won);
 
   const options = (fieldOptions ?? []) as FieldOptionRow[];
-  const optionsFor = (key: string) =>
-    options.filter((option) => option.field_key === key);
+  /*
+   * Scoped to the record the field belongs to, not just the key. `priority` is
+   * a list on companies, another on contacts and another on products, and
+   * matching the key alone draws all three — which is how a badge ends up
+   * wearing another record type's colour.
+   */
+  const optionsFor = (key: string) => optionsForField(options, "company", key);
+  const contactOptionsFor = (key: string) => optionsForField(options, "contact", key);
 
   const userName = (userId: string | null) => {
     if (!userId) return null;
@@ -172,6 +141,17 @@ export default async function CompanyDetailPage({
   const customByCard = (card: ContactCard) =>
     customFields.filter((field) => field.card === card);
   const customValues = (company.custom_fields ?? {}) as Record<string, unknown>;
+
+  /*
+   * Size is promoted next to the country, so it is taken out of the list the
+   * card renders generically — otherwise it appears twice, once where it was
+   * asked for and once at the bottom with the rest.
+   */
+  const sizeField = findCompanyField(customFields, "size");
+  const sizeValues = sizeField ? companyFieldValues(company.custom_fields, sizeField) : [];
+  const ratingCustomFields = customByCard("rating").filter(
+    (field) => field.id !== sizeField?.id,
+  );
 
   const website = safeUrl(company.domain);
   const notesHtml = renderMarkdown(company.notes);
@@ -186,9 +166,36 @@ export default async function CompanyDetailPage({
     <>
       <PageHeader
         title={company.name}
-        description={company.domain ?? undefined}
+        /*
+          What kind of business this is, rather than its web address. The
+          address is already the second row of Company info, and a line under
+          the name is worth more to somebody scanning the record than a
+          repeated URL — "Liquidation Retailer" tells you how to think about
+          the company before you have read anything else.
+        */
+        description={
+          company.customer_type.length > 0 ? (
+            <OptionBadges
+              values={company.customer_type}
+              options={optionsFor("customer_type")}
+            />
+          ) : (
+            (company.domain ?? undefined)
+          )
+        }
         actions={
           <>
+            {/*
+              Beside the name, like a deal's. Who owns an account is what
+              somebody checks before acting on it, and the name is louder than
+              its label because the name is the answer.
+            */}
+            <div className="mr-2 min-w-0 text-right">
+              <p className="text-xs text-slate-500">Owner</p>
+              <p className="truncate text-base font-semibold text-slate-900">
+                {userName(company.owner_id) ?? "—"}
+              </p>
+            </div>
             {context.canWrite && (
               <Link
                 href={`/contacts/new?company_id=${id}`}
@@ -386,8 +393,16 @@ export default async function CompanyDetailPage({
                     <tr>
                       <th>Name</th>
                       <th>Job title</th>
-                      <th>Stage</th>
-                      <th>Score</th>
+                      {/*
+                        Priority, role and credibility rather than stage and
+                        lead score. On a company's own page the question is who
+                        to call and how much weight to give them, which is what
+                        these three answer; the stage is about a pipeline this
+                        table is not showing.
+                      */}
+                      <th>Priority</th>
+                      <th>Role type</th>
+                      <th>Credibility</th>
                       <th className="text-right">Actions</th>
                     </tr>
                   </thead>
@@ -413,10 +428,30 @@ export default async function CompanyDetailPage({
                             {contact.job_title ?? "—"}
                           </td>
                           <td>
-                            <LifecycleBadge stage={contact.lifecycle_stage} />
+                            {contact.priority ? (
+                              <OptionBadges
+                                values={[contact.priority]}
+                                options={contactOptionsFor("priority")}
+                              />
+                            ) : (
+                              <Empty />
+                            )}
                           </td>
-                          <td className="font-medium text-slate-700">
-                            {contact.lead_score}
+                          <td>
+                            <OptionBadges
+                              values={contact.role_type}
+                              options={contactOptionsFor("role_type")}
+                            />
+                          </td>
+                          <td>
+                            {contact.credibility ? (
+                              <OptionBadges
+                                values={[contact.credibility]}
+                                options={contactOptionsFor("credibility")}
+                              />
+                            ) : (
+                              <Empty />
+                            )}
                           </td>
                           {/* The email column is gone: the icon does the job it
                               was doing, and the row gets the space back. */}
@@ -475,6 +510,13 @@ export default async function CompanyDetailPage({
                   <thead>
                     <tr>
                       <th>Deal</th>
+                      {/*
+                        Who it is with and who is running it. On a company with
+                        several open deals those are the two things that tell
+                        them apart, and both meant opening each deal to find out.
+                      */}
+                      <th>Contact</th>
+                      <th>Owner</th>
                       <th>Stage</th>
                       <th>Value</th>
                       <th>Status</th>
@@ -491,6 +533,21 @@ export default async function CompanyDetailPage({
                           >
                             {deal.name}
                           </Link>
+                        </td>
+                        <td>
+                          {deal.contacts ? (
+                            <Link
+                              href={`/contacts/${deal.contacts.id}`}
+                              className="text-slate-600 hover:text-brand-700"
+                            >
+                              {contactName(deal.contacts)}
+                            </Link>
+                          ) : (
+                            <Empty />
+                          )}
+                        </td>
+                        <td className="text-slate-600">
+                          {userName(deal.owner_id) ?? <Empty />}
                         </td>
                         <td>{deal.stages?.name ?? "—"}</td>
                         <td>
@@ -578,10 +635,36 @@ export default async function CompanyDetailPage({
                 glance on a card and is what the filters take; the full names
                 would wrap to three lines and say no more.
               */}
+              {/*
+                Size sits beside the country rather than down among the custom
+                fields, because "a big US buyer" is one thought and reading it
+                meant jumping the length of the card. It is still whatever field
+                this organization defined — matched by name, not assumed.
+              */}
               <FieldRow>
                 <Field label="Base Country">
                   {company.based_in ?? <Empty />}
                 </Field>
+                {sizeField ? (
+                  <Field label={sizeField.label}>
+                    {sizeValues.length > 0 ? (
+                      <OptionBadges
+                        values={sizeValues}
+                        options={options.filter(
+                          (option) =>
+                            option.entity_type === "company" &&
+                            option.field_key === sizeField.key,
+                        )}
+                      />
+                    ) : (
+                      <Empty />
+                    )}
+                  </Field>
+                ) : (
+                  <span />
+                )}
+              </FieldRow>
+              <FieldRow columns={1}>
                 <Field label="Sells To">
                   {company.sells_in.length > 0 ? company.sells_in.join(" · ") : <Empty />}
                 </Field>
@@ -595,7 +678,7 @@ export default async function CompanyDetailPage({
                 </Field>
               </FieldRow>
               <CustomFieldValues
-                fields={customByCard("rating")}
+                fields={ratingCustomFields}
                 values={customValues}
                 fieldOptions={options}
               />
@@ -716,44 +799,6 @@ export default async function CompanyDetailPage({
             </dl>
           </Section>
 
-          <Section title="Products" className="order-9">
-            {purchaseRows.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Nothing yet. This is built from the line items on this
-                client&rsquo;s deals.
-              </p>
-            ) : (
-              <ul className="space-y-2.5">
-                {purchaseRows.map((row) => (
-                  <li
-                    key={`${row.id}-${row.currency}`}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <Link
-                      href={`/products/${row.id}`}
-                      className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 hover:text-brand-700"
-                    >
-                      {row.name}
-                    </Link>
-                    {/* Already grouped by currency — the key is id + currency —
-                        so each line is one currency and needs saying which. */}
-                    <div className="shrink-0 text-right">
-                      <Money
-                        value={row.won}
-                        currency={row.currency}
-                        amountClassName="text-sm font-semibold text-slate-900"
-                      />
-                      {row.open > 0 && (
-                        <p className="text-xs text-slate-500">
-                          <Money value={row.open} currency={row.currency} /> open
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
 
           <Section title="Record history" className="order-8">
             <dl className="divide-y divide-slate-100">

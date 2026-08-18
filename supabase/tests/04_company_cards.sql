@@ -380,4 +380,30 @@ begin
 end;
 $$;
 
+/*
+ * The duplicate Stock type field is merged into the built-in, not dropped.
+ *
+ * 20260257 removes a custom field somebody named "Stock type" alongside the
+ * built-in column of the same name. Deleting the field in Settings would have
+ * taken its answers with it; the point of doing it in a migration is that they
+ * survive. This checks the migration left nothing behind.
+ */
+do $$
+declare
+  v_org_a uuid := (select id from fixture where key = 'org_a');
+begin
+  raise notice 'Duplicate stock type:';
+
+  perform test_assert(
+    not exists (
+      select 1 from custom_field_definitions
+      where organization_id = v_org_a
+        and entity_type = 'company'
+        and btrim(label) ~* '^stock[ _-]?types?$'
+    ),
+    'no company custom field duplicates the built-in stock type'
+  );
+end;
+$$;
+
 rollback;
