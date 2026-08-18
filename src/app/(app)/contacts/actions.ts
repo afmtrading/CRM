@@ -9,6 +9,7 @@ import { assertCanBulk, assertCanManage, assertCanWrite, requireSession, scoped 
 // forms, whose shape is different.
 import type { ActionState as ButtonState } from '@/components/action-form'
 import { readCustomFields } from '@/lib/custom-fields'
+import { syncTags, tagIdsFrom } from '@/lib/tags'
 import { safeUrl } from '@/lib/field-options'
 import { likeLiteral } from '@/lib/sql'
 import type { ContactLink, ContactRow, LifecycleStage } from '@/lib/database.types'
@@ -183,6 +184,15 @@ export async function createContact(_prev: ActionState, formData: FormData): Pro
 
   if (error) return { error: error.message }
 
+  /*
+   * After the insert, because a tag hangs off the contact's id and there is no
+   * id until the row exists. That is the whole reason tagging used to be a
+   * second trip to the record — the form could ask the question, but the answer
+   * had nowhere to go until now.
+   */
+  const tagIds = tagIdsFrom(formData)
+  if (tagIds) await syncTags(context, 'contact', data.id, tagIds)
+
   revalidatePath('/contacts')
   revalidatePath('/companies')
   redirect(`/contacts/${data.id}`)
@@ -218,6 +228,9 @@ export async function updateContact(_prev: ActionState, formData: FormData): Pro
     .eq('id', id)
 
   if (error) return { error: error.message }
+
+  const tagIds = tagIdsFrom(formData)
+  if (tagIds) await syncTags(context, 'contact', id, tagIds)
 
   revalidatePath('/contacts')
   revalidatePath(`/contacts/${id}`)
@@ -264,23 +277,13 @@ export async function mergeContactsAction(formData: FormData) {
   redirect(`/contacts/${targetId}?merged=1`)
 }
 
+/** The record page's own tag form. The create and edit forms carry one too. */
 export async function setContactTags(formData: FormData) {
   const context = await requireSession()
   assertCanWrite(context)
   const contactId = String(formData.get('contact_id') ?? '')
-  const tagIds = formData.getAll('tag_ids').map(String).filter(Boolean)
 
-  await context.supabase
-    .from('contact_tags')
-    .delete()
-    .eq('organization_id', context.organizationId)
-    .eq('contact_id', contactId)
-
-  if (tagIds.length > 0) {
-    await scoped(context, 'contact_tags').insert(
-      tagIds.map((tagId) => ({ contact_id: contactId, tag_id: tagId })),
-    )
-  }
+  await syncTags(context, 'contact', contactId, formData.getAll('tag_ids').map(String).filter(Boolean))
 
   revalidatePath(`/contacts/${contactId}`)
 }

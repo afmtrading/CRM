@@ -93,6 +93,7 @@ const PRODUCT_COLUMNS: TableColumn[] = [
   { key: 'category', label: 'Category' },
   { key: 'product_condition', label: 'Condition' },
   { key: 'priority', label: 'Priority' },
+  { key: 'tags', label: 'Tags' },
   { key: 'case_pack', label: 'Case pack', align: 'center' },
   { key: 'created_at', label: 'Created' },
 ]

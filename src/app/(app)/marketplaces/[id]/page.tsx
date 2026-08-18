@@ -10,12 +10,15 @@ import type {
   ContactRow,
   FieldOptionRow,
   MarketplaceProfileRow,
+  TagRow,
 } from '@/lib/database.types'
 import { ActionForm, SubmitButton } from '@/components/action-form'
 import { Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
 import { PageHeader, Section } from '@/components/ui'
+import { TagChecklist } from '@/components/form-fields'
 
 import { removeMarketplace, updateMarketplace } from '../actions'
+import { setCompanyTags } from '../../companies/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +41,8 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
     { data: contactRows },
     { data: options },
     { data: salesRows },
+    { data: tags },
+    { data: companyTags },
   ] = await Promise.all([
       scoped(context, 'companies').select('*').eq('id', id).is('deleted_at', null).maybeSingle(),
       scoped(context, 'marketplace_profiles').select('*').eq('company_id', id).maybeSingle(),
@@ -63,11 +68,21 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
        * their channel had turned over a fraction of what it had.
        */
       context.supabase.rpc('marketplace_sales', { p_marketplace_id: id }),
+      /*
+       * The company's tags, for the same reason as its priority: a marketplace
+       * is a company. Editing them here rather than only on the company page,
+       * which is where they had to be set from until now.
+       */
+      scoped(context, 'tags').select('*').order('name'),
+      scoped(context, 'company_tags').select('tag_id').eq('company_id', id),
     ])
 
   // Both have to exist: a company with no profile is not a marketplace, and a
   // profile with no company cannot happen but would be a broken page if it did.
   if (!company || !profileRow) notFound()
+
+  const tagList = (tags ?? []) as TagRow[]
+  const selectedTagIds = new Set(((companyTags ?? []) as { tag_id: string }[]).map((t) => t.tag_id))
 
   const business = company as CompanyRow
   const profile = profileRow as MarketplaceProfileRow
@@ -489,6 +504,20 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
 
               {context.canWrite && <SubmitButton className="btn-primary w-full">Save</SubmitButton>}
             </ActionForm>
+          </Section>
+
+          <Section title="Tags">
+            {tagList.length === 0 || !context.canWrite ? (
+              <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
+            ) : (
+              <form action={setCompanyTags} className="space-y-3">
+                <input type="hidden" name="company_id" value={id} />
+                <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
+                <button type="submit" className="btn-secondary">
+                  Save tags
+                </button>
+              </form>
+            )}
           </Section>
 
           <Section title="On the company">

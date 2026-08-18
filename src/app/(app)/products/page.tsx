@@ -2,7 +2,12 @@ import Link from 'next/link'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { formatCurrency, formatNumber, formatPrice } from '@/lib/format'
-import type { CustomFieldDefinitionRow, FieldOptionRow, ProductRow } from '@/lib/database.types'
+import type {
+  CustomFieldDefinitionRow,
+  FieldOptionRow,
+  ProductRow,
+  TagRow,
+} from '@/lib/database.types'
 import { derivePricing } from '@/lib/products'
 import { round2 } from '@/lib/sales'
 import { availableTone, formatQuantity } from '@/lib/stock'
@@ -70,13 +75,24 @@ export default async function ProductsPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query = applyFilter(query as any, config, 'product', { column: 'name', ascending: true }) as any
 
-  const [{ data }, { data: fieldOptions }, { data: stockRows }, { data: definitionRows }] =
-    await Promise.all([
+  const [
+    { data },
+    { data: fieldOptions },
+    { data: stockRows },
+    { data: definitionRows },
+    { data: tagRows },
+    { data: productTagRows },
+  ] = await Promise.all([
     query.limit(500),
+    /*
+     * Every product list, not a named few. It used to name three keys, which
+     * meant the Priority column added later drew its badges from an empty list
+     * and rendered them colourless — a filter that silently excludes the next
+     * field somebody adds is a trap, and the rows are a handful either way.
+     */
     scoped(context, 'field_options')
       .select('*')
       .eq('entity_type', 'product')
-      .in('field_key', ['product_category', 'product_status', 'product_type'])
       .order('order'),
     // One call for every product rather than one per row: committed comes off
     // the open deals, which no page-level query could see through its own
@@ -88,6 +104,8 @@ export default async function ProductsPage({
       .select('*')
       .eq('entity_type', 'product')
       .order('order'),
+    scoped(context, 'tags').select('id, name, color').order('name'),
+    scoped(context, 'product_tags').select('product_id, tag_id'),
   ])
 
   const products = (data ?? []) as ProductRow[]
@@ -98,6 +116,19 @@ export default async function ProductsPage({
   const statusOptions = allOptions.filter((o) => o.field_key === 'product_status')
   const typeOptions = allOptions.filter((o) => o.field_key === 'product_type')
   const priorityOptions = allOptions.filter((o) => o.field_key === 'priority')
+
+  /* Tag ids to the tag, and each product to the tags on it. */
+  const tagsById = new Map(
+    ((tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]).map((tag) => [tag.id, tag]),
+  )
+  const tagsByProduct = new Map<string, Pick<TagRow, 'id' | 'name' | 'color'>[]>()
+  for (const link of (productTagRows ?? []) as { product_id: string; tag_id: string }[]) {
+    const tag = tagsById.get(link.tag_id)
+    if (!tag) continue
+    const list = tagsByProduct.get(link.product_id)
+    if (list) list.push(tag)
+    else tagsByProduct.set(link.product_id, [tag])
+  }
 
   type StockRow = {
     product_id: string
@@ -287,6 +318,25 @@ export default async function ProductsPage({
             options={priorityOptions}
           />
         )
+      case 'tags': {
+        // The tag's own colour, chosen in Settings → Tags, so it is an inline
+        // style — Tailwind cannot see a hex that only exists in the database.
+        const tags = tagsByProduct.get(product.id) ?? []
+        if (tags.length === 0) return <Empty />
+        return (
+          <span className="flex flex-wrap gap-1">
+            {tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="badge"
+                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </span>
+        )
+      }
       case 'available': {
         const available = Number(stock?.available ?? 0)
         return (

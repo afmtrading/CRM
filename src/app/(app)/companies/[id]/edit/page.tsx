@@ -1,7 +1,13 @@
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped, firstRow } from '@/lib/tenancy'
-import type { CompanyRow, CustomFieldDefinitionRow, FieldOptionRow, UserRow } from '@/lib/database.types'
+import type {
+  CompanyRow,
+  CustomFieldDefinitionRow,
+  FieldOptionRow,
+  TagRow,
+  UserRow,
+} from '@/lib/database.types'
 import { PageHeader } from '@/components/ui'
 
 import { updateCompany } from '../../actions'
@@ -22,6 +28,8 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
     { data: customFields },
     { data: fieldOptions },
     { data: countries },
+    { data: tags },
+    { data: companyTags },
   ] = await Promise.all([
     scoped(context, 'users').select('*').eq('status', 'active').order('name'),
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company').order('order'),
@@ -29,6 +37,8 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
     // Reference data, not tenant data — no organization to scope it to, and
     // the same list for everybody.
     context.supabase.from('countries').select('code, name, kind').order('sort_order').order('name'),
+    scoped(context, 'tags').select('*').order('name'),
+    scoped(context, 'company_tags').select('tag_id').eq('company_id', id),
   ])
 
   return (
@@ -41,6 +51,9 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
         fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
         countries={(countries ?? []) as { code: string; name: string; kind?: string }[]}
+        tags={(tags ?? []) as TagRow[]}
+        selectedTagIds={((companyTags ?? []) as { tag_id: string }[]).map((row) => row.tag_id)}
+        canManage={context.isAdmin}
         submitLabel="Save changes"
       />
     </>

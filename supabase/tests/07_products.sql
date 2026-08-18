@@ -715,4 +715,87 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- Tags on products
+--
+-- The same tags a contact and a company carry, joined a third way. What is
+-- checked is what the other two joins are checked for: the organization is
+-- derived rather than supplied, a tag from elsewhere is refused, and deleting
+-- the product takes its links with it.
+-- =============================================================================
+do $$
+declare
+  v_org   uuid := (select id from fixture where key = 'org');
+  v_other uuid := (select id from fixture where key = 'other');
+  v_shea  uuid := (select id from fixture where key = 'shea');
+  v_tag   uuid;
+  v_alien uuid;
+  v_temp  uuid;
+  v_failed boolean := false;
+begin
+  raise notice 'Product tags:';
+
+  set local role postgres;
+  insert into tags (organization_id, name, color) values (v_org, 'Q4 push', '#10b981')
+  returning id into v_tag;
+  insert into tags (organization_id, name, color) values (v_other, 'Theirs', '#ef4444')
+  returning id into v_alien;
+
+  perform sign_in_as('admin_auth');
+
+  insert into product_tags (product_id, tag_id) values (v_shea, v_tag);
+
+  perform test_assert(
+    (select organization_id from product_tags
+      where product_id = v_shea and tag_id = v_tag) = v_org,
+    'the join row is stamped with the product''s organization automatically'
+  );
+
+  perform test_assert(
+    (select count(*) from product_tags where product_id = v_shea) = 1,
+    'a product carries its tag'
+  );
+
+  -- The caller cannot even see this tag, which is the point: the guard is in
+  -- the database rather than in the form that chose it.
+  begin
+    insert into product_tags (product_id, tag_id) values (v_shea, v_alien);
+  exception when others then
+    v_failed := true;
+  end;
+
+  perform test_assert(v_failed, 'tagging a product with another organization''s tag is refused');
+
+  -- Links go with the record rather than becoming rows pointing at nothing.
+  set local role postgres;
+  insert into products (organization_id, name, currency)
+  values (v_org, 'Temp line', 'USD') returning id into v_temp;
+  insert into product_tags (organization_id, product_id, tag_id)
+  values (v_org, v_temp, v_tag);
+
+  delete from products where id = v_temp;
+
+  perform test_assert(
+    (select count(*) from product_tags where product_id = v_temp) = 0,
+    'deleting a product removes its tag links'
+  );
+end;
+$$;
+
+-- And another organization sees none of it.
+do $$
+declare
+  v_shea uuid := (select id from fixture where key = 'shea');
+begin
+  -- Back to authenticated: the block above ends as postgres, which bypasses
+  -- RLS entirely and would make this assertion pass without proving anything.
+  set local role authenticated;
+  perform sign_in_as('badmin_auth');
+  perform test_assert(
+    (select count(*) from product_tags where product_id = v_shea) = 0,
+    'another organization sees neither the product nor its tags'
+  );
+end;
+$$;
+
 rollback;

@@ -13,6 +13,7 @@ import type {
   SalesOrderStatus,
   StockAdjustmentRow,
   StockLevelRow,
+  TagRow,
 } from '@/lib/database.types'
 import { availableTone, formatDelta, formatQuantity } from '@/lib/stock'
 import { productImageUrl } from '@/lib/product-image'
@@ -38,8 +39,9 @@ import {
   Section,
 } from '@/components/ui'
 import { DateTime } from '@/components/date-time'
+import { TagChecklist } from '@/components/form-fields'
 
-import { deleteProduct } from '../actions'
+import { deleteProduct, setProductTags } from '../actions'
 import { StockNote } from '../stock-note'
 
 /**
@@ -115,6 +117,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     { data: movements },
     { data: stockSummary },
     { data: committedOrders },
+    { data: tags },
+    { data: productTags },
   ] = await Promise.all([
       scoped(context, 'deal_products')
         .select('*, deals(id, name, status, currency, probability, companies(id, name))')
@@ -136,9 +140,14 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         .limit(50),
       context.supabase.rpc('product_stock_summary', { p_product_id: id }),
       context.supabase.rpc('product_committed_orders', { p_product_id: id }),
+      scoped(context, 'tags').select('*').order('name'),
+      scoped(context, 'product_tags').select('tag_id').eq('product_id', id),
     ])
 
   const lineItems = ((lines ?? []) as LineItem[]).filter((line) => line.deals !== null)
+
+  const tagList = (tags ?? []) as TagRow[]
+  const selectedTagIds = new Set(((productTags ?? []) as { tag_id: string }[]).map((t) => t.tag_id))
 
   const fields = (customFields ?? []) as CustomFieldDefinitionRow[]
   const options = (fieldOptions ?? []) as FieldOptionRow[]
@@ -702,6 +711,21 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               </dl>
             </section>
           )}
+
+          {/* The organization's tags, the same ones a contact and a company carry. */}
+          <Section title="Tags" className="order-6">
+            {tagList.length === 0 || !context.canManage ? (
+              <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
+            ) : (
+              <form action={setProductTags} className="space-y-3">
+                <input type="hidden" name="product_id" value={id} />
+                <TagChecklist tags={tagList} selected={selectedTagIds} canManage={context.isAdmin} />
+                <button type="submit" className="btn-secondary">
+                  Save tags
+                </button>
+              </form>
+            )}
+          </Section>
 
           <Section title="In the Market" className="order-7">
             {marketLinks.every((link) => link.url === null) ? (

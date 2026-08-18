@@ -1,5 +1,5 @@
 import { requireSession, scoped } from '@/lib/tenancy'
-import type { CustomFieldDefinitionRow, FieldOptionRow, UserRow } from '@/lib/database.types'
+import type { CustomFieldDefinitionRow, FieldOptionRow, TagRow, UserRow } from '@/lib/database.types'
 import { PageHeader } from '@/components/ui'
 
 import { createCompany } from '../actions'
@@ -15,6 +15,7 @@ export default async function NewCompanyPage() {
     { data: customFields },
     { data: fieldOptions },
     { data: countries },
+    { data: tags },
   ] = await Promise.all([
     scoped(context, 'users').select('*').eq('status', 'active').order('name'),
     scoped(context, 'custom_field_definitions').select('*').eq('entity_type', 'company').order('order'),
@@ -22,6 +23,7 @@ export default async function NewCompanyPage() {
     // Reference data, not tenant data — no organization to scope it to, and
     // the same list for everybody.
     context.supabase.from('countries').select('code, name, kind').order('sort_order').order('name'),
+    scoped(context, 'tags').select('*').order('name'),
   ])
 
   return (
@@ -33,6 +35,8 @@ export default async function NewCompanyPage() {
         customFields={(customFields ?? []) as CustomFieldDefinitionRow[]}
         fieldOptions={(fieldOptions ?? []) as FieldOptionRow[]}
         countries={(countries ?? []) as { code: string; name: string; kind?: string }[]}
+        tags={(tags ?? []) as TagRow[]}
+        canManage={context.isAdmin}
         submitLabel="Create company"
       />
     </>
