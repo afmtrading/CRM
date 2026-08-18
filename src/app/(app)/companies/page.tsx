@@ -18,6 +18,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
+import { optionsForField } from '@/lib/field-options'
 import { placeNames, type Place } from '@/lib/geography'
 import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
@@ -126,9 +127,14 @@ export default async function CompaniesPage({
 
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
 
-  const marketOptions = allOptions.filter((option) => option.field_key === 'specialty_market')
-  const typeOptions = allOptions.filter((option) => option.field_key === 'customer_type')
-  const priorityOptions = allOptions.filter((option) => option.field_key === 'priority')
+  /*
+   * Scoped by entity, not just by key. `priority` is a list on companies,
+   * another on contacts and another on products; matching the key alone drew
+   * all three, and the colour a badge got depended on which came back first.
+   */
+  const marketOptions = optionsForField(allOptions, 'company', 'specialty_market')
+  const typeOptions = optionsForField(allOptions, 'company', 'customer_type')
+  const priorityOptions = optionsForField(allOptions, 'company', 'priority')
 
   /*
    * Region and size are the organization's own fields, so the columns look them
@@ -138,15 +144,12 @@ export default async function CompaniesPage({
   const regionField = findCompanyField(definitions, 'regions', 'region')
   const sizeField = findCompanyField(definitions, 'size')
 
-  const optionsForField = (field: CustomFieldDefinitionRow | undefined) =>
-    field
-      ? allOptions.filter(
-          (option) => option.entity_type === 'company' && option.field_key === field.key,
-        )
-      : []
+  /** The same lookup, for a field found by name rather than named in code. */
+  const customFieldOptions = (field: CustomFieldDefinitionRow | undefined) =>
+    field ? optionsForField(allOptions, 'company', field.key) : []
 
-  const regionOptions = optionsForField(regionField)
-  const sizeOptions = optionsForField(sizeField)
+  const regionOptions = customFieldOptions(regionField)
+  const sizeOptions = customFieldOptions(sizeField)
 
   const viewId = typeof params.view === 'string' ? params.view : null
   const savedView = viewId

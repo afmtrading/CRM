@@ -306,10 +306,8 @@ export default async function CompanyDetailPage({
                   <ExternalLink url={website} />
                 </Field>
               </FieldRow>
-              <FieldRow>
-                <Field label="Owner">
-                  {userName(company.owner_id) ?? <Empty />}
-                </Field>
+              {/* Owner is beside the name now, so it is not repeated here. */}
+              <FieldRow columns={1}>
                 <Field label="Contacts">{contactRows.length}</Field>
               </FieldRow>
               <FieldRow>
@@ -771,11 +769,6 @@ export default async function CompanyDetailPage({
 
           <Section title={COMPANY_CARDS[1].label} className="order-7">
             <dl className="divide-y divide-slate-100">
-              <FieldRow columns={1}>
-                <Field label="Owner">
-                  {userName(company.owner_id) ?? <Empty />}
-                </Field>
-              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("additional")}
                 values={customValues}
