@@ -42,17 +42,59 @@ export function Empty() {
 /** One label/value pair inside a card. */
 export function Field({
   label,
+  hint,
   children,
-  wide = false,
 }: {
   label: string
+  /** A short aside after the label, e.g. "From the company record". */
+  hint?: string
   children: React.ReactNode
-  wide?: boolean
 }) {
   return (
-    <div className={wide ? 'sm:col-span-2' : undefined}>
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+    <div>
+      <dt className="text-xs font-medium text-slate-500">
+        {label}
+        {hint && <span className="ml-1 font-normal text-slate-400">· {hint}</span>}
+      </dt>
       <dd className="mt-1 text-sm text-slate-800">{children}</dd>
+    </div>
+  )
+}
+
+/** How many fields sit side by side in one row of a card. */
+type FieldColumns = 1 | 2 | 3 | 4
+
+const ROW_COLUMN_CLASSES: Record<FieldColumns, string> = {
+  1: '',
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-2 lg:grid-cols-3',
+  4: 'sm:grid-cols-2 lg:grid-cols-4',
+}
+
+/**
+ * One row of a card's field grid — however many fields belong together, side
+ * by side.
+ *
+ * A row is its own small grid rather than a slice of one shared one. A field
+ * that needs the full width is simply alone in its row, rather than spanning
+ * columns across a grid whose column count changes at every breakpoint — a
+ * span that is correct at one width and wrong at the next.
+ *
+ * Pairs with `divide-y` on the `<dl>` that holds these: the border between
+ * rows comes from that, not from this component, so a row group produced by
+ * `CustomFieldValues` gets the same line as one written by hand — divide-y
+ * reads direct children, and a fragment's children count as the parent's.
+ */
+export function FieldRow({
+  columns = 2,
+  children,
+}: {
+  columns?: FieldColumns
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`grid gap-3 py-3 first:pt-0 last:pb-0 ${ROW_COLUMN_CLASSES[columns]}`}>
+      {children}
     </div>
   )
 }
@@ -116,42 +158,65 @@ export function ExternalLink({ url, label }: { url: string | null; label?: strin
  * option list the built-in select fields draw from — a custom field should not
  * look like a lesser citizen on the record.
  */
+/** Groups a flat list into rows of `size`, the last row short rather than padded. */
+function chunk<T>(items: T[], size: number): T[][] {
+  const groups: T[][] = []
+  for (let i = 0; i < items.length; i += size) groups.push(items.slice(i, i + size))
+  return groups
+}
+
+/**
+ * An admin's custom fields, laid out in the same row-and-line grid as the
+ * fields around them.
+ *
+ * `columns` should match whatever the caller is using for its own `FieldRow`s
+ * on the same card, so a custom field falls into the same rhythm as the
+ * built-in ones rather than starting a mismatched grid of its own.
+ */
 export function CustomFieldValues({
   fields,
   values,
   fieldOptions = [],
+  columns = 2,
 }: {
   fields: { id: string; key: string; label: string; field_type: string; entity_type: string }[]
   values: Record<string, unknown>
   fieldOptions?: FieldOptionRow[]
+  columns?: FieldColumns
 }) {
+  const rendered = fields.map((field) => {
+    const raw = values[field.key]
+    const isEmpty = raw === undefined || raw === null || raw === ''
+
+    if (field.field_type === 'select' || field.field_type === 'multiselect') {
+      const options = fieldOptions.filter(
+        (option) => option.entity_type === field.entity_type && option.field_key === field.key,
+      )
+      const list = Array.isArray(raw) ? raw.map(String) : isEmpty ? [] : [String(raw)]
+
+      return (
+        <Field key={field.id} label={field.label}>
+          <OptionBadges values={list} options={options} />
+        </Field>
+      )
+    }
+
+    const display = Array.isArray(raw) ? raw.join(', ') : raw
+
+    return (
+      <Field key={field.id} label={field.label}>
+        {isEmpty ? <Empty /> : String(display)}
+      </Field>
+    )
+  })
+
   return (
     <>
-      {fields.map((field) => {
-        const raw = values[field.key]
-        const isEmpty = raw === undefined || raw === null || raw === ''
-
-        if (field.field_type === 'select' || field.field_type === 'multiselect') {
-          const options = fieldOptions.filter(
-            (option) => option.entity_type === field.entity_type && option.field_key === field.key,
-          )
-          const list = Array.isArray(raw) ? raw.map(String) : isEmpty ? [] : [String(raw)]
-
-          return (
-            <Field key={field.id} label={field.label}>
-              <OptionBadges values={list} options={options} />
-            </Field>
-          )
-        }
-
-        const display = Array.isArray(raw) ? raw.join(', ') : raw
-
-        return (
-          <Field key={field.id} label={field.label}>
-            {isEmpty ? <Empty /> : String(display)}
-          </Field>
-        )
-      })}
+      {chunk(rendered, columns).map((group, index) => (
+        <FieldRow key={index} columns={columns}>
+          {group}
+        </FieldRow>
+      ))}
     </>
   )
 }

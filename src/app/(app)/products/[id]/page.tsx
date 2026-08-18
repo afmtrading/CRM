@@ -28,6 +28,7 @@ import {
   Empty,
   ExternalLink,
   Field,
+  FieldRow,
   OptionBadges,
 } from '@/components/contact-cards'
 import {
@@ -271,63 +272,74 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-3">
         <div className="contents lg:block lg:space-y-5 lg:order-1 lg:col-span-2">
           <Section title={PRODUCT_CARDS[0].label} className="order-2">
-            <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <Field label="SKU">{product.sku || <Empty />}</Field>
-              <Field label="Brand">{product.brand || <Empty />}</Field>
-              <Field label="Model">{product.model || <Empty />}</Field>
-              <Field label="Count">{product.item_count || <Empty />}</Field>
-              <Field label="Size">{product.size || <Empty />}</Field>
-              <Field label="Color">{product.color || <Empty />}</Field>
-              <Field label="Case Pack">
-                {product.case_pack === null ? <Empty /> : formatNumber(product.case_pack)}
-              </Field>
-              <Field label="Product Type">
-                <OptionBadges
-                  values={product.product_type ? [product.product_type] : []}
-                  options={options.filter((option) => option.field_key === 'product_type')}
-                />
-              </Field>
-              <Field label="Condition">
-                <OptionBadges
-                  values={product.product_condition ? [product.product_condition] : []}
-                  options={options.filter((option) => option.field_key === 'product_condition')}
-                />
-              </Field>
-              <Field label="Status">
-                <OptionBadges
-                  values={product.status ? [product.status] : []}
-                  options={options.filter((option) => option.field_key === 'product_status')}
-                />
-              </Field>
-              <Field label="Priority">
-                <OptionBadges
-                  values={product.priority ? [product.priority] : []}
-                  options={options.filter((option) => option.field_key === 'priority')}
-                />
-              </Field>
-              <Field label="Category" wide>
-                <OptionBadges
-                  values={product.category ? [product.category] : []}
-                  options={options.filter((option) => option.field_key === 'product_category')}
-                />
-              </Field>
-              <Field label="Item Notes" wide>
-                {product.item_notes ? (
-                  <div
-                    className="space-y-2 leading-relaxed text-slate-700"
-                    // Safe by construction: renderMarkdown escapes the stored
-                    // text before applying formatting, so the only markup here
-                    // is what it generated.
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(product.item_notes) }}
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={3}>
+                <Field label="SKU">{product.sku || <Empty />}</Field>
+                <Field label="Brand">{product.brand || <Empty />}</Field>
+                <Field label="Model">{product.model || <Empty />}</Field>
+              </FieldRow>
+              <FieldRow columns={3}>
+                <Field label="Count">{product.item_count || <Empty />}</Field>
+                <Field label="Size">{product.size || <Empty />}</Field>
+                <Field label="Color">{product.color || <Empty />}</Field>
+              </FieldRow>
+              <FieldRow columns={3}>
+                <Field label="Case Pack">
+                  {product.case_pack === null ? <Empty /> : formatNumber(product.case_pack)}
+                </Field>
+                <Field label="Product Type">
+                  <OptionBadges
+                    values={product.product_type ? [product.product_type] : []}
+                    options={options.filter((option) => option.field_key === 'product_type')}
                   />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
+                </Field>
+                <Field label="Condition">
+                  <OptionBadges
+                    values={product.product_condition ? [product.product_condition] : []}
+                    options={options.filter((option) => option.field_key === 'product_condition')}
+                  />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={3}>
+                <Field label="Status">
+                  <OptionBadges
+                    values={product.status ? [product.status] : []}
+                    options={options.filter((option) => option.field_key === 'product_status')}
+                  />
+                </Field>
+                <Field label="Priority">
+                  <OptionBadges
+                    values={product.priority ? [product.priority] : []}
+                    options={options.filter((option) => option.field_key === 'priority')}
+                  />
+                </Field>
+                <Field label="Category">
+                  <OptionBadges
+                    values={product.category ? [product.category] : []}
+                    options={options.filter((option) => option.field_key === 'product_category')}
+                  />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Item Notes">
+                  {product.item_notes ? (
+                    <div
+                      className="space-y-2 leading-relaxed text-slate-700"
+                      // Safe by construction: renderMarkdown escapes the stored
+                      // text before applying formatting, so the only markup here
+                      // is what it generated.
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(product.item_notes) }}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={forCard('details')}
                 values={product.custom_fields}
                 fieldOptions={options}
+                columns={3}
               />
             </dl>
           </Section>
@@ -701,13 +713,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 </>
               )}
 
-              <dl className="grid gap-3">
-                <Field label="Folder Location">
-                  <ExternalLink url={safeUrl(product.folder_url)} />
-                </Field>
-                <Field label="Knowledge Base">
-                  <ExternalLink url={safeUrl(product.knowledge_base_url)} />
-                </Field>
+              <dl className="divide-y divide-slate-100">
+                <FieldRow columns={1}>
+                  <Field label="Folder Location">
+                    <ExternalLink url={safeUrl(product.folder_url)} />
+                  </Field>
+                </FieldRow>
+                <FieldRow columns={1}>
+                  <Field label="Knowledge Base">
+                    <ExternalLink url={safeUrl(product.knowledge_base_url)} />
+                  </Field>
+                </FieldRow>
               </dl>
             </section>
           )}
@@ -734,19 +750,21 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 editing the product.
               </p>
             ) : (
-              <dl className="grid gap-3 sm:grid-cols-3">
-                {marketLinks.map((link) => (
-                  <Field key={link.label} label={link.label}>
-                    <ExternalLink url={link.url} />
-                  </Field>
-                ))}
+              <dl>
+                <FieldRow columns={3}>
+                  {marketLinks.map((link) => (
+                    <Field key={link.label} label={link.label}>
+                      <ExternalLink url={link.url} />
+                    </Field>
+                  ))}
+                </FieldRow>
               </dl>
             )}
           </Section>
 
           {forCard('pricing').length > 0 && (
             <Section title={PRODUCT_CARDS[1].label} className="order-4">
-              <dl className="grid gap-3 sm:grid-cols-2">
+              <dl className="divide-y divide-slate-100">
                 <CustomFieldValues
                   fields={forCard('pricing')}
                   values={product.custom_fields}
@@ -819,20 +837,22 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           )}
 
           <Section title={PRODUCT_CARDS[2].label} className="order-8">
-            <dl className="grid gap-3">
-              <Field label="Description" wide>
-                {product.description ? (
-                  <div
-                    className="space-y-2 leading-relaxed text-slate-700"
-                    // Safe by construction: renderMarkdown escapes the stored
-                    // text before applying formatting, so the only markup here
-                    // is what it generated.
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(product.description) }}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="Description">
+                  {product.description ? (
+                    <div
+                      className="space-y-2 leading-relaxed text-slate-700"
+                      // Safe by construction: renderMarkdown escapes the stored
+                      // text before applying formatting, so the only markup here
+                      // is what it generated.
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(product.description) }}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={forCard('additional')}
                 values={product.custom_fields}

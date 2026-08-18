@@ -51,6 +51,7 @@ import {
   Empty,
   ExternalLink,
   Field,
+  FieldRow,
   OptionBadge,
   OptionBadges,
   optionColor,
@@ -377,34 +378,32 @@ export default async function ContactDetailPage({
               keeps a row of its own because addresses are the long value here;
               the two phone numbers are short enough to sit side by side.
             */}
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Company">
-                {contact.companies ? (
-                  <CardLink href={`/companies/${contact.companies.id}`}>
-                    {contact.companies.name}
-                  </CardLink>
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-              <Field label="Job title">{contact.job_title || <Empty />}</Field>
-              <Field label="Primary email" wide>
-                <ContactMethod
-                  value={contact.email}
-                  kind="email"
-                  label={name}
-                />
-              </Field>
-              <Field label="Mobile phone">
-                <ContactMethod value={contact.phone} kind="phone" label={name} />
-              </Field>
-              <Field label="Office phone">
-                <ContactMethod
-                  value={contact.office_phone}
-                  kind="phone"
-                  label={name}
-                />
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow>
+                <Field label="Company">
+                  {contact.companies ? (
+                    <CardLink href={`/companies/${contact.companies.id}`}>
+                      {contact.companies.name}
+                    </CardLink>
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+                <Field label="Job title">{contact.job_title || <Empty />}</Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Primary email">
+                  <ContactMethod value={contact.email} kind="email" label={name} />
+                </Field>
+              </FieldRow>
+              <FieldRow>
+                <Field label="Mobile phone">
+                  <ContactMethod value={contact.phone} kind="phone" label={name} />
+                </Field>
+                <Field label="Office phone">
+                  <ContactMethod value={contact.office_phone} kind="phone" label={name} />
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("details")}
                 values={customValues}
@@ -506,39 +505,34 @@ export default async function ContactDetailPage({
         */}
         <div className="contents lg:block lg:space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
           <Section title={CONTACT_CARDS[1].label} className="order-2">
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Role type" wide>
-                <OptionBadges
-                  values={contact.role_type}
-                  options={optionsFor("role_type")}
-                />
-              </Field>
-              <Field label="Priority">
-                {contact.priority ? (
-                  <OptionBadge
-                    value={contact.priority}
-                    color={optionColor(
-                      optionsFor("priority"),
-                      contact.priority,
-                    )}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
-              <Field label="Credibility">
-                {contact.credibility ? (
-                  <OptionBadge
-                    value={contact.credibility}
-                    color={optionColor(
-                      optionsFor("credibility"),
-                      contact.credibility,
-                    )}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="Role type">
+                  <OptionBadges values={contact.role_type} options={optionsFor("role_type")} />
+                </Field>
+              </FieldRow>
+              <FieldRow>
+                <Field label="Priority">
+                  {contact.priority ? (
+                    <OptionBadge
+                      value={contact.priority}
+                      color={optionColor(optionsFor("priority"), contact.priority)}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+                <Field label="Credibility">
+                  {contact.credibility ? (
+                    <OptionBadge
+                      value={contact.credibility}
+                      color={optionColor(optionsFor("credibility"), contact.credibility)}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("influence")}
                 values={customValues}
@@ -568,50 +562,67 @@ export default async function ContactDetailPage({
 
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[3].label} className="order-5">
-            <dl className="grid gap-3">
-              <Field label="Company website">
-                <ExternalLink url={companyWebsite} />
-              </Field>
-              <Field label="LinkedIn">
-                <ExternalLink url={socialUrl("linkedin", contact.linkedin)} />
-              </Field>
-              <Field label="Facebook">
-                <ExternalLink url={socialUrl("facebook", contact.facebook)} />
-              </Field>
-              <Field label="Instagram">
-                <ExternalLink url={socialUrl("instagram", contact.instagram)} />
-              </Field>
-              <Field label="TikTok">
-                <ExternalLink url={socialUrl("tiktok", contact.tiktok)} />
-              </Field>
-              <Field label="X (Twitter)">
-                <ExternalLink url={socialUrl("x_twitter", contact.x_twitter)} />
-              </Field>
-              <Field label="YouTube">
-                <ExternalLink url={socialUrl("youtube", contact.youtube)} />
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="Company website">
+                  <ExternalLink url={companyWebsite} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="LinkedIn">
+                  <ExternalLink url={socialUrl("linkedin", contact.linkedin)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Facebook">
+                  <ExternalLink url={socialUrl("facebook", contact.facebook)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Instagram">
+                  <ExternalLink url={socialUrl("instagram", contact.instagram)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="TikTok">
+                  <ExternalLink url={socialUrl("tiktok", contact.tiktok)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="X (Twitter)">
+                  <ExternalLink url={socialUrl("x_twitter", contact.x_twitter)} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="YouTube">
+                  <ExternalLink url={socialUrl("youtube", contact.youtube)} />
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("digital")}
                 values={customValues}
                 fieldOptions={options}
+                columns={1}
               />
 
               {extraLinks.length > 0 && (
-                <div>
-                  <dt className="text-xs font-medium text-slate-500">
-                    Other links
-                  </dt>
-                  <dd className="mt-1 space-y-1 text-sm">
-                    {extraLinks.map((link, index) => (
-                      <div key={`${link.url}-${index}`}>
-                        <ExternalLink
-                          url={safeUrl(link.url)}
-                          label={link.label || undefined}
-                        />
-                      </div>
-                    ))}
-                  </dd>
-                </div>
+                <FieldRow columns={1}>
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">
+                      Other links
+                    </dt>
+                    <dd className="mt-1 space-y-1 text-sm">
+                      {extraLinks.map((link, index) => (
+                        <div key={`${link.url}-${index}`}>
+                          <ExternalLink
+                            url={safeUrl(link.url)}
+                            label={link.label || undefined}
+                          />
+                        </div>
+                      ))}
+                    </dd>
+                  </div>
+                </FieldRow>
               )}
             </dl>
           </Section>
@@ -632,23 +643,28 @@ export default async function ContactDetailPage({
                 </CardLink>
               }
             >
-              <dl className="grid gap-3 sm:grid-cols-2">
-                <Field label="Market" wide>
-                  <OptionBadges
-                    values={company.specialty_market}
-                    options={optionsFor("specialty_market")}
-                  />
-                </Field>
-                <Field label="Company type" wide>
-                  <OptionBadges
-                    values={company.customer_type}
-                    options={optionsFor("customer_type")}
-                  />
-                </Field>
+              <dl className="divide-y divide-slate-100">
+                <FieldRow columns={1}>
+                  <Field label="Market">
+                    <OptionBadges
+                      values={company.specialty_market}
+                      options={optionsFor("specialty_market")}
+                    />
+                  </Field>
+                </FieldRow>
+                <FieldRow columns={1}>
+                  <Field label="Company type">
+                    <OptionBadges
+                      values={company.customer_type}
+                      options={optionsFor("customer_type")}
+                    />
+                  </Field>
+                </FieldRow>
                 <CustomFieldValues
                   fields={companyCustomFields}
                   values={companyCustomValues}
                   fieldOptions={options}
+                  columns={1}
                 />
               </dl>
             </Section>
@@ -656,73 +672,85 @@ export default async function ContactDetailPage({
 
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label} className="order-6">
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Owner">
-                {userName(contact.owner_id) ?? <Empty />}
-              </Field>
-              <Field label="Lead score">
-                <ScoreMeter score={contact.lead_score} />
-              </Field>
-              <Field label="Source">{contact.source || <Empty />}</Field>
-              <Field label="Lifecycle stage">
-                <LifecycleBadge stage={contact.lifecycle_stage} />
-              </Field>
-              <Field label="Birthday" wide>
-                {contact.birthday ? (
-                  <span className="flex flex-wrap items-center gap-2">
-                    {formatDay(contact.birthday)}
-                    {untilBirthday !== null && (
-                      <span className="text-xs text-slate-500">
-                        {untilBirthday === 0
-                          ? "today"
-                          : `in ${untilBirthday} day${untilBirthday === 1 ? "" : "s"}`}
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <Empty />
-                )}
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow>
+                <Field label="Owner">
+                  {userName(contact.owner_id) ?? <Empty />}
+                </Field>
+                <Field label="Lead score">
+                  <ScoreMeter score={contact.lead_score} />
+                </Field>
+              </FieldRow>
+              <FieldRow>
+                <Field label="Source">{contact.source || <Empty />}</Field>
+                <Field label="Lifecycle stage">
+                  <LifecycleBadge stage={contact.lifecycle_stage} />
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Birthday">
+                  {contact.birthday ? (
+                    <span className="flex flex-wrap items-center gap-2">
+                      {formatDay(contact.birthday)}
+                      {untilBirthday !== null && (
+                        <span className="text-xs text-slate-500">
+                          {untilBirthday === 0
+                            ? "today"
+                            : `in ${untilBirthday} day${untilBirthday === 1 ? "" : "s"}`}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
               <CustomFieldValues
                 fields={customByCard("additional")}
                 values={customValues}
                 fieldOptions={options}
               />
-              <Field label="Notes" wide>
-                {notesHtml ? (
-                  <div
-                    className="space-y-2 leading-relaxed text-slate-700"
-                    // Safe by construction: renderMarkdown escapes the stored
-                    // text before applying formatting, so the only markup here
-                    // is what it generated. Covered by tests/field-options.test.ts.
-                    dangerouslySetInnerHTML={{ __html: notesHtml }}
-                  />
-                ) : (
-                  <Empty />
-                )}
-              </Field>
+              <FieldRow columns={1}>
+                <Field label="Notes">
+                  {notesHtml ? (
+                    <div
+                      className="space-y-2 leading-relaxed text-slate-700"
+                      // Safe by construction: renderMarkdown escapes the stored
+                      // text before applying formatting, so the only markup here
+                      // is what it generated. Covered by tests/field-options.test.ts.
+                      dangerouslySetInnerHTML={{ __html: notesHtml }}
+                    />
+                  ) : (
+                    <Empty />
+                  )}
+                </Field>
+              </FieldRow>
             </dl>
           </Section>
 
           {/* ---------------------------------------------------------------- */}
           <Section title="Record history" className="order-7">
-            <dl className="space-y-3">
-              <Field label="Created by">
-                <span className="block">
-                  {userName(contact.created_by) ?? "Unknown"}
-                </span>
-                <span className="text-xs text-slate-500">
-                  <DateTime value={contact.created_at} />
-                </span>
-              </Field>
-              <Field label="Updated by">
-                <span className="block">
-                  {userName(contact.updated_by) ?? "Unknown"}
-                </span>
-                <span className="text-xs text-slate-500">
-                  <DateTime value={contact.updated_at} />
-                </span>
-              </Field>
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="Created by">
+                  <span className="block">
+                    {userName(contact.created_by) ?? "Unknown"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    <DateTime value={contact.created_at} />
+                  </span>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Updated by">
+                  <span className="block">
+                    {userName(contact.updated_by) ?? "Unknown"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    <DateTime value={contact.updated_at} />
+                  </span>
+                </Field>
+              </FieldRow>
             </dl>
           </Section>
 
@@ -732,26 +760,36 @@ export default async function ContactDetailPage({
             of question from who owns the record.
           */}
           <Section title="Email consent" className="order-8">
-            <dl className="grid gap-3">
-              <Field label="Basis">
-                {CONSENT_LABELS[contact.marketing_consent]}
-              </Field>
-              <Field label="Source">{contact.consent_source || <Empty />}</Field>
-              <Field label="Recorded">
-                {contact.consent_at ? <DateTime value={contact.consent_at} /> : <Empty />}
-              </Field>
-              {consentExpiry && (
-                <Field label="Implied consent runs out">
-                  <DateTime value={consentExpiry.toISOString()} />
+            <dl className="divide-y divide-slate-100">
+              <FieldRow columns={1}>
+                <Field label="Basis">
+                  {CONSENT_LABELS[contact.marketing_consent]}
                 </Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Source">{contact.consent_source || <Empty />}</Field>
+              </FieldRow>
+              <FieldRow columns={1}>
+                <Field label="Recorded">
+                  {contact.consent_at ? <DateTime value={contact.consent_at} /> : <Empty />}
+                </Field>
+              </FieldRow>
+              {consentExpiry && (
+                <FieldRow columns={1}>
+                  <Field label="Implied consent runs out">
+                    <DateTime value={consentExpiry.toISOString()} />
+                  </Field>
+                </FieldRow>
               )}
-              <Field label="Can be emailed">
-                {emailBlock ? (
-                  <span className="text-amber-700">No — {emailBlock.toLowerCase()}</span>
-                ) : (
-                  <span className="text-emerald-700">Yes</span>
-                )}
-              </Field>
+              <FieldRow columns={1}>
+                <Field label="Can be emailed">
+                  {emailBlock ? (
+                    <span className="text-amber-700">No — {emailBlock.toLowerCase()}</span>
+                  ) : (
+                    <span className="text-emerald-700">Yes</span>
+                  )}
+                </Field>
+              </FieldRow>
             </dl>
 
             {/*
