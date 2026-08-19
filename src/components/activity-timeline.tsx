@@ -3,6 +3,7 @@ import { DueDate } from '@/components/due-date'
 import type { ActivityRow, ActivityType, RelatedToType, UserRow } from '@/lib/database.types'
 
 import { deleteActivity, logActivity, toggleActivityComplete } from '@/app/(app)/activities/actions'
+import { ActionForm, SubmitButton } from '@/components/action-form'
 
 const TYPE_ICON: Record<ActivityType, string> = {
   call: '📞',
@@ -25,7 +26,7 @@ export function ActivityComposer({
   currentUserId: string
 }) {
   return (
-    <form action={logActivity} className="space-y-2">
+    <ActionForm action={logActivity} className="space-y-2">
       <input type="hidden" name="related_to_type" value={relatedToType} />
       <input type="hidden" name="related_to_id" value={relatedToId} />
 
@@ -55,10 +56,10 @@ export function ActivityComposer({
 
       <textarea name="body" className="input min-h-20" placeholder="Details…" />
 
-      <button type="submit" className="btn-primary">
+      <SubmitButton className="btn-primary" pendingLabel="Logging…">
         Log activity
-      </button>
-    </form>
+      </SubmitButton>
+    </ActionForm>
   )
 }
 

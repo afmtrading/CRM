@@ -194,12 +194,17 @@ const lineSchema = z.object({
   discount_pct: z.coerce.number().min(0).max(100).default(0),
 })
 
-export async function addDealProduct(formData: FormData) {
+export async function addDealProduct(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const parsed = lineSchema.safeParse(Object.fromEntries(formData))
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid line item')
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid line item' }
+  }
   const input = parsed.data
 
   const { count } = await scoped(context, 'deal_products')
@@ -220,6 +225,7 @@ export async function addDealProduct(formData: FormData) {
 
   revalidatePath(`/deals/${input.deal_id}`)
   revalidatePath('/deals')
+  return { ok: 'Line added.' }
 }
 
 export async function updateDealProduct(formData: FormData) {

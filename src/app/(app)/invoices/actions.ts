@@ -53,14 +53,17 @@ const headerSchema = z.object({
     .transform((value) => (value === undefined ? undefined : value || null)),
 })
 
-export async function updateInvoice(formData: FormData) {
+export async function updateInvoice(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const id = formData.get('id') as string
   const parsed = headerSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? 'Those details are not valid')
+    return { error: parsed.error.issues[0]?.message ?? 'Those details are not valid' }
   }
 
   const { error } = await scoped(context, 'invoices')
@@ -80,6 +83,7 @@ export async function updateInvoice(formData: FormData) {
 
   revalidatePath('/invoices')
   revalidatePath(`/invoices/${id}`)
+  return { ok: 'Saved.' }
 }
 
 /**
@@ -141,14 +145,17 @@ const paymentSchema = z.object({
  * total below zero. This function's job is to pass the row along and let those
  * messages come back as they are.
  */
-export async function recordPayment(formData: FormData) {
+export async function recordPayment(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const invoiceId = formData.get('invoice_id') as string
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? 'That payment is not valid')
+    return { error: parsed.error.issues[0]?.message ?? 'That payment is not valid' }
   }
 
   const { error } = await scoped(context, 'invoice_payments').insert({
@@ -161,10 +168,11 @@ export async function recordPayment(formData: FormData) {
     created_by: context.user.id,
   })
 
-  if (error) throw new Error(error.message)
+  if (error) return { error: error.message }
 
   revalidatePath('/invoices')
   revalidatePath(`/invoices/${invoiceId}`)
+  return { ok: 'Payment recorded.' }
 }
 
 /**
@@ -257,14 +265,17 @@ const lineSchema = z
     message: 'A revised rate needs both a kind and a value',
   })
 
-export async function addInvoiceLine(formData: FormData) {
+export async function addInvoiceLine(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const invoiceId = formData.get('invoice_id') as string
   const parsed = lineSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? 'That line is not valid')
+    return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
   }
 
   // No discount is sent. The function computes it from the rate with the same
@@ -285,6 +296,7 @@ export async function addInvoiceLine(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/invoices/${invoiceId}`)
+  return { ok: 'Line added.' }
 }
 
 export async function removeInvoiceLine(formData: FormData) {

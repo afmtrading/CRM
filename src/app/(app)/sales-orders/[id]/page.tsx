@@ -450,7 +450,10 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
               happened rather than what somebody last thought.
             */}
             {context.canWrite && !invoice && salesOrder.status !== 'cancelled' && (
-              <form action={recordDeposit} className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4">
+              <ActionForm
+                action={recordDeposit}
+                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4"
+              >
                 <input type="hidden" name="sales_order_id" value={id} />
 
                 <div>
@@ -483,11 +486,11 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 </div>
 
                 <div className="flex items-end">
-                  <button type="submit" className="btn-secondary">
+                  <SubmitButton className="btn-secondary" pendingLabel="Recording…">
                     Record deposit
-                  </button>
+                  </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             )}
           </Section>
         </div>
@@ -522,7 +525,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
           </Section>
 
           <Section title="Details">
-            <form action={updateSalesOrder} className="space-y-3">
+            <ActionForm action={updateSalesOrder} className="space-y-3">
               <input type="hidden" name="id" value={id} />
 
               <div>
@@ -740,11 +743,11 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
               </div>
 
               {context.canWrite && (
-                <button type="submit" className="btn-primary w-full">
+                <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">
                   Save details
-                </button>
+                </SubmitButton>
               )}
-            </form>
+            </ActionForm>
           </Section>
 
           <Section title="Record">

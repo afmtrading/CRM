@@ -230,7 +230,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             </div>
 
             {composable && (
-              <form
+              <ActionForm
                 action={addInvoiceLine}
                 className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-6"
               >
@@ -323,11 +323,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 </div>
 
                 <div className="flex items-end sm:col-span-6">
-                  <button type="submit" className="btn-primary">
+                  <SubmitButton className="btn-primary" pendingLabel="Adding…">
                     Add line
-                  </button>
+                  </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             )}
 
             <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
@@ -372,7 +372,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             )}
 
             {context.canWrite && invoice.status !== 'void' && (
-              <form
+              <ActionForm
                 action={recordPayment}
                 className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4"
               >
@@ -401,11 +401,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 </div>
 
                 <div className="flex items-end">
-                  <button type="submit" className="btn-secondary">
+                  <SubmitButton className="btn-secondary" pendingLabel="Recording…">
                     Record payment
-                  </button>
+                  </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             )}
           </Section>
         </div>
@@ -494,7 +494,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               </Row>
             </dl>
 
-            <form action={updateInvoice} className="space-y-3 border-t border-slate-100 pt-4">
+            <ActionForm action={updateInvoice} className="space-y-3 border-t border-slate-100 pt-4">
               <input type="hidden" name="id" value={id} />
 
               {/*
@@ -622,11 +622,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               </div>
 
               {context.canWrite && (
-                <button type="submit" className="btn-primary w-full">
+                <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">
                   Save
-                </button>
+                </SubmitButton>
               )}
-            </form>
+            </ActionForm>
 
             {/*
               Deleting is the administrator's escape hatch for an invoice raised

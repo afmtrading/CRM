@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { requireSession, scoped } from '@/lib/tenancy'
+import type { ActionState } from '@/components/action-form'
 
 const activitySchema = z.object({
   type: z.enum(['call', 'email', 'meeting', 'note', 'task']),
@@ -19,11 +20,16 @@ function pathFor(type: string, id: string) {
   return type === 'contact' ? `/contacts/${id}` : type === 'company' ? `/companies/${id}` : `/deals/${id}`
 }
 
-export async function logActivity(formData: FormData) {
+export async function logActivity(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
 
   const parsed = activitySchema.safeParse(Object.fromEntries(formData))
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid activity')
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid activity' }
+  }
   const input = parsed.data
 
   const { error } = await scoped(context, 'activities').insert({
@@ -41,6 +47,7 @@ export async function logActivity(formData: FormData) {
 
   revalidatePath(pathFor(input.related_to_type, input.related_to_id))
   revalidatePath('/activities')
+  return { ok: 'Logged.' }
 }
 
 export async function toggleActivityComplete(formData: FormData) {
