@@ -5,6 +5,7 @@ import { useState } from 'react'
 import type { ProductRow } from '@/lib/database.types'
 import { formatCurrency } from '@/lib/format'
 import { PlusIcon } from '@/components/icons'
+import { ActionForm, SubmitButton, type ActionState } from '@/components/action-form'
 
 /**
  * The "add a product" row on a deal.
@@ -22,7 +23,7 @@ export function AddLineItem({
   dealId: string
   dealCurrency: string
   products: ProductRow[]
-  action: (formData: FormData) => void
+  action: (state: ActionState, formData: FormData) => Promise<ActionState>
 }) {
   const [productId, setProductId] = useState('')
   const [price, setPrice] = useState('')
@@ -47,7 +48,7 @@ export function AddLineItem({
   }
 
   return (
-    <form action={action} className="grid gap-3 sm:grid-cols-12">
+    <ActionForm action={action} className="grid gap-3 sm:grid-cols-12">
       <input type="hidden" name="deal_id" value={dealId} />
       <input type="hidden" name="unit_cost" value={cost} />
 
@@ -123,10 +124,10 @@ export function AddLineItem({
       </div>
 
       <div className="flex items-end sm:col-span-2">
-        <button type="submit" className="btn-primary w-full">
+        <SubmitButton className="btn-primary w-full" pendingLabel="Adding…">
           <PlusIcon className="h-4 w-4" />
           Add
-        </button>
+        </SubmitButton>
       </div>
 
       {currencyDiffers && (
@@ -142,6 +143,6 @@ export function AddLineItem({
           {selected.unit ? ` per ${selected.unit}` : ''}.
         </p>
       )}
-    </form>
+    </ActionForm>
   )
 }

@@ -78,14 +78,17 @@ const headerSchema = z.object({
   terms: z.string().max(20_000).default(''),
 })
 
-export async function updateSalesOrder(formData: FormData) {
+export async function updateSalesOrder(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const id = formData.get('id') as string
   const parsed = headerSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? 'Those details are not valid')
+    return { error: parsed.error.issues[0]?.message ?? 'Those details are not valid' }
   }
 
   // Pulled out so an absent currency is left alone rather than sent as null.
@@ -106,6 +109,7 @@ export async function updateSalesOrder(formData: FormData) {
 
   revalidatePath('/sales-orders')
   revalidatePath(`/sales-orders/${id}`)
+  return { ok: 'Saved.' }
 }
 
 /**
@@ -346,14 +350,17 @@ const paymentSchema = z.object({
  * row with a negative amount. The table has no update policy at all, so this is
  * a property of the database rather than a habit of this file.
  */
-export async function recordDeposit(formData: FormData) {
+export async function recordDeposit(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
   const orderId = formData.get('sales_order_id') as string
   const parsed = paymentSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? 'That deposit is not valid')
+    return { error: parsed.error.issues[0]?.message ?? 'That deposit is not valid' }
   }
 
   const { error } = await scoped(context, 'sales_order_payments').insert({
@@ -368,9 +375,10 @@ export async function recordDeposit(formData: FormData) {
     created_by: context.user.id,
   })
 
-  if (error) throw new Error(error.message)
+  if (error) return { error: error.message }
 
   revalidatePath(`/sales-orders/${orderId}`)
+  return { ok: 'Deposit recorded.' }
 }
 
 // -----------------------------------------------------------------------------
