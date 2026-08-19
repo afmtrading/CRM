@@ -1,0 +1,239 @@
+-- Data integrity: what reading the code cannot tell you.
+--
+-- The migrations decide what the schema allows. This asks what the data
+-- actually says — a stored value with no option row behind it, an owner id
+-- pointing at nobody, a contact the importer left without a name. None of it
+-- is a constraint violation; all of it reaches a screen looking wrong.
+--
+-- Read-only. Safe to run against production.
+--
+--   psql "$DATABASE_URL" -f supabase/checks/data-integrity.sql
+--
+-- or paste it into the Supabase SQL editor. Every check returns nothing when
+-- the data is clean, so an empty result is the pass.
+--
+-- Every comparison is scoped by organization_id. Two organizations each having
+-- an option called "New", or a company called Acme, is the system working —
+-- matching on the value alone reports the whole seeded vocabulary as duplicated.
+--
+-- Two faults are deliberately not checked, because the schema already refuses
+-- them and a check that cannot fire is worse than no check — it reads as
+-- coverage:
+--
+--   an owner id with no user behind it   contacts_owner_id_fkey
+--   one option value in two spellings    field_options_value_unique
+--
+-- Both were tried against a scratch database and rejected by the constraint.
+-- If either constraint is ever dropped, the check belongs back here.
+
+with
+
+-- Live records only. A soft-deleted contact in the recycle bin and a merged-away
+-- tombstone are both meant to look abandoned.
+live_contacts as (
+  select * from contacts where deleted_at is null and duplicate_of_id is null
+),
+live_companies as (
+  select * from companies where deleted_at is null
+),
+
+-- One row per stored value that no option list accounts for. The screens look
+-- options up by (organization, entity_type, field_key, value); anything missing
+-- here renders as an uncoloured chip or as raw text.
+contact_scalar_orphans as (
+  select 'contact' as entity, v.key as field, v.value, count(*) as rows
+  from (
+    select c.organization_id, 'priority' as key, c.priority as value from live_contacts c
+    union all
+    select c.organization_id, 'credibility', c.credibility from live_contacts c
+  ) v
+  where v.value is not null and v.value <> ''
+    and not exists (
+      select 1 from field_options o
+      where o.organization_id = v.organization_id
+        and o.entity_type = 'contact'
+        and o.field_key = v.key
+        and lower(o.value) = lower(v.value)
+    )
+  group by v.key, v.value
+),
+
+contact_array_orphans as (
+  select 'contact' as entity, 'role_type' as field, v as value, count(*) as rows
+  from live_contacts c, unnest(c.role_type) v
+  where not exists (
+    select 1 from field_options o
+    where o.organization_id = c.organization_id
+      and o.entity_type = 'contact'
+      and o.field_key = 'role_type'
+      and lower(o.value) = lower(v)
+  )
+  group by v
+),
+
+company_scalar_orphans as (
+  select 'company' as entity, 'priority' as field, co.priority as value, count(*) as rows
+  from live_companies co
+  where co.priority is not null and co.priority <> ''
+    and not exists (
+      select 1 from field_options o
+      where o.organization_id = co.organization_id
+        and o.entity_type = 'company'
+        and o.field_key = 'priority'
+        and lower(o.value) = lower(co.priority)
+    )
+  group by co.priority
+),
+
+company_array_orphans as (
+  select 'company' as entity, x.key as field, x.v as value, count(*) as rows
+  from (
+    select co.organization_id, 'customer_type' as key, unnest(co.customer_type) as v
+    from live_companies co
+    union all
+    select co.organization_id, 'specialty_market', unnest(co.specialty_market)
+    from live_companies co
+  ) x
+  where not exists (
+    select 1 from field_options o
+    where o.organization_id = x.organization_id
+      and o.entity_type = 'company'
+      and o.field_key = x.key
+      and lower(o.value) = lower(x.v)
+  )
+  group by x.key, x.v
+),
+
+-- A custom field's value outlives its definition: the jsonb keeps the key and
+-- nothing renders it. Invisible until somebody asks why a column went blank.
+contact_custom_orphans as (
+  select 'contact' as entity, k as field, '(custom field, no definition)' as value, count(*) as rows
+  from live_contacts c, jsonb_object_keys(coalesce(c.custom_fields, '{}'::jsonb)) k
+  where not exists (
+    select 1 from custom_field_definitions d
+    where d.organization_id = c.organization_id
+      and d.entity_type = 'contact'
+      and d.key = k
+  )
+  group by k
+),
+
+company_custom_orphans as (
+  select 'company' as entity, k as field, '(custom field, no definition)' as value, count(*) as rows
+  from live_companies co, jsonb_object_keys(coalesce(co.custom_fields, '{}'::jsonb)) k
+  where not exists (
+    select 1 from custom_field_definitions d
+    where d.organization_id = co.organization_id
+      and d.entity_type = 'company'
+      and d.key = k
+  )
+  group by k
+),
+
+-- Owner is drawn by looking the id up in a list of users the page loaded for
+-- this organization, so an owner from another organization renders as "—" —
+-- indistinguishable from unassigned, while the record is in fact spoken for.
+--
+-- Only the cross-tenant half is worth asking: contacts_owner_id_fkey already
+-- makes an id with no user behind it impossible.
+cross_tenant_owners as (
+  select 'contact' as entity, 'owner_id' as field, c.owner_id::text as value, count(*) as rows
+  from live_contacts c
+  where c.owner_id is not null
+    and not exists (
+      select 1 from users u
+      where u.id = c.owner_id and u.organization_id = c.organization_id
+    )
+  group by c.owner_id
+  union all
+  select 'company', 'owner_id', co.owner_id::text, count(*)
+  from live_companies co
+  where co.owner_id is not null
+    and not exists (
+      select 1 from users u
+      where u.id = co.owner_id and u.organization_id = co.organization_id
+    )
+  group by co.owner_id
+),
+
+-- A contact whose company belongs to somebody else, which the joins on both
+-- record pages would follow.
+crossed_companies as (
+  select 'contact' as entity, 'company_id' as field, c.id::text as value, 1 as rows
+  from live_contacts c
+  join companies co on co.id = c.company_id
+  where co.organization_id <> c.organization_id
+),
+
+-- The importer builds a name from whatever columns it matched. A row where it
+-- matched neither is a contact nobody can find by name.
+nameless as (
+  select 'contact' as entity, 'name' as field, '(no first or last name)' as value, count(*) as rows
+  from live_contacts c
+  where coalesce(nullif(trim(c.first_name), ''), nullif(trim(c.last_name), '')) is null
+  having count(*) > 0
+),
+
+unreachable as (
+  select 'contact' as entity, 'email/phone' as field, '(no email, no phone)' as value, count(*) as rows
+  from live_contacts c
+  where coalesce(
+    nullif(trim(c.email), ''),
+    nullif(trim(c.phone), ''),
+    nullif(trim(c.office_phone), '')
+  ) is null
+  having count(*) > 0
+),
+
+-- Not a constraint: two live contacts may legitimately share an address. Worth
+-- seeing, because it is usually an import that ran twice.
+duplicate_emails as (
+  select 'contact' as entity, 'email' as field, lower(trim(c.email)) as value, count(*) as rows
+  from live_contacts c
+  where nullif(trim(c.email), '') is not null
+  group by c.organization_id, lower(trim(c.email))
+  having count(*) > 1
+),
+
+duplicate_companies as (
+  select 'company' as entity, 'name' as field, lower(trim(co.name)) as value, count(*) as rows
+  from live_companies co
+  group by co.organization_id, lower(trim(co.name))
+  having count(*) > 1
+),
+
+-- Tenancy on the join tables, which carry their own organization_id kept in
+-- step by a trigger. A row whose halves disagree is one organization's tag on
+-- another's record.
+tag_leaks as (
+  select 'contact' as entity, 'contact_tags' as field, ct.contact_id::text as value, count(*) as rows
+  from contact_tags ct
+  join contacts c on c.id = ct.contact_id
+  join tags t on t.id = ct.tag_id
+  where c.organization_id <> t.organization_id
+  group by ct.contact_id
+  union all
+  select 'company', 'company_tags', cot.company_id::text, count(*)
+  from company_tags cot
+  join companies co on co.id = cot.company_id
+  join tags t on t.id = cot.tag_id
+  where co.organization_id <> t.organization_id
+  group by cot.company_id
+)
+
+select * from (
+  select * from contact_scalar_orphans
+  union all select * from contact_array_orphans
+  union all select * from company_scalar_orphans
+  union all select * from company_array_orphans
+  union all select * from contact_custom_orphans
+  union all select * from company_custom_orphans
+  union all select * from cross_tenant_owners
+  union all select * from crossed_companies
+  union all select * from nameless
+  union all select * from unreachable
+  union all select * from duplicate_emails
+  union all select * from duplicate_companies
+  union all select * from tag_leaks
+) findings
+order by entity, field, rows desc, value;
