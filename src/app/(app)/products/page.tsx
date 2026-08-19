@@ -11,6 +11,7 @@ import type {
 import { derivePricing } from '@/lib/products'
 import { round2 } from '@/lib/sales'
 import { availableTone, formatQuantity } from '@/lib/stock'
+import { startOfMonthIn } from '@/lib/timezone'
 import { productImageUrl } from '@/lib/product-image'
 import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
 import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
@@ -156,9 +157,11 @@ export default async function ProductsPage({
 
   // Scoped to what is actually on screen, like the two value totals below —
   // filter to one brand and this says how many of that brand are new.
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  monthStart.setHours(0, 0, 0, 0)
+  //
+  // The month begins on the organization's clock. The server runs in UTC, so a
+  // product added at nine on the evening of the 31st in Toronto had already
+  // been counted against the following month.
+  const monthStart = startOfMonthIn(context.organization.timezone)
   const newThisMonth = products.filter((product) => new Date(product.created_at) >= monthStart)
 
   /*

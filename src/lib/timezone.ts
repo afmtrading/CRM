@@ -91,6 +91,87 @@ export function todayIn(timeZone: string, now: Date = new Date()): string {
 }
 
 /**
+ * How far ahead of UTC the zone's wall clock reads at a given instant, in
+ * milliseconds. Positive east of Greenwich, negative west of it.
+ *
+ * Read at an instant rather than looked up per zone, because the answer moves:
+ * Toronto is five hours behind in January and four in July.
+ */
+function offsetMsAt(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: safeTimeZone(timeZone),
+    // Without this, midnight formats as hour 24 and the arithmetic lands a day
+    // out — the one place this calculation is actually used.
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant)
+
+  const at = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? '0')
+
+  const wallClock = Date.UTC(
+    at('year'),
+    at('month') - 1,
+    at('day'),
+    at('hour'),
+    at('minute'),
+    at('second'),
+  )
+
+  return wallClock - instant.getTime()
+}
+
+/**
+ * The instant a given calendar day began in a zone.
+ *
+ * `dayIn` goes one way — an instant to the day it fell on. This goes the other,
+ * which is what a query needs: `created_at` is a timestamptz, so filtering to
+ * "this month" means comparing against a moment, not a date string.
+ *
+ * `day` is YYYY-MM-DD, the shape `dayIn` returns and a date column stores.
+ */
+export function startOfDayIn(day: string, timeZone: string): Date {
+  const zone = safeTimeZone(timeZone)
+  const asIfUtc = new Date(`${day}T00:00:00Z`)
+  if (Number.isNaN(asIfUtc.getTime())) return asIfUtc
+
+  /*
+   * Subtracting the offset turns "midnight, read as UTC" into the real instant.
+   * The catch is that the offset has to be read somewhere, and the only instant
+   * available to read it at is the guess — which sits up to a day from the
+   * answer, and can therefore fall on the far side of a clock change.
+   *
+   * So read it again at the candidate. If the zone was on a different offset
+   * there, that is the one that governs the day's first moment, and one more
+   * subtraction lands on it. Two passes are enough: offsets shift by an hour,
+   * never by enough to cross a second boundary.
+   */
+  const guess = offsetMsAt(asIfUtc, zone)
+  const candidate = new Date(asIfUtc.getTime() - guess)
+  const actual = offsetMsAt(candidate, zone)
+
+  return actual === guess ? candidate : new Date(asIfUtc.getTime() - actual)
+}
+
+/**
+ * The instant the current month began, on the organization's clock.
+ *
+ * What the "New this month" counts on the record lists are asking for. The
+ * server runs in UTC, so a contact added at nine on the evening of the 31st in
+ * Toronto was already next month as far as `new Date()` was concerned.
+ */
+export function startOfMonthIn(timeZone: string, now: Date = new Date()): Date {
+  const today = todayIn(timeZone, now)
+  if (!today) return new Date(NaN)
+
+  return startOfDayIn(`${today.slice(0, 7)}-01`, timeZone)
+}
+
+/**
  * How the zone reads next to a date, for the one line of explanation a report
  * owes anybody wondering why a deal is filed on the day it is.
  */
