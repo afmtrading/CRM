@@ -1,11 +1,12 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 
 import type { SavedFilterRow } from '@/lib/database.types'
 
 import { deleteDealView, saveDealView } from './actions'
+import type { ActionState } from '@/components/action-form'
 
 /**
  * The deals board's own filter row.
@@ -44,6 +45,13 @@ export function DealFilters({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [naming, setNaming] = useState(false)
+  const [saveState, saveAction, savingView] = useActionState(saveDealView, {} as ActionState)
+
+  // Closing on success rather than on submit. Closing on submit is what this
+  // did, which took the refusal off screen at the moment it arrived.
+  useEffect(() => {
+    if (saveState.ok) setNaming(false)
+  }, [saveState.ok])
 
   const current = {
     owner: searchParams.get('owner') ?? '',
@@ -160,35 +168,39 @@ export function DealFilters({
       </div>
 
       {naming && (
-        <form
-          action={saveDealView}
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={() => setNaming(false)}
-        >
-          <input type="hidden" name="params" value={viewParams()} />
-          <input
-            name="name"
-            required
-            maxLength={80}
-            autoFocus
-            placeholder="Name this view — “My open EU deals”"
-            className="input w-72 py-1.5 text-sm"
-          />
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" name="is_shared" className="h-3.5 w-3.5" />
-            Share with the team
-          </label>
-          <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
-            Save
-          </button>
-          <button
-            type="button"
-            className="text-xs text-slate-500 hover:text-slate-800"
-            onClick={() => setNaming(false)}
-          >
-            Cancel
-          </button>
-        </form>
+        <div>
+          <form action={saveAction} className="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="params" value={viewParams()} />
+            <input
+              name="name"
+              required
+              maxLength={80}
+              autoFocus
+              placeholder="Name this view — “My open EU deals”"
+              className="input w-72 py-1.5 text-sm"
+            />
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input type="checkbox" name="is_shared" className="h-3.5 w-3.5" />
+              Share with the team
+            </label>
+            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs" disabled={savingView}>
+              {savingView ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              className="text-xs text-slate-500 hover:text-slate-800"
+              onClick={() => setNaming(false)}
+            >
+              Cancel
+            </button>
+          </form>
+
+          {saveState.error && (
+            <p role="status" className="mt-1 text-xs text-red-700">
+              {saveState.error}
+            </p>
+          )}
+        </div>
       )}
 
       {savedViews.length > 0 && (

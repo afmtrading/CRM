@@ -87,17 +87,17 @@ export default async function PipelineSettingsPage() {
         description="Each pipeline has its own ordered stages. A stage's default probability is what deals inherit when they land in it, and its outcome is what reaching it means — a stage that closes a deal as won stamps the close date, credits the owner and releases the stock the deal was holding."
       />
 
-      <form action={createPipeline} className="card mb-5 flex flex-wrap items-end gap-2 p-4">
+      <ActionForm action={createPipeline} className="card mb-5 flex flex-wrap items-end gap-2 p-4">
         <div>
           <label className="label" htmlFor="pipeline-name">
             New pipeline
           </label>
           <input id="pipeline-name" name="name" required className="input w-64" placeholder="Trading desk" />
         </div>
-        <button type="submit" className="btn-primary">
+        <SubmitButton className="btn-primary" pendingLabel="Adding…">
           Add pipeline
-        </button>
-      </form>
+        </SubmitButton>
+      </ActionForm>
 
       <div className="space-y-5">
         {pipelineList.map((pipeline, pipelineIndex) => {
@@ -141,7 +141,7 @@ export default async function PipelineSettingsPage() {
                     Same shape as the stage rows below — a field with its value
                     in it and a Save beside it — rather than a separate mode.
                   */}
-                  <form action={renamePipeline} className="flex items-center gap-1.5">
+                  <ActionForm action={renamePipeline} className="flex items-center gap-1.5">
                     <input type="hidden" name="id" value={pipeline.id} />
                     <label className="sr-only" htmlFor={`pipeline-name-${pipeline.id}`}>
                       Name for {pipeline.name}
@@ -154,10 +154,10 @@ export default async function PipelineSettingsPage() {
                       maxLength={120}
                       className="input w-44 py-1 text-xs"
                     />
-                    <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                    <SubmitButton className="btn-secondary px-2.5 py-1 text-xs" pendingLabel="Saving…">
                       Rename
-                    </button>
-                  </form>
+                    </SubmitButton>
+                  </ActionForm>
 
                   {pipeline.is_default ? (
                     <span className="badge bg-brand-50 text-brand-700">default</span>
@@ -233,7 +233,7 @@ export default async function PipelineSettingsPage() {
                               />
                             </div>
 
-                            <form
+                            <ActionForm
                               action={updateStage}
                               className="flex flex-1 items-center gap-2"
                               id={`stage-${stage.id}`}
@@ -290,10 +290,10 @@ export default async function PipelineSettingsPage() {
                                 <option value="won">Closes as won</option>
                                 <option value="lost">Closes as lost</option>
                               </select>
-                              <button type="submit" className="btn-secondary">
+                              <SubmitButton className="btn-secondary" pendingLabel="Saving…">
                                 Save
-                              </button>
-                            </form>
+                              </SubmitButton>
+                            </ActionForm>
                           </div>
                         </td>
                       </tr>
@@ -303,7 +303,7 @@ export default async function PipelineSettingsPage() {
               </table>
 
               <div className="flex flex-wrap items-center gap-3">
-                <form action={createStage} className="flex flex-wrap items-end gap-2">
+                <ActionForm action={createStage} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="pipeline_id" value={pipeline.id} />
                   <input name="name" required className="input w-52" placeholder="New stage name" />
                   <div className="flex items-center gap-1">
@@ -318,10 +318,10 @@ export default async function PipelineSettingsPage() {
                     />
                     <span className="text-sm text-slate-500">%</span>
                   </div>
-                  <button type="submit" className="btn-secondary">
+                  <SubmitButton className="btn-secondary" pendingLabel="Adding…">
                     Add stage
-                  </button>
-                </form>
+                  </SubmitButton>
+                </ActionForm>
 
                 {pipelineStages.length > 0 && (
                   <ActionForm action={retireStage} className="flex items-end gap-2">

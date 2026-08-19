@@ -299,7 +299,10 @@ const savedFilterSchema = z.object({
   is_shared: z.boolean().default(false),
 })
 
-export async function saveFilter(formData: FormData) {
+export async function saveFilter(
+  _state: ButtonState,
+  formData: FormData,
+): Promise<ButtonState> {
   const context = await requireSession()
 
   const parsed = savedFilterSchema.safeParse({
@@ -309,7 +312,7 @@ export async function saveFilter(formData: FormData) {
     is_shared: formData.get('is_shared') === 'on',
   })
 
-  if (!parsed.success) throw new Error('A saved filter needs a name')
+  if (!parsed.success) return { error: 'A saved filter needs a name' }
 
   const { error } = await scoped(context, 'saved_filters').insert({
     name: parsed.data.name,
@@ -325,6 +328,7 @@ export async function saveFilter(formData: FormData) {
   // a reload. Five screens share this action now, and revalidating /contacts
   // for all of them would leave four of them stale.
   revalidatePath(String(formData.get('return_to') ?? '/contacts'))
+  return { ok: `Saved as ${parsed.data.name}.` }
 }
 
 export async function deleteSavedFilter(formData: FormData) {
