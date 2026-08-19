@@ -957,15 +957,29 @@ export async function createFieldOption(
   if (!value) return { error: 'An option needs a value' }
   if (!OPTION_COLORS.includes(color as OptionColor)) return { error: 'Unknown colour' }
 
-  // Appended to the end of its own list.
+  /*
+   * The whole list rather than only its last row, because it answers two
+   * questions in one read: where the new option goes, and whether the value is
+   * already on the list under a different casing. The database refuses that
+   * pair either way — field_options_value_unique folds the case — but it can
+   * only name the value that was typed, and "kenya" is already an option is a
+   * confusing thing to read when the list says Kenya.
+   */
   const { data: existing } = await scoped(context, 'field_options')
-    .select('order')
+    .select('value, order')
     .eq('field_key', fieldKey)
     .eq('entity_type', entityType)
-    .order('order', { ascending: false })
-    .limit(1)
 
-  const nextOrder = ((existing ?? []) as { order: number }[])[0]?.order ?? 0
+  const siblings = (existing ?? []) as { value: string; order: number }[]
+
+  const alreadyThere = siblings.find(
+    (option) => option.value.toLowerCase() === value.toLowerCase(),
+  )
+  if (alreadyThere) {
+    return { error: `"${alreadyThere.value}" is already an option for that field.` }
+  }
+
+  const nextOrder = siblings.reduce((highest, option) => Math.max(highest, option.order), 0)
 
   const { error } = await scoped(context, 'field_options').insert({
     field_key: fieldKey,
@@ -975,6 +989,8 @@ export async function createFieldOption(
     order: nextOrder + 1,
   })
 
+  // Still handled: the check above loses to a second administrator adding the
+  // same value between that read and this write.
   if (error) {
     return {
       error: error.message.includes('duplicate key')
