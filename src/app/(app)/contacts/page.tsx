@@ -10,6 +10,7 @@ import {
   parseFilterConfig,
 } from "@/lib/filters";
 import { contactName, formatDay } from "@/lib/format";
+import { startOfMonthIn } from "@/lib/timezone";
 import type {
   FieldOptionRow,
   ContactRow,
@@ -131,9 +132,11 @@ export default async function ContactsPage({
   // Headline counts describe the whole book of contacts, not the filtered view,
   // so they stay stable while someone narrows the list below. Started here and
   // awaited after the list query so the two run concurrently.
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
+  //
+  // The month begins on the organization's clock. The server runs in UTC, so a
+  // contact added at nine on the evening of the 31st in Toronto had already
+  // been counted against the following month.
+  const monthStart = startOfMonthIn(context.organization.timezone);
 
   const live = () =>
     scoped(context, "contacts")

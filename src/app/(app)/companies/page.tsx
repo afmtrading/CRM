@@ -19,6 +19,7 @@ import type {
 } from '@/lib/database.types'
 import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
 import { optionsForField } from '@/lib/field-options'
+import { startOfMonthIn } from '@/lib/timezone'
 import { placeNames, type Place } from '@/lib/geography'
 import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
@@ -64,9 +65,11 @@ export default async function CompaniesPage({
   // view, so they stay put while somebody narrows the list below — the same
   // rule the contacts list follows. Started here and awaited after the list
   // query so everything runs concurrently.
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  monthStart.setHours(0, 0, 0, 0)
+  //
+  // The month begins on the organization's clock. The server runs in UTC, so a
+  // company added at nine on the evening of the 31st in Toronto had already
+  // been counted against the following month.
+  const monthStart = startOfMonthIn(context.organization.timezone)
 
   const live = () => scoped(context, 'companies').select('id', { count: 'exact', head: true }).is('deleted_at', null)
 
