@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import type { ActionState } from '@/components/action-form'
 import { CURRENCIES } from '@/lib/format'
 import { settableInvoiceStatuses } from '@/lib/sales'
 import type { InvoiceStatus, RevisedRateType } from '@/lib/database.types'
@@ -88,7 +89,10 @@ export async function updateInvoice(formData: FormData) {
  * them here would be a way to say an invoice was settled without any money
  * arriving — which is exactly the hole the ledger exists to close.
  */
-export async function setInvoiceStatus(formData: FormData) {
+export async function setInvoiceStatus(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
@@ -101,14 +105,15 @@ export async function setInvoiceStatus(formData: FormData) {
     .maybeSingle()
 
   if (readError) throw new Error(readError.message)
-  if (!invoice) throw new Error('Invoice not found')
+  if (!invoice) return { error: 'Invoice not found' }
 
   if (!settableInvoiceStatuses(invoice.status).includes(next)) {
-    throw new Error(
-      next === 'paid' || next === 'partial'
-        ? 'Record a payment instead — an invoice is paid when the money is on it.'
-        : `This invoice cannot be marked ${next}.`,
-    )
+    return {
+      error:
+        next === 'paid' || next === 'partial'
+          ? 'Record a payment instead — an invoice is paid when the money is on it.'
+          : `This invoice cannot be marked ${next}.`,
+    }
   }
 
   const { error } = await scoped(context, 'invoices').update({ status: next }).eq('id', id)
@@ -116,6 +121,7 @@ export async function setInvoiceStatus(formData: FormData) {
 
   revalidatePath('/invoices')
   revalidatePath(`/invoices/${id}`)
+  return { ok: `Marked ${next}.` }
 }
 
 const paymentSchema = z.object({
@@ -167,12 +173,15 @@ export async function recordPayment(formData: FormData) {
  * It exists because deleting frees the order to be invoiced again, which is the
  * only way back from an invoice raised against the wrong order.
  */
-export async function deleteInvoice(formData: FormData) {
+export async function deleteInvoice(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   const id = formData.get('id') as string
 
   if (!context.isAdmin) {
-    throw new Error('Only an administrator can delete an invoice. Void it instead.')
+    return { error: 'Only an administrator can delete an invoice. Void it instead.' }
   }
 
   const { error } = await scoped(context, 'invoices').delete().eq('id', id)
@@ -294,7 +303,10 @@ export async function removeInvoiceLine(formData: FormData) {
 }
 
 /** Shipping is a header field, but it moves the total, so it lives with the lines. */
-export async function setInvoiceShipping(formData: FormData) {
+export async function setInvoiceShipping(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
@@ -302,7 +314,7 @@ export async function setInvoiceShipping(formData: FormData) {
   const shipping = Number(formData.get('shipping_charge') ?? 0)
 
   if (!Number.isFinite(shipping) || shipping < 0) {
-    throw new Error('Shipping has to be a number, and cannot be negative')
+    return { error: 'Shipping has to be a number, and cannot be negative' }
   }
 
   const { error } = await scoped(context, 'invoices')
@@ -312,4 +324,5 @@ export async function setInvoiceShipping(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/invoices/${id}`)
+  return { ok: 'Shipping updated.' }
 }

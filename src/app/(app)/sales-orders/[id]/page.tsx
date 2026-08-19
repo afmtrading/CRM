@@ -31,6 +31,7 @@ type PickerLocation = { id: string; name: string }
 type PickerProduct = { id: string; name: string; sku: string | null; unit: string }
 import { Money } from '@/components/money'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
+import { ActionForm, SubmitButton } from '@/components/action-form'
 
 import {
   addSalesOrderLine,
@@ -179,17 +180,17 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
         {/* Forward only, and never back — a deposit already taken is a fact. */}
         {context.canWrite &&
           nextStatuses(salesOrder.status).map((next) => (
-            <form key={next} action={setSalesOrderStatus}>
+            <ActionForm key={next} action={setSalesOrderStatus}>
               <input type="hidden" name="id" value={id} />
               <input type="hidden" name="status" value={next} />
-              <button
-                type="submit"
+              <SubmitButton
                 className="btn-secondary px-3 py-1.5 text-sm"
+                pendingLabel="Saving…"
                 title={SALES_ORDER_STATUS_HINTS[next]}
               >
                 Mark {SALES_ORDER_STATUS_LABELS[next].toLowerCase()}
-              </button>
-            </form>
+              </SubmitButton>
+            </ActionForm>
           ))}
 
         {!invoice && blocked && (

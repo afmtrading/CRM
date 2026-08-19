@@ -62,16 +62,18 @@ export function ActionForm({
 export function SubmitButton({
   className,
   pendingLabel,
+  title,
   children,
 }: {
   className?: string
   pendingLabel?: string
+  title?: string
   children: React.ReactNode
 }) {
   const { pending } = useFormStatus()
 
   return (
-    <button type="submit" disabled={pending} className={className}>
+    <button type="submit" disabled={pending} className={className} title={title}>
       {pending ? (pendingLabel ?? children) : children}
     </button>
   )

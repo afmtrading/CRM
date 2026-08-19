@@ -20,6 +20,7 @@ import type {
 } from '@/lib/database.types'
 import { Money } from '@/components/money'
 import { InvoiceStatusBadge, PageHeader, Section } from '@/components/ui'
+import { ActionForm, SubmitButton } from '@/components/action-form'
 
 import {
   addInvoiceLine,
@@ -148,13 +149,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         */}
         {context.canWrite &&
           settableInvoiceStatuses(invoice.status).map((next) => (
-            <form key={next} action={setInvoiceStatus}>
+            <ActionForm key={next} action={setInvoiceStatus}>
               <input type="hidden" name="id" value={id} />
               <input type="hidden" name="status" value={next} />
-              <button type="submit" className="btn-secondary px-3 py-1.5 text-sm">
+              <SubmitButton className="btn-secondary px-3 py-1.5 text-sm" pendingLabel="Saving…">
                 Mark {INVOICE_STATUS_LABELS[next].toLowerCase()}
-              </button>
-            </form>
+              </SubmitButton>
+            </ActionForm>
           ))}
 
         {isOverdue(invoice, today) && (
@@ -417,7 +418,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               </Row>
               <Row label="Shipping">
                 {composable ? (
-                  <form action={setInvoiceShipping} className="flex items-center gap-1">
+                  <ActionForm action={setInvoiceShipping} className="flex items-center gap-1">
                     <input type="hidden" name="id" value={id} />
                     <input
                       name="shipping_charge"
@@ -428,10 +429,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                       className="input w-24 py-1 text-right text-sm"
                       aria-label="Shipping charge"
                     />
-                    <button type="submit" className="text-xs text-slate-500 hover:text-slate-900">
+                    <SubmitButton
+                      className="text-xs text-slate-500 hover:text-slate-900"
+                      pendingLabel="Saving…"
+                    >
                       Save
-                    </button>
-                  </form>
+                    </SubmitButton>
+                  </ActionForm>
                 ) : (
                   <Money value={Number(invoice.shipping_charge)} currency={invoice.currency} />
                 )}
@@ -631,15 +635,18 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               the sequence where an audit expects to find it.
             */}
             {context.isAdmin && (
-              <form action={deleteInvoice} className="mt-4 border-t border-slate-100 pt-4">
+              <ActionForm action={deleteInvoice} className="mt-4 border-t border-slate-100 pt-4">
                 <input type="hidden" name="id" value={id} />
-                <button type="submit" className="text-sm text-slate-500 hover:text-red-600">
+                <SubmitButton
+                  className="text-sm text-slate-500 hover:text-red-600"
+                  pendingLabel="Deleting…"
+                >
                   Delete this invoice
-                </button>
+                </SubmitButton>
                 <p className="mt-1 text-xs text-slate-400">
                   Void it instead unless the invoice should never have existed.
                 </p>
-              </form>
+              </ActionForm>
             )}
           </Section>
         </div>

@@ -1,6 +1,7 @@
 import { requireSession, scoped } from '@/lib/tenancy'
 import type { TagRow } from '@/lib/database.types'
 import { PageHeader, Section } from '@/components/ui'
+import { ActionForm, SubmitButton } from '@/components/action-form'
 
 import { createTag } from '../actions'
 import { TagRows, type TagUsage } from './tag-rows'
@@ -60,7 +61,7 @@ export default async function TagsPage() {
         </div>
 
         <Section title="Add a tag">
-          <form action={createTag} className="space-y-3">
+          <ActionForm action={createTag} className="space-y-3">
             <div>
               <label className="label" htmlFor="tag-name">
                 Name
@@ -79,10 +80,10 @@ export default async function TagsPage() {
                 defaultValue="#0f766e"
               />
             </div>
-            <button type="submit" className="btn-primary w-full">
+            <SubmitButton className="btn-primary w-full" pendingLabel="Adding…">
               Add tag
-            </button>
-          </form>
+            </SubmitButton>
+          </ActionForm>
           <p className="mt-3 text-xs text-slate-400">
             You can also add one while tagging a record — search for it and pick &ldquo;Create&rdquo;.
           </p>
