@@ -279,38 +279,6 @@ export async function addSalesOrderLine(
   return { ok: 'Line added.' }
 }
 
-export async function updateSalesOrderLine(
-  _state: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const context = await requireSession()
-  assertCanWrite(context)
-
-  const id = formData.get('id') as string
-  const orderId = formData.get('sales_order_id') as string
-  const refusal = await lineEditRefusal(context, orderId)
-  if (refusal) return refusal
-
-  const parsed = lineSchema.safeParse(Object.fromEntries(formData))
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
-  }
-
-  const { error } = await scoped(context, 'sales_order_lines')
-    .update({
-      ...parsed.data,
-      description: parsed.data.description || null,
-      notes: parsed.data.notes || null,
-      revised_rate_type: parsed.data.revised_rate_type as RevisedRateType | null,
-    })
-    .eq('id', id)
-
-  if (error) throw new Error(error.message)
-
-  revalidatePath(`/sales-orders/${orderId}`)
-  return { ok: 'Line saved.' }
-}
-
 export async function removeSalesOrderLine(
   _state: ActionState,
   formData: FormData,
