@@ -453,11 +453,19 @@ export default async function ContactDetailPage({
           Deals sit directly under the record, ahead of the activity feed. What
           this person is involved in selling is usually the reason their page
           was opened, and it was below the whole feed.
+
+          That held on a wide screen only. The grid puts this column under the
+          record, but the order class read `order-9`, so a phone — where the
+          wrappers dissolve and the order classes are the whole layout — showed
+          Deals ninth, behind Additional info, Record history and Email consent.
+          Sixth now: after the cards that say who this person is, ahead of the
+          ones that say how the record was kept. The same place a company gives
+          its own Deals card.
         */}
         <div className="contents lg:block lg:space-y-5 lg:col-span-2 lg:col-start-1 lg:row-start-2">
           <Section
             title="Deals"
-            className="order-9"
+            className="order-6"
             actions={
               <Link
                 href={`/deals/new?contact_id=${id}`}
@@ -710,7 +718,7 @@ export default async function ContactDetailPage({
           )}
 
           {/* ---------------------------------------------------------------- */}
-          <Section title={CONTACT_CARDS[2].label} className="order-6">
+          <Section title={CONTACT_CARDS[2].label} className="order-7">
             <dl className="divide-y divide-slate-100">
               {/* Owner is in the Contact details header now, not repeated here. */}
               <FieldRow columns={1}>
@@ -766,7 +774,7 @@ export default async function ContactDetailPage({
           </Section>
 
           {/* ---------------------------------------------------------------- */}
-          <Section title="Record history" className="order-7">
+          <Section title="Record history" className="order-8">
             <dl className="divide-y divide-slate-100">
               <FieldRow columns={1}>
                 <Field label="Created by">
@@ -796,7 +804,7 @@ export default async function ContactDetailPage({
             the answer to "may we email this person", which is a different kind
             of question from who owns the record.
           */}
-          <Section title="Email consent" className="order-8">
+          <Section title="Email consent" className="order-9">
             <dl className="divide-y divide-slate-100">
               <FieldRow columns={1}>
                 <Field label="Basis">
