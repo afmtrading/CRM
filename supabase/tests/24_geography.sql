@@ -233,11 +233,12 @@ begin
 
   perform test_assert(
     (select name from countries where code = 'CA') = 'Canada', 'and says what CA is');
-  -- The nine trading regions share the list, coded from the ISO user-assigned
-  -- X series so they can sit behind the same foreign key as a country.
+  -- The trading regions share the list, coded from the ISO user-assigned X
+  -- series so they can sit behind the same foreign key as a country. Nine of
+  -- them name a part of the world; the tenth, Global, means all of it.
   perform test_assert(
-    (select count(*) from countries where kind = 'region') = 9,
-    'and the nine trading regions are in it too');
+    (select count(*) from countries where kind = 'region') = 10,
+    'and the ten trading regions are in it too');
   perform test_assert(
     (select name from countries where code = 'XN') = 'North America',
     'named rather than coded');
@@ -245,6 +246,11 @@ begin
     (select min(sort_order) from countries where kind = 'country')
       > (select max(sort_order) from countries where kind = 'region'),
     'and sorted ahead of every country, which is where they were asked to be');
+  -- Global leads the regions, because a catch-all nobody scrolls past is a
+  -- catch-all nobody uses.
+  perform test_assert(
+    (select code from countries order by sort_order, name limit 1) = 'XG',
+    'with Global at the head of the whole list');
 
   -- A region is a place a company can be based, because based_in references
   -- countries and a region now lives there.

@@ -7,10 +7,11 @@
  * that forgets shows a group heading reading "CA" or a filter box you have to
  * know to type "CA" into.
  *
- * The nine trading regions live in the same table, coded from the ISO 3166-1
+ * The trading regions live in the same table, coded from the ISO 3166-1
  * user-assigned X series, so "sells across Europe" is one value rather than a
  * list of forty. They sort ahead of the countries because they are the coarser
- * answer and the one people reach for first.
+ * answer and the one people reach for first, and Global — everywhere, as one
+ * value rather than as ten ticks — sorts ahead of them.
  *
  * Reference data rather than tenant data: the same list for every organization,
  * small enough that a list page can load it without thinking about it.

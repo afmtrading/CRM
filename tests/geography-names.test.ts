@@ -5,7 +5,7 @@ import { placeNames } from '@/lib/geography'
 /*
  * The bug this exists to prevent: a list grouped by "Base Country" whose
  * headings read CA and US, and a filter box you have to know to type a code
- * into. The nine trading regions live in the same list, coded from the ISO
+ * into. The trading regions live in the same list, coded from the ISO
  * user-assigned X series, and have to lead it.
  */
 describe('placeNames', () => {
