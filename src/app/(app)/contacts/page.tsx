@@ -6,6 +6,7 @@ import {
   fieldsFor,
   filterFromSearchParams,
   groupRowsNested,
+  overlappingGroupField,
   labelFromFields,
   parseFilterConfig,
   TAGS_FIELD_KEY,
@@ -46,6 +47,7 @@ import {
 import {
   EmptyState,
   ErrorNote,
+  GroupOverlapNote,
   LifecycleBadge,
   PageHeader,
   StatCard,
@@ -258,13 +260,20 @@ export default async function ContactsPage({
   const [totalStat, newThisMonth, customers, unassigned] = await statsPromise;
   const savedColumns = await readColumns("contact");
 
-  const rows = (contacts ?? []) as (ContactRow & {
+  /*
+   * Tags ride along on the row so the grouping can read them. They are not a
+   * column, and groupRows has only the row to work from.
+   */
+  const rows = ((contacts ?? []) as (ContactRow & {
     companies: {
       id: string;
       name: string;
       custom_fields: Record<string, unknown>;
     } | null;
-  })[];
+  })[]).map((contact) => ({
+    ...contact,
+    [TAGS_FIELD_KEY]: tagIdsByContact.get(contact.id) ?? [],
+  }));
 
   const ownerNames = new Map(
     ownerList.map((user) => [user.id, user.name || user.email]),
@@ -305,6 +314,10 @@ export default async function ContactsPage({
    * as `lead` still reads "Lead" and an owner id still reads a name. See
    * labelFromFields.
    */
+  // Tags put a record in every group it is tagged with, so the counts add up
+  // to more than the list. The page says so rather than looking wrong.
+  const overlap = overlappingGroupField(fields, config.groupBy, config.subGroupBy);
+
   const groups = groupRowsNested(
     rows,
     config.groupBy,
@@ -606,6 +619,7 @@ export default async function ContactsPage({
       ) : (
         <BulkEdit entity="contact" fields={bulkFields} canDelete={context.canDelete}>
           <ConsentBar lists={(emailLists ?? []) as { id: string; name: string }[]} />
+          {overlap && <GroupOverlapNote label={overlap.label} />}
           <div className="space-y-8">
             {groups.map((group) => (
             <div key={group.key ?? "all"}>

@@ -71,6 +71,12 @@ export interface FieldDef {
   options?: { value: string; label: string }[]
   groupable?: boolean
   sortable?: boolean
+  /**
+   * The field holds several values at once, so a row grouped by it lands in
+   * more than one bucket. Only meaningful alongside `groupable`; the lists read
+   * it to warn that the group counts add up to more than the rows above them.
+   */
+  multi?: boolean
 }
 
 /**
@@ -92,7 +98,25 @@ export const TAGS_FIELD_KEY = 'tags'
  * includes none, is empty. The options are tag ids rather than names, so
  * renaming a tag does not break a saved view that filters on it.
  */
-export const TAGS_FIELD: FieldDef = { key: TAGS_FIELD_KEY, label: 'Tags', type: 'array' }
+export const TAGS_FIELD: FieldDef = {
+  key: TAGS_FIELD_KEY,
+  label: 'Tags',
+  type: 'array',
+  /*
+   * Groupable, and multi, which is the whole difficulty. A record carries any
+   * number of tags, so "group by tag" puts it under each one it wears rather
+   * than inventing a bucket called "Canada, VIP" that answers no question
+   * anybody asked. See groupKeys.
+   *
+   * This is not the ruling made for `sells_in` and the other territory arrays,
+   * which stay ungroupable. The difference is what the values are for: a
+   * territory list describes one fact about a company and reads as a set, while
+   * tags are the words an organization invented precisely so it could pull one
+   * out and look at everything wearing it.
+   */
+  groupable: true,
+  multi: true,
+}
 
 export const CONTACT_FIELDS: FieldDef[] = [
   { key: 'first_name', label: 'First name', type: 'text', sortable: true },
@@ -133,18 +157,21 @@ export const COMPANY_FIELDS: FieldDef[] = [
   { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
   /*
-   * Where they are and where they trade, as three separate questions.
+   * Where they are and where they trade, as separate questions.
    *
-   * based_in groups usefully — "how many of our buyers are in Canada" is a
-   * sensible column heading. The territories do not: a company selling in six
-   * countries belongs to six groups at once, and a grouped list would either
-   * repeat it or pick one arbitrarily.
+   * All of them group. based_in is one country and one heading; the rest are
+   * lists, so a company selling in six countries appears under all six. That
+   * used to be the reason they were not offered — repeat the row or pick one
+   * arbitrarily — and it stopped being a reason when grouping learned to
+   * repeat honestly and the page learned to say it had. "Which of our
+   * suppliers sell to Canada" is the same question as "which are tagged VIP",
+   * asked of a column instead of a label.
    */
   { key: 'based_in', label: 'Base Country', type: 'enum', groupable: true, sortable: true },
-  { key: 'sells_in', label: 'Sells To', type: 'array' },
-  { key: 'specialty_market', label: 'Merchandise', type: 'array' },
-  { key: 'stock_type', label: 'Stock type', type: 'array' },
-  { key: 'customer_type', label: 'Company type', type: 'array' },
+  { key: 'sells_in', label: 'Sells To', type: 'array', groupable: true, multi: true },
+  { key: 'specialty_market', label: 'Merchandise', type: 'array', groupable: true, multi: true },
+  { key: 'stock_type', label: 'Stock type', type: 'array', groupable: true, multi: true },
+  { key: 'customer_type', label: 'Company type', type: 'array', groupable: true, multi: true },
   { key: 'created_at', label: 'Created', type: 'date', sortable: true },
   TAGS_FIELD,
 ]
@@ -210,8 +237,9 @@ export const MARKETPLACE_FIELDS: FieldDef[] = [
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
   { key: 'based_in', label: 'Base Country', type: 'enum', groupable: true, sortable: true },
   { key: 'domain', label: 'Website', type: 'text' },
-  { key: 'sells_in', label: 'Sells To', type: 'array' },
-  { key: 'specialty_market', label: 'Merchandise', type: 'array' },
+  // The company's own columns, so they group exactly as they do on Companies.
+  { key: 'sells_in', label: 'Sells To', type: 'array', groupable: true, multi: true },
+  { key: 'specialty_market', label: 'Merchandise', type: 'array', groupable: true, multi: true },
 
   { key: 'marketplace_profiles.marketplace_type', label: 'Marketplace type', type: 'array' },
   { key: 'marketplace_profiles.fulfilment', label: 'Fulfilment', type: 'array' },
@@ -277,6 +305,9 @@ export function fieldsFor(
           ? 'enum'
           : definition.field_type,
       groupable: true,
+      // A multiselect stores a list, so grouping by one lands a record in each
+      // of its values — the same arithmetic as tags. See groupKeys.
+      multi: definition.field_type === 'multiselect',
       sortable: false,
       options: fieldOptions
         .filter(
@@ -642,9 +673,34 @@ export interface RowGroup<T> {
  * into an embedded row, where the marketplaces list joins a company to its
  * profile and the thing worth grouping by lives on the profile.
  */
-function groupValue(row: Record<string, unknown>, field: string): string | null {
+/**
+ * The buckets one row belongs to. Usually one; sometimes several.
+ *
+ * A field holding a list — tags, a multiselect custom field — puts the row in
+ * each of its values. A company tagged VIP and Canada appears under both,
+ * because the question somebody is asking of a tag grouping is "show me the
+ * VIP ones", and a bucket labelled "Canada, VIP" answers it for nobody.
+ *
+ * The cost is that the group counts add up to more than the number of rows on
+ * the page. The lists say so out loud when it happens rather than leaving it to
+ * be discovered — the deal ledger has grouped by product and region this way
+ * for as long as it has existed, and says the same thing.
+ *
+ * An empty list is not a bucket per value, it is the absence of one: the row
+ * goes to `null` and reads as None, alongside the rows whose single value is
+ * missing.
+ */
+function groupKeys(row: Record<string, unknown>, field: string): (string | null)[] {
   const raw = rowValue(row, field)
-  return raw === null || raw === undefined || raw === '' ? null : String(raw)
+
+  if (Array.isArray(raw)) {
+    const keys = raw
+      .filter((value) => value !== null && value !== undefined && value !== '')
+      .map(String)
+    return keys.length > 0 ? [...new Set(keys)] : [null]
+  }
+
+  return [raw === null || raw === undefined || raw === '' ? null : String(raw)]
 }
 
 /** The same walk, returning what is actually there rather than a label. */
@@ -676,10 +732,11 @@ export function groupRows<T extends Record<string, unknown>>(
   const buckets = new Map<string | null, T[]>()
 
   for (const row of rows) {
-    const key = groupValue(row, groupBy)
-    const bucket = buckets.get(key)
-    if (bucket) bucket.push(row)
-    else buckets.set(key, [row])
+    for (const key of groupKeys(row, groupBy)) {
+      const bucket = buckets.get(key)
+      if (bucket) bucket.push(row)
+      else buckets.set(key, [row])
+    }
   }
 
   return [...buckets.entries()]
@@ -758,6 +815,28 @@ export function groupRowsNested<T extends Record<string, unknown>>(
     ...group,
     subGroups: groupRows(group.rows, subGroupBy, (value) => labelFor(subGroupBy, value)),
   }))
+}
+
+/**
+ * The field, if any, that puts a row in more than one group.
+ *
+ * As soon as either level groups by a field holding a list, the group counts
+ * stop summing to the length of the list. The pages say so, and they need the
+ * field to say which one — hence the definition back rather than a boolean.
+ * The top level wins when both are lists: it is the one whose headings a reader
+ * is adding up.
+ */
+export function overlappingGroupField(
+  fields: FieldDef[],
+  groupBy: string | null | undefined,
+  subGroupBy: string | null | undefined,
+): FieldDef | null {
+  if (!groupBy) return null
+
+  const multi = (key: string | null | undefined) =>
+    fields.find((field) => field.key === key && field.multi) ?? null
+
+  return multi(groupBy) ?? multi(subGroupBy)
 }
 
 // -----------------------------------------------------------------------------

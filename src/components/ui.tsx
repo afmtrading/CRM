@@ -236,6 +236,24 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * Said on any list grouped by a field a record can hold several of.
+ *
+ * A record tagged twice is in two groups, so the headings count more rows
+ * between them than the list holds. That is the useful behaviour — it is what
+ * makes "show me the VIP ones" work — but a count that quietly double-counts
+ * is worse than no count, so the page says it rather than letting somebody add
+ * the headings up and conclude the list is broken.
+ */
+export function GroupOverlapNote({ label }: { label: string }) {
+  return (
+    <p className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600">
+      A record can carry more than one {label.toLowerCase()}, so it appears under each one it
+      carries. The group counts therefore add up to more than the number of records listed.
+    </p>
+  )
+}
+
 export function Section({
   title,
   actions,

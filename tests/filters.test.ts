@@ -9,10 +9,14 @@ import {
   filterToSearchParams,
   groupRows,
   groupRowsNested,
+  COMPANY_FIELDS,
   labelFromFields,
+  MARKETPLACE_FIELDS,
   matchesFilter,
+  overlappingGroupField,
   parseFilterConfig,
   sortRows,
+  TAGS_FIELD,
   TAGS_FIELD_KEY,
   tagPredicate,
   tagsMatch,
@@ -382,6 +386,173 @@ describe('groupRows', () => {
   it('sorts the ungrouped bucket last', () => {
     const groups = groupRows(rows, 'source')
     expect(groups.at(-1)?.key).toBeNull()
+  })
+})
+
+describe('grouping by a field that holds several values', () => {
+  /*
+   * Tag ids, as the lists carry them: the group key is the id and the heading
+   * comes from the field's options, so renaming a tag moves no record.
+   */
+  const rows = [
+    { id: '1', tags: ['vip', 'canada'] },
+    { id: '2', tags: ['vip'] },
+    { id: '3', tags: [] },
+    { id: '4', tags: ['canada'] },
+  ]
+
+  it('puts a row in every group it belongs to', () => {
+    const groups = groupRows(rows, TAGS_FIELD_KEY)
+
+    expect(groups.map((group) => group.key)).toEqual(['canada', 'vip', null])
+    expect(groups.find((group) => group.key === 'vip')?.rows.map((row) => row.id)).toEqual([
+      '1',
+      '2',
+    ])
+    expect(groups.find((group) => group.key === 'canada')?.rows.map((row) => row.id)).toEqual([
+      '1',
+      '4',
+    ])
+  })
+
+  it('counts a doubly tagged row once per group, so the groups outnumber the rows', () => {
+    const groups = groupRows(rows, TAGS_FIELD_KEY)
+    const counted = groups.reduce((total, group) => total + group.rows.length, 0)
+
+    expect(counted).toBe(5)
+    expect(counted).toBeGreaterThan(rows.length)
+  })
+
+  it('sends an untagged row to the empty bucket rather than a bucket of its own', () => {
+    const groups = groupRows(rows, TAGS_FIELD_KEY)
+    const untagged = groups.find((group) => group.key === null)
+
+    expect(untagged?.rows.map((row) => row.id)).toEqual(['3'])
+    expect(groups.at(-1)?.key).toBeNull()
+  })
+
+  it('does not repeat a row that carries the same value twice', () => {
+    const groups = groupRows([{ id: '1', tags: ['vip', 'vip'] }], TAGS_FIELD_KEY)
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].rows).toHaveLength(1)
+  })
+
+  it('ignores blanks inside the list', () => {
+    const groups = groupRows([{ id: '1', tags: ['vip', '', null] }], TAGS_FIELD_KEY)
+
+    expect(groups.map((group) => group.key)).toEqual(['vip'])
+  })
+
+  it('reads tag headings off the field options', () => {
+    const fields = [{ ...TAGS_FIELD, options: [{ value: 'vip', label: 'VIP' }] }]
+
+    expect(labelFromFields(fields)(TAGS_FIELD_KEY, 'vip')).toBe('VIP')
+    expect(labelFromFields(fields)(TAGS_FIELD_KEY, null)).toBe('None')
+  })
+
+  it('still groups a single-valued field into one bucket each', () => {
+    const groups = groupRows(
+      [
+        { id: '1', source: 'website' },
+        { id: '2', source: 'website' },
+      ],
+      'source',
+    )
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].rows).toHaveLength(2)
+  })
+
+  it('sub-groups the repeated row inside each group it landed in', () => {
+    const nested = groupRowsNested(
+      [
+        { id: '1', tags: ['vip', 'canada'], priority: 'high' },
+        { id: '2', tags: ['vip'], priority: 'low' },
+      ],
+      TAGS_FIELD_KEY,
+      'priority',
+    )
+
+    const vip = nested.find((group) => group.key === 'vip')
+    expect(vip?.subGroups?.map((group) => group.key)).toEqual(['high', 'low'])
+    expect(nested.find((group) => group.key === 'canada')?.subGroups).toHaveLength(1)
+  })
+})
+
+describe('overlappingGroupField', () => {
+  const fields = [
+    TAGS_FIELD,
+    { key: 'priority', label: 'Priority', type: 'enum' as const, groupable: true },
+  ]
+
+  it('names the field when the top level holds several values', () => {
+    expect(overlappingGroupField(fields, TAGS_FIELD_KEY, null)?.label).toBe('Tags')
+  })
+
+  it('names it when only the sub-group does', () => {
+    expect(overlappingGroupField(fields, 'priority', TAGS_FIELD_KEY)?.label).toBe('Tags')
+  })
+
+  it('prefers the top level, which is the one being added up', () => {
+    expect(overlappingGroupField(fields, TAGS_FIELD_KEY, 'priority')?.label).toBe('Tags')
+  })
+
+  it('says nothing when neither level repeats a row', () => {
+    expect(overlappingGroupField(fields, 'priority', null)).toBeNull()
+  })
+
+  it('says nothing when there is no grouping at all', () => {
+    expect(overlappingGroupField(fields, null, TAGS_FIELD_KEY)).toBeNull()
+  })
+})
+
+describe('the multi-valued columns a list can be grouped by', () => {
+  const byKey = (fields: typeof COMPANY_FIELDS, key: string) =>
+    fields.find((field) => field.key === key)
+
+  it.each(['sells_in', 'specialty_market', 'stock_type', 'customer_type'])(
+    'offers %s as a grouping on companies, and declares that it repeats a row',
+    (key) => {
+      const field = byKey(COMPANY_FIELDS, key)
+      expect(field?.groupable).toBe(true)
+      expect(field?.multi).toBe(true)
+    },
+  )
+
+  /* The same company columns, so they have to behave the same on both lists. */
+  it.each(['sells_in', 'specialty_market'])('offers %s on marketplaces too', (key) => {
+    const field = byKey(MARKETPLACE_FIELDS, key)
+    expect(field?.groupable).toBe(true)
+    expect(field?.multi).toBe(true)
+  })
+
+  it('puts a company selling in three countries under all three', () => {
+    const groups = groupRows(
+      [
+        { id: '1', sells_in: ['CA', 'US', 'MX'] },
+        { id: '2', sells_in: ['CA'] },
+        { id: '3', sells_in: [] },
+      ],
+      'sells_in',
+    )
+
+    expect(groups.map((group) => group.key)).toEqual(['CA', 'MX', 'US', null])
+    expect(groups.find((group) => group.key === 'CA')?.rows).toHaveLength(2)
+  })
+
+  it('warns on a territory grouping the same way it warns on tags', () => {
+    expect(overlappingGroupField(COMPANY_FIELDS, 'sells_in', null)?.label).toBe('Sells To')
+  })
+
+  /*
+   * based_in is one country per company however many it sells to, so it files
+   * each of them once. A heading count that can be trusted must not carry the
+   * warning, or the warning stops meaning anything.
+   */
+  it('says nothing for a grouping that files each company once', () => {
+    expect(overlappingGroupField(COMPANY_FIELDS, 'based_in', null)).toBeNull()
+    expect(overlappingGroupField(COMPANY_FIELDS, 'priority', null)).toBeNull()
   })
 })
 

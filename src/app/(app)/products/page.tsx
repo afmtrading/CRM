@@ -13,7 +13,14 @@ import { round2 } from '@/lib/sales'
 import { availableTone, formatQuantity } from '@/lib/stock'
 import { startOfMonthIn } from '@/lib/timezone'
 import { productImageUrl } from '@/lib/product-image'
-import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
+import {
+  EmptyState,
+  GroupOverlapNote,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  SubGroupRow,
+} from '@/components/ui'
 import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
@@ -23,6 +30,7 @@ import {
   fieldsFor,
   filterFromSearchParams,
   groupRowsNested,
+  overlappingGroupField,
   labelFromFields,
   parseFilterConfig,
   TAGS_FIELD_KEY,
@@ -143,7 +151,14 @@ export default async function ProductsPage({
       .order('order'),
   ])
 
-  const products = (data ?? []) as ProductRow[]
+  /*
+   * Tags ride along on the row so the grouping can read them. They are not a
+   * column, and groupRows has only the row to work from.
+   */
+  const products = ((data ?? []) as ProductRow[]).map((product) => ({
+    ...product,
+    [TAGS_FIELD_KEY]: tagIdsByProduct.get(product.id) ?? [],
+  }))
   const definitions = (definitionRows ?? []) as CustomFieldDefinitionRow[]
   const savedColumns = await readColumns('product')
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
@@ -272,6 +287,10 @@ export default async function ProductsPage({
     ][],
   )
   if (!showRetired) retiredToggle.set('show', 'all')
+  // Tags put a record in every group it is tagged with, so the counts add up
+  // to more than the list. The page says so rather than looking wrong.
+  const overlap = overlappingGroupField(fields, config.groupBy, config.subGroupBy)
+
 
   const groups = groupRowsNested(
     products,
@@ -546,8 +565,10 @@ export default async function ProductsPage({
           }
         />
       ) : (
-        <div className="space-y-8">
-          {groups.map((group) => (
+        <>
+          {overlap && <GroupOverlapNote label={overlap.label} />}
+          <div className="space-y-8">
+            {groups.map((group) => (
             <div key={group.key ?? 'all'}>
               {config.groupBy && (
                 <div className="group-header flex items-baseline justify-between gap-3">
@@ -628,7 +649,8 @@ export default async function ProductsPage({
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
     </>
   )
