@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { requireSession, scoped } from '@/lib/tenancy'
 import { contactName, formatDay, formatPrice } from '@/lib/format'
 import { renderMarkdown } from '@/lib/field-options'
-import { MARKETPLACE_OPTION_FIELDS, directionLabel, yesNo } from '@/lib/marketplace'
+import { MARKETPLACE_OPTION_FIELDS, yesNo } from '@/lib/marketplace'
 import type {
   CompanyRow,
   ContactRow,
@@ -119,7 +119,6 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
     <>
       <PageHeader
         title={business.name}
-        description={`${directionLabel(profile)} · ${business.based_in ?? 'no country on file'}`}
         actions={
           <>
             <Link href={`/companies/${business.id}`} className="btn-secondary">
