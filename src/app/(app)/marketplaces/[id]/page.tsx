@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { requireSession, scoped } from '@/lib/tenancy'
 import { placeNames, type Place } from '@/lib/geography'
 import { formatDay } from '@/lib/format'
-import { renderMarkdown, COMPANY_CARDS, optionsForField } from '@/lib/field-options'
+import { COMPANY_CARDS, optionsForField } from '@/lib/field-options'
 import { MARKETPLACE_OPTION_FIELDS } from '@/lib/marketplace'
 import type {
   ActivityRow,
@@ -28,6 +28,9 @@ import {
   CompanyInfoRows,
   type CompanyDeal,
 } from '@/components/company-cards'
+/* The row rhythm the record cards on this page use — see the note in the
+   Marketplace detail card. */
+import { FieldRow } from '@/components/contact-cards'
 import { PageHeader, Section } from '@/components/ui'
 import { TagPicker } from '@/components/tag-picker'
 
@@ -149,7 +152,6 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
     return user ? user.name || user.email : null
   }
 
-  const feesHtml = renderMarkdown(profile.fee_notes)
 
   return (
     <>
@@ -185,86 +187,106 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
               <input type="hidden" name="company_id" value={id} />
               <input type="hidden" name="section" value="detail" />
 
-              <fieldset>
-                <legend className="label">Used for</legend>
-                <label className="flex items-center gap-2 py-0.5 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    name="sells_through"
-                    defaultChecked={profile.sells_through}
-                    className="h-4 w-4 rounded border-slate-300"
+              {/*
+                Four rows of two, ruled between, in the rhythm the read-only
+                cards beside this one use — FieldRow and divide-y are the same
+                primitives Company info and Company Rating are built from, so a
+                form and a record read as the same kind of thing.
+
+                The pairing is by question rather than by control: what is sold
+                and what stock it is, how it ships and who it reaches, what it
+                costs and who pays the premium, how the money moves and which
+                directions the channel is used in.
+              */}
+              <div className="divide-y divide-slate-100">
+                <FieldRow>
+                  <Multi
+                    name="marketplace_type"
+                    label="Marketplace type"
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.type)}
+                    selected={profile.marketplace_type}
                   />
-                  Selling
-                </label>
-                <label className="flex items-center gap-2 py-0.5 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    name="sources_from"
-                    defaultChecked={profile.sources_from}
-                    className="h-4 w-4 rounded border-slate-300"
+                  <Multi
+                    name="inventory_type"
+                    label="Inventory type"
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
+                    selected={profile.inventory_type}
                   />
-                  Sourcing
-                </label>
-              </fieldset>
+                </FieldRow>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Multi
-                  name="marketplace_type"
-                  label="Marketplace type"
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.type)}
-                  selected={profile.marketplace_type}
-                />
-                <Single
-                  name="selling_cost"
-                  label="Selling cost"
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.sellingCost)}
-                  selected={profile.selling_cost}
-                />
-                <Multi
-                  name="fulfilment"
-                  label="Fulfilment"
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.fulfilment)}
-                  selected={profile.fulfilment}
-                />
-                <Single
-                  name="payment"
-                  label="Payment"
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.payment)}
-                  selected={profile.payment}
-                />
+                <FieldRow>
+                  <Multi
+                    name="fulfilment"
+                    label="Fulfilment"
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.fulfilment)}
+                    selected={profile.fulfilment}
+                  />
+                  <Multi
+                    name="audience"
+                    label="Audience"
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.audience)}
+                    selected={profile.audience}
+                  />
+                </FieldRow>
 
-                <div>
-                  <label className="label" htmlFor="buyers_premium">
-                    Buyer&rsquo;s premium
-                  </label>
-                  <select
-                    id="buyers_premium"
-                    name="buyers_premium"
-                    className="input"
-                    defaultValue={
-                      profile.buyers_premium === null ? '' : String(profile.buyers_premium)
-                    }
-                  >
-                    {/* Blank is a real answer, not a prompt: it means nobody has
-                        looked it up, which is different from there being none. */}
-                    <option value="">Not recorded</option>
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                  </select>
-                </div>
+                <FieldRow>
+                  <Single
+                    name="selling_cost"
+                    label="Selling cost"
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.sellingCost)}
+                    selected={profile.selling_cost}
+                  />
+                  <div>
+                    <label className="label" htmlFor="buyers_premium">
+                      Buyer&rsquo;s premium
+                    </label>
+                    <select
+                      id="buyers_premium"
+                      name="buyers_premium"
+                      className="input"
+                      defaultValue={
+                        profile.buyers_premium === null ? '' : String(profile.buyers_premium)
+                      }
+                    >
+                      {/* Blank is a real answer, not a prompt: it means nobody
+                          has looked it up, which is different from there being
+                          none. */}
+                      <option value="">Not recorded</option>
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </div>
+                </FieldRow>
 
-                <Multi
-                  name="audience"
-                  label="Audience"
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.audience)}
-                  selected={profile.audience}
-                />
-                <Multi
-                  name="inventory_type"
-                  label="Inventory type"
-                  options={optionsFor(MARKETPLACE_OPTION_FIELDS.inventoryType)}
-                  selected={profile.inventory_type}
-                />
+                <FieldRow>
+                  <Single
+                    name="payment"
+                    label="Payment"
+                    options={optionsFor(MARKETPLACE_OPTION_FIELDS.payment)}
+                    selected={profile.payment}
+                  />
+                  <fieldset>
+                    <legend className="label">Used for</legend>
+                    <label className="flex items-center gap-2 py-0.5 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        name="sells_through"
+                        defaultChecked={profile.sells_through}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      Selling
+                    </label>
+                    <label className="flex items-center gap-2 py-0.5 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        name="sources_from"
+                        defaultChecked={profile.sources_from}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      Sourcing
+                    </label>
+                  </fieldset>
+                </FieldRow>
               </div>
 
               {context.canWrite && <SubmitButton className="btn-primary">Save</SubmitButton>}
@@ -281,15 +303,12 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
               three decimal places. So the percentages are prose and the
               comparison is the Selling cost field on the card above.
             */}
-            {feesHtml && (
-              <div
-                // Safe by construction: renderMarkdown escapes the stored text
-                // before applying any formatting, so nothing here is raw HTML.
-                className="mb-4 space-y-2 border-b border-slate-100 pb-4 text-sm leading-relaxed text-slate-700"
-                dangerouslySetInnerHTML={{ __html: feesHtml }}
-              />
-            )}
-
+            {/*
+              One copy, not two. The card used to render the stored text above
+              the box that holds it, so the same sentence appeared twice with
+              nothing to tell a reader which of them was the record. The box is
+              the one that can be changed, so the box is the one that stays.
+            */}
             <ActionForm action={updateMarketplace} className="space-y-3">
               <input type="hidden" name="company_id" value={id} />
               <input type="hidden" name="section" value="fees" />
@@ -307,9 +326,12 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                   defaultValue={profile.fee_notes ?? ''}
                   placeholder={'15% seller fee\n3% processing\n$0.30 a listing, waived under $50'}
                 />
+                {/* No markdown promise any more: nothing renders this as
+                    formatted text now that the duplicate above is gone, and a
+                    hint for formatting nobody will see is a small lie. */}
                 <p className="mt-1 text-xs text-slate-400">
-                  Markdown: **bold**, `-` bullets, [links](url). Commission, listing fees,
-                  processing — whatever this platform charges, in whatever words fit.
+                  Commission, listing fees, processing — whatever this platform charges, in
+                  whatever words fit.
                 </p>
               </div>
 
