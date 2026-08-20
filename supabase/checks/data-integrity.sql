@@ -174,13 +174,23 @@ nameless as (
   having count(*) > 0
 ),
 
+-- A contact nobody can open a conversation with. LinkedIn counts as a way
+-- through: a lead captured from a profile before anyone has sourced an email is
+-- prospecting in progress, not a defective row, and a check that flags it
+-- teaches the reader to skip the check.
+--
+-- The remaining ways to reach a contact — website, facebook, instagram,
+-- x_twitter and the links array — are still not counted. Widen this the same
+-- way if one of them turns out to be how somebody is actually being worked.
 unreachable as (
-  select 'contact' as entity, 'email/phone' as field, '(no email, no phone)' as value, count(*) as rows
+  select 'contact' as entity, 'email/phone/linkedin' as field,
+         '(no email, phone or LinkedIn)' as value, count(*) as rows
   from live_contacts c
   where coalesce(
     nullif(trim(c.email), ''),
     nullif(trim(c.phone), ''),
-    nullif(trim(c.office_phone), '')
+    nullif(trim(c.office_phone), ''),
+    nullif(trim(c.linkedin), '')
   ) is null
   having count(*) > 0
 ),
