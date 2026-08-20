@@ -12,6 +12,8 @@ import {
   TAGS_FIELD_KEY,
 } from "@/lib/filters";
 import { contactName, formatDay } from "@/lib/format";
+import { LIFECYCLE_LABELS } from "@/lib/field-options";
+import { chosenValues } from "@/lib/custom-fields";
 import { startOfMonthIn } from "@/lib/timezone";
 import type {
   FieldOptionRow,
@@ -37,23 +39,17 @@ import { ColumnPicker } from "@/components/column-picker";
 import { readColumns } from "../column-actions";
 import { ConsentBar } from "@/components/consent-bar";
 import { FilterBar } from "@/components/filter-bar";
-import {
-  CustomCell,
-  Empty,
-  OptionBadge,
-  OptionBadges,
-  optionColor,
-} from "@/components/contact-cards";
+import { CustomCell, Empty, OptionBadges } from "@/components/contact-cards";
 import {
   EmptyState,
   ErrorNote,
   GroupOverlapNote,
-  LifecycleBadge,
   PageHeader,
   StatCard,
   StatGrid,
-  SubGroupRow,
 } from "@/components/ui";
+import { CollapsibleGroup, CollapsibleSubGroup } from "@/components/collapsible";
+import { InlineEdit, InlineText, type InlineOption } from "@/components/inline-edit";
 import {
   AlertIcon,
   AwardIcon,
@@ -81,6 +77,22 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: "Contacts · FLO CRM" };
 
 const PAGE_SIZE = 200;
+
+/*
+ * The lifecycle stages, for the cell that edits one.
+ *
+ * Not a field_options list — the stages are a column with a check constraint
+ * on it, so the colours are named here to match the badge the record's own
+ * page draws. The cell that uses this offers no way to empty it: a contact
+ * always has a stage, "none" is `lead`, and the database whitelist refuses
+ * `clear` on the column anyway.
+ */
+const LIFECYCLE_OPTIONS: InlineOption[] = [
+  { value: "lead", label: LIFECYCLE_LABELS.lead, color: "slate" },
+  { value: "qualified", label: LIFECYCLE_LABELS.qualified, color: "amber" },
+  { value: "customer", label: LIFECYCLE_LABELS.customer, color: "green" },
+  { value: "other", label: LIFECYCLE_LABELS.other, color: "slate" },
+];
 
 /** Filter conditions travel in the URL as a JSON `f` param (see filterToSearchParams). */
 const UNASSIGNED_VIEW = `/contacts?f=${encodeURIComponent(
@@ -199,6 +211,57 @@ export default async function ContactsPage({
     contactOptions.filter((option) => option.field_key === key);
 
   /*
+   * The same list, in the shape an editable cell wants: the value, the word to
+   * show for it, and the colour an admin gave it in Settings → Fields, so the
+   * menu offers exactly the badges the column is already drawing.
+   *
+   * Built once per field and handed to every row that shows it. React writes
+   * an object it has already written as a back-reference, so one shared array
+   * costs one copy in the payload while a fresh array per row costs two
+   * hundred — which on the company picker below is the difference between
+   * forty kilobytes and four megabytes.
+   */
+  const inlineOptionCache = new Map<string, InlineOption[]>();
+  const inlineOptions = (key: string): InlineOption[] => {
+    const built = inlineOptionCache.get(key);
+    if (built) return built;
+
+    const options = optionsFor(key).map((option) => ({
+      value: option.value,
+      label: option.value,
+      color: option.color,
+    }));
+    inlineOptionCache.set(key, options);
+    return options;
+  };
+
+  /** The people a record can be assigned to. Also built once — see above. */
+  const ownerOptions: InlineOption[] = ownerList.map((user) => ({
+    value: user.id,
+    label: user.name || user.email,
+  }));
+
+  /*
+   * Which cells can be changed from the list at all. Ownership is a manager's
+   * decision wherever it is made — the record's own form does not render the
+   * field for a rep either — and everything else follows plain write access.
+   * The database checks both again; this only decides what is offered.
+   */
+  const canEditCell = context.canWrite;
+  const canAssign = context.canManage;
+
+  /*
+   * The tags an organization has, as options. Their colours are hexes an admin
+   * chose in Settings → Tags rather than one of the ten named ones, so they
+   * ride as a swatch — see InlineOption.
+   */
+  const tagOptions: InlineOption[] = tagList.map((tag) => ({
+    value: tag.id,
+    label: tag.name,
+    swatch: tag.color,
+  }));
+
+  /*
    * Region is a field of the company rather than the contact, so the column
    * finds it by name — the same lookup the companies list uses.
    */
@@ -210,6 +273,35 @@ export default async function ContactsPage({
           option.field_key === regionField.key,
       )
     : [];
+
+  /*
+   * Every company, as options for the cell that moves a contact between them.
+   * Each carries its own link, so the value in the cell stays clickable and
+   * points at whichever company is chosen — see InlineOption.href.
+   */
+  const companyOptions: InlineOption[] = companyList.map((company) => ({
+    value: company.id,
+    label: company.name,
+    href: `/companies/${company.id}`,
+  }));
+  const companyIds = new Set(companyList.map((company) => company.id));
+
+  /*
+   * …and the same list with this contact's own company guaranteed to be in it.
+   *
+   * The picker's list comes back from one query, and PostgREST caps how many
+   * rows that returns. On a book of companies large enough to hit that cap, a
+   * contact can be at one the list does not mention — and an option list
+   * missing the value it is showing would draw a raw id where a name should
+   * be. The copy only happens in that case.
+   */
+  const companyOptionsFor = (company: { id: string; name: string } | null) =>
+    company && !companyIds.has(company.id)
+      ? [
+          { value: company.id, label: company.name, href: `/companies/${company.id}` },
+          ...companyOptions,
+        ]
+      : companyOptions;
 
   const fields = fieldsFor(
     "contact",
@@ -275,22 +367,11 @@ export default async function ContactsPage({
     [TAGS_FIELD_KEY]: tagIdsByContact.get(contact.id) ?? [],
   }));
 
-  const ownerNames = new Map(
-    ownerList.map((user) => [user.id, user.name || user.email]),
-  );
-
-  /* Tag ids to the tag, and each contact to the tags on it. */
-  const tagsById = new Map(
-    tagList.map((tag) => [tag.id, tag]),
-  );
-  const tagsByContact = new Map<string, Pick<TagRow, "id" | "name" | "color">[]>();
-  for (const link of (contactTagRows ?? []) as { contact_id: string; tag_id: string }[]) {
-    const tag = tagsById.get(link.tag_id);
-    if (!tag) continue;
-    const list = tagsByContact.get(link.contact_id);
-    if (list) list.push(tag);
-    else tagsByContact.set(link.contact_id, [tag]);
-  }
+  /*
+   * Which tags each contact carries is already `tagIdsByContact`, built above
+   * for the filter. The cell draws them from the option list by id, so there
+   * is no second map from contact to tag rows any more.
+   */
   /*
    * Region is not offered here. It belongs to the company, so setting it on a
    * selection of contacts would quietly edit their employers — including for
@@ -355,86 +436,154 @@ export default async function ContactsPage({
           </Link>
         );
       case "company":
-        return contact.companies ? (
-          <Link
-            href={`/companies/${contact.companies.id}`}
-            className="block truncate text-slate-600 hover:text-brand-700 hover:underline"
-          >
-            {contact.companies.name}
-          </Link>
-        ) : (
-          <Empty />
+        /*
+         * Editable, and still a link. The company name goes on pointing at the
+         * company; the chevron beside it is what opens the picker, so a column
+         * people use to get somewhere did not become one they can only change.
+         */
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="company_id"
+            fieldLabel="Company"
+            values={contact.companies ? [contact.companies.id] : []}
+            options={companyOptionsFor(contact.companies)}
+            canEdit={canEditCell}
+          />
         );
+      /*
+       * Typed where it is shown. The mailto and tel links are not lost with
+       * the anchor — they are the two icons at the end of every row, which is
+       * where somebody reaches for them anyway. What the cell is for is fixing
+       * the address that bounced.
+       */
       case "email":
-        return contact.email ? (
-          <a href={`mailto:${contact.email}`} className="text-brand-700 hover:underline">
-            {contact.email}
-          </a>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="contact"
+            id={contact.id}
+            field="email"
+            fieldLabel="Email"
+            kind="email"
+            value={contact.email ?? ""}
+            display={
+              contact.email ? (
+                <span className="block truncate text-slate-600">{contact.email}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         );
       case "phone":
-        return contact.phone ? (
-          <span className="whitespace-nowrap text-slate-600">{contact.phone}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="contact"
+            id={contact.id}
+            field="phone"
+            fieldLabel="Phone"
+            kind="phone"
+            value={contact.phone ?? ""}
+            display={
+              contact.phone ? (
+                <span className="whitespace-nowrap text-slate-600">{contact.phone}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         );
+      /*
+       * Owner, priority, role type, credibility, lifecycle stage and any
+       * custom list below: the cell is the editor. Click it, pick a value, and
+       * it is written — see components/inline-edit. Those are exactly the
+       * columns the database will accept a one-field change to, which is why a
+       * name or an email address is still a link to the record rather than a
+       * box to type in.
+       */
       case "owner":
-        return contact.owner_id ? (
-          <span className="text-slate-600">{ownerNames.get(contact.owner_id) ?? "—"}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="owner_id"
+            fieldLabel="Owner"
+            values={contact.owner_id ? [contact.owner_id] : []}
+            options={ownerOptions}
+            canEdit={canAssign}
+          />
         );
       case "priority":
-        return contact.priority ? (
-          <OptionBadge
-            value={contact.priority}
-            color={optionColor(optionsFor("priority"), contact.priority)}
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="priority"
+            fieldLabel="Priority"
+            values={contact.priority ? [contact.priority] : []}
+            options={inlineOptions("priority")}
+            canEdit={canEditCell}
           />
-        ) : (
-          <Empty />
         );
       case "role_type":
-        return <OptionBadges values={contact.role_type} options={optionsFor("role_type")} />;
-      case "credibility":
-        return contact.credibility ? (
-          <OptionBadge
-            value={contact.credibility}
-            color={optionColor(optionsFor("credibility"), contact.credibility)}
-          />
-        ) : (
-          <Empty />
-        );
-      case "tags": {
-        /*
-         * The tag's own colour, which an admin chose in Settings → Tags, so it
-         * is an inline style rather than a class — Tailwind cannot see a hex
-         * that only exists in the database. Tinted background, solid text, the
-         * same shape every other badge on this row has.
-         */
-        const tags = tagsByContact.get(contact.id) ?? [];
-        if (tags.length === 0) return <Empty />;
         return (
-          <span className="flex flex-wrap gap-1">
-            {tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="badge"
-                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
-              >
-                {tag.name}
-              </span>
-            ))}
-          </span>
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="role_type"
+            fieldLabel="Role type"
+            values={contact.role_type ?? []}
+            options={inlineOptions("role_type")}
+            multiple
+            canEdit={canEditCell}
+          />
         );
-      }
+      case "credibility":
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="credibility"
+            fieldLabel="Credibility"
+            values={contact.credibility ? [contact.credibility] : []}
+            options={inlineOptions("credibility")}
+            canEdit={canEditCell}
+          />
+        );
+      case "tags":
+        /*
+         * The same menu the other vocabulary fields use, over a different
+         * table: tags are a join rather than a column. Nobody reading a list
+         * should have to know which of their record's words live where.
+         */
+        return (
+          <InlineEdit
+            as="tags"
+            entity="contact"
+            id={contact.id}
+            field="tags"
+            fieldLabel="Tags"
+            values={tagIdsByContact.get(contact.id) ?? []}
+            options={tagOptions}
+            multiple
+            canEdit={canEditCell}
+          />
+        );
       case "lifecycle_stage":
-        // The badge the contact's own page uses. Every other column here with a
-        // fixed vocabulary is a badge; this one was plain lowercase text.
-        return contact.lifecycle_stage ? (
-          <LifecycleBadge stage={contact.lifecycle_stage} />
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="lifecycle_stage"
+            fieldLabel="Lifecycle stage"
+            values={contact.lifecycle_stage ? [contact.lifecycle_stage] : []}
+            options={LIFECYCLE_OPTIONS}
+            clearable={false}
+            canEdit={canEditCell}
+          />
         );
       case "lead_score":
         return <span className="text-slate-600">{contact.lead_score ?? 0}</span>;
@@ -445,10 +594,22 @@ export default async function ContactsPage({
           <Empty />
         );
       case "job_title":
-        return contact.job_title ? (
-          <span className="block truncate text-slate-600">{contact.job_title}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="contact"
+            id={contact.id}
+            field="job_title"
+            fieldLabel="Job title"
+            value={contact.job_title ?? ""}
+            display={
+              contact.job_title ? (
+                <span className="block truncate text-slate-600">{contact.job_title}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         );
       case "region":
         // The company's, not the person's — a contact has no region of its own.
@@ -460,8 +621,37 @@ export default async function ContactsPage({
         );
       case "created_at":
         return <span className="text-slate-600">{formatDay(contact.created_at)}</span>;
-      default:
+      default: {
+        /*
+         * An organization's own fields. The ones with a list behind them are
+         * editable in place like the built-in ones; a free-text or number
+         * field is shown as it is stored, because there is nothing to pick
+         * from and nothing here to validate a typed value against.
+         */
+        const definition = contactDefinitions.find(
+          (candidate) => `custom_fields.${candidate.key}` === key,
+        );
+
+        if (
+          definition &&
+          (definition.field_type === "select" || definition.field_type === "multiselect")
+        ) {
+          return (
+            <InlineEdit
+              entity="contact"
+              id={contact.id}
+              field={key}
+              fieldLabel={definition.label}
+              values={chosenValues(contact.custom_fields?.[definition.key])}
+              options={inlineOptions(definition.key)}
+              multiple={definition.field_type === "multiselect"}
+              canEdit={canEditCell}
+            />
+          );
+        }
+
         return <CustomCell row={contact} columnKey={key} />;
+      }
     }
   };
 
@@ -622,15 +812,20 @@ export default async function ContactsPage({
           {overlap && <GroupOverlapNote label={overlap.label} />}
           <div className="space-y-8">
             {groups.map((group) => (
-            <div key={group.key ?? "all"}>
-              {config.groupBy && (
-                <div className="group-header flex items-baseline justify-between gap-3">
-                  <h2>{group.label}</h2>
+            <CollapsibleGroup
+              key={group.key ?? "all"}
+              scope="contact"
+              id={group.key ?? "all"}
+              /* No heading when the list is not grouped — and then nothing to fold. */
+              label={config.groupBy ? group.label : undefined}
+              summary={
+                config.groupBy ? (
                   <span className="badge bg-brand-100 text-brand-700">
                     {group.rows.length}
                   </span>
-                </div>
-              )}
+                ) : undefined
+              }
+            >
               {/*
                 The card starts here rather than around the heading, so the
                 rounded corners land on the column header row. overflow-x is
@@ -664,29 +859,29 @@ export default async function ContactsPage({
                   </thead>
                   <tbody>
                     {/*
-                      With a sub-group, each one gets a heading row and then its
-                      rows; without, the rows go straight in. Same table either
-                      way, so the columns keep their widths.
+                      With a sub-group, each one gets a band it can be folded
+                      away by and then its rows; without, the rows go straight
+                      in. Same table either way, so the columns keep their
+                      widths.
                     */}
-                    {(group.subGroups ?? [{ key: null, label: "", rows: group.rows }]).flatMap(
-                      (sub) => [
-                        ...(group.subGroups
-                          ? [
-                              <SubGroupRow
-                                key={`sub-${sub.key ?? "none"}`}
-                                label={sub.label}
-                                count={sub.rows.length}
-                                columns={COLUMNS}
-                              />,
-                            ]
-                          : []),
-                        ...sub.rows.map(contactRow),
-                      ],
-                    )}
+                    {group.subGroups
+                      ? group.subGroups.map((sub) => (
+                          <CollapsibleSubGroup
+                            key={`sub-${sub.key ?? "none"}`}
+                            scope="contact"
+                            id={`${group.key ?? "all"}/${sub.key ?? "none"}`}
+                            label={sub.label}
+                            count={sub.rows.length}
+                            columns={COLUMNS}
+                          >
+                            {sub.rows.map(contactRow)}
+                          </CollapsibleSubGroup>
+                        ))
+                      : group.rows.map(contactRow)}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </CollapsibleGroup>
             ))}
           </div>
         </BulkEdit>

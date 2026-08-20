@@ -165,3 +165,51 @@ describe('moveColumn', () => {
     expect(items).toEqual(original)
   })
 })
+
+/*
+ * Region and Size are built-in columns that render a custom field found by
+ * name, so the field behind them must not also be offered as a custom column —
+ * two entries, same heading, same values.
+ */
+describe('the custom fields a built-in column already draws', () => {
+  it('offers Size once, not twice', () => {
+    const catalogue = columnCatalogue('company', [customField('size', 'Size', 'company')])
+
+    expect(catalogue.filter((column) => column.label === 'Size')).toHaveLength(1)
+    expect(catalogue.some((column) => column.key === 'size')).toBe(true)
+    expect(catalogue.some((column) => column.key === 'custom_fields.size')).toBe(false)
+  })
+
+  it('offers Region once, however the organization named it', () => {
+    const catalogue = columnCatalogue('company', [
+      customField('regions', 'Regions', 'company'),
+    ])
+
+    expect(catalogue.some((column) => column.key === 'custom_fields.regions')).toBe(false)
+    expect(catalogue.some((column) => column.key === 'region')).toBe(true)
+  })
+
+  it('leaves every other custom field alone', () => {
+    const catalogue = columnCatalogue('company', [
+      customField('size', 'Size', 'company'),
+      customField('tier', 'Tier', 'company'),
+    ])
+
+    expect(catalogue.some((column) => column.key === 'custom_fields.tier')).toBe(true)
+  })
+
+  /* A marketplace shows the company's custom fields, so it inherits the rule. */
+  it('applies to marketplaces too', () => {
+    const catalogue = columnCatalogue('marketplace', [customField('size', 'Size', 'company')])
+
+    expect(catalogue.some((column) => column.key === 'custom_fields.size')).toBe(false)
+  })
+
+  /* A contact's own custom field called Size is not the company's, and the
+     contact list has no Size column to collide with. */
+  it('leaves a contact custom field of the same name alone', () => {
+    const catalogue = columnCatalogue('contact', [customField('size', 'Size')])
+
+    expect(catalogue.some((column) => column.key === 'custom_fields.size')).toBe(true)
+  })
+})

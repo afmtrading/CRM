@@ -19,8 +19,9 @@ import {
   PageHeader,
   StatCard,
   StatGrid,
-  SubGroupRow,
 } from '@/components/ui'
+import { CollapsibleGroup, CollapsibleSubGroup } from '@/components/collapsible'
+import { InlineEdit, InlineText, type InlineOption } from '@/components/inline-edit'
 import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
@@ -167,18 +168,42 @@ export default async function ProductsPage({
   const typeOptions = allOptions.filter((o) => o.field_key === 'product_type')
   const priorityOptions = allOptions.filter((o) => o.field_key === 'priority')
 
-  /* Tag ids to the tag, and each product to the tags on it. */
-  const tagsById = new Map(
-    tagList.map((tag) => [tag.id, tag]),
-  )
-  const tagsByProduct = new Map<string, Pick<TagRow, 'id' | 'name' | 'color'>[]>()
-  for (const link of (productTagRows ?? []) as { product_id: string; tag_id: string }[]) {
-    const tag = tagsById.get(link.tag_id)
-    if (!tag) continue
-    const list = tagsByProduct.get(link.product_id)
-    if (list) list.push(tag)
-    else tagsByProduct.set(link.product_id, [tag])
-  }
+  const conditionOptions = allOptions.filter((o) => o.field_key === 'product_condition')
+
+  /*
+   * The option lists in the shape an editable cell wants, built once for the
+   * whole table rather than per row: React writes an object it has already
+   * written as a back-reference, so one shared array costs one copy in the
+   * payload while a fresh array per row costs two hundred.
+   */
+  const inlineOptions = (rows: FieldOptionRow[]): InlineOption[] =>
+    rows.map((option) => ({ value: option.value, label: option.value, color: option.color }))
+
+  const statusInline = inlineOptions(statusOptions)
+  const categoryInline = inlineOptions(categoryOptions)
+  const conditionInline = inlineOptions(conditionOptions)
+  const priorityInline = inlineOptions(priorityOptions)
+
+  /*
+   * Tag colours are hexes an admin chose in Settings → Tags rather than one of
+   * the ten named ones, so they ride as a swatch — see InlineOption. Which
+   * product carries which is already `tagIdsByProduct`, built above for the
+   * filter.
+   */
+  const tagOptions: InlineOption[] = tagList.map((tag) => ({
+    value: tag.id,
+    label: tag.name,
+    swatch: tag.color,
+  }))
+
+  /*
+   * The catalogue is the desk's reference data rather than anybody's record,
+   * and its policy asks for the manage capability — the same one the New
+   * product button asks for. Tags are the exception the join table's own
+   * policy makes: putting a word on a line only takes write access.
+   */
+  const canPrice = context.canManage
+  const canTag = context.canWrite
 
   type StockRow = {
     product_id: string
@@ -366,11 +391,22 @@ export default async function ProductsPage({
           </div>
         )
       }
+      /*
+       * From here down the cell is the editor: click it, pick or type, and it
+       * is written. A catalogue is re-graded and repriced far more often than
+       * a contact is re-titled, and until now none of it could be done without
+       * opening each product in turn.
+       */
       case 'status':
         return (
-          <OptionBadges
+          <InlineEdit
+            entity="product"
+            id={product.id}
+            field="status"
+            fieldLabel="Status"
             values={product.status ? [product.status] : []}
-            options={statusOptions}
+            options={statusInline}
+            canEdit={canPrice}
           />
         )
       case 'product_type':
@@ -382,30 +418,35 @@ export default async function ProductsPage({
         )
       case 'priority':
         return (
-          <OptionBadges
+          <InlineEdit
+            entity="product"
+            id={product.id}
+            field="priority"
+            fieldLabel="Priority"
             values={product.priority ? [product.priority] : []}
-            options={priorityOptions}
+            options={priorityInline}
+            canEdit={canPrice}
           />
         )
-      case 'tags': {
-        // The tag's own colour, chosen in Settings → Tags, so it is an inline
-        // style — Tailwind cannot see a hex that only exists in the database.
-        const tags = tagsByProduct.get(product.id) ?? []
-        if (tags.length === 0) return <Empty />
+      case 'tags':
+        /*
+         * The same menu the vocabulary fields use, over a different table:
+         * tags are a join rather than a column. Write access rather than
+         * manage, which is what the join table's own policy asks for.
+         */
         return (
-          <span className="flex flex-wrap gap-1">
-            {tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="badge"
-                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
-              >
-                {tag.name}
-              </span>
-            ))}
-          </span>
+          <InlineEdit
+            as="tags"
+            entity="product"
+            id={product.id}
+            field="tags"
+            fieldLabel="Tags"
+            values={tagIdsByProduct.get(product.id) ?? []}
+            options={tagOptions}
+            multiple
+            canEdit={canTag}
+          />
         )
-      }
       case 'available': {
         const available = Number(stock?.available ?? 0)
         return (
@@ -430,37 +471,157 @@ export default async function ProductsPage({
           <span className="text-xs text-slate-600">{locations.join(' · ')}</span>
         )
       }
+      /*
+       * Showroom and wholesale are overrides, and the box is empty when there
+       * is not one — what the cell shows is the derived figure, and it shows
+       * again as the input's placeholder. So typing sets an override, and
+       * emptying the box takes it back to following retail rather than
+       * standing at zero. `auto` is what derivePricing calls the difference.
+       */
       case 'price_showroom':
-        return <span className="text-slate-800">{money(pricing.unit.showroom.value)}</span>
+        return (
+          <InlineText
+            entity="product"
+            id={product.id}
+            field="price_showroom"
+            fieldLabel="Showroom price"
+            kind="number"
+            align="center"
+            value={product.price_showroom === null ? '' : String(product.price_showroom)}
+            placeholder={
+              pricing.unit.showroom.value === null
+                ? undefined
+                : String(pricing.unit.showroom.value)
+            }
+            display={
+              <span className={pricing.unit.showroom.auto ? 'text-slate-400' : 'text-slate-800'}>
+                {money(pricing.unit.showroom.value)}
+              </span>
+            }
+            canEdit={canPrice}
+          />
+        )
       case 'price_wholesale':
-        return <span className="text-slate-800">{money(pricing.unit.wholesale.value)}</span>
+        return (
+          <InlineText
+            entity="product"
+            id={product.id}
+            field="price_wholesale"
+            fieldLabel="Wholesale price"
+            kind="number"
+            align="center"
+            value={product.price_wholesale === null ? '' : String(product.price_wholesale)}
+            placeholder={
+              pricing.unit.wholesale.value === null
+                ? undefined
+                : String(pricing.unit.wholesale.value)
+            }
+            display={
+              <span className={pricing.unit.wholesale.auto ? 'text-slate-400' : 'text-slate-800'}>
+                {money(pricing.unit.wholesale.value)}
+              </span>
+            }
+            canEdit={canPrice}
+          />
+        )
+      /*
+       * Retail and cost are the stored columns the other two derive from —
+       * `unit_price` and `unit_cost`, whatever the column headings say. Both
+       * are NOT NULL with a zero default, so there is no clearing them: a
+       * price of nothing is nought.
+       */
       case 'price_retail':
-        return <span className="text-slate-600">{money(pricing.unit.retail.value)}</span>
+        return (
+          <InlineText
+            entity="product"
+            id={product.id}
+            field="unit_price"
+            fieldLabel="Retail price"
+            kind="number"
+            align="center"
+            value={String(product.unit_price ?? '')}
+            display={<span className="text-slate-600">{money(pricing.unit.retail.value)}</span>}
+            canEdit={canPrice}
+          />
+        )
       case 'unit_cost':
-        return <span className="text-slate-600">{money(pricing.unit.cost.value)}</span>
+        return (
+          <InlineText
+            entity="product"
+            id={product.id}
+            field="unit_cost"
+            fieldLabel="Cost"
+            kind="number"
+            align="center"
+            value={String(product.unit_cost ?? '')}
+            display={<span className="text-slate-600">{money(pricing.unit.cost.value)}</span>}
+            canEdit={canPrice}
+          />
+        )
       case 'brand':
-        return product.brand ? (
-          <span className="block truncate text-slate-600">{product.brand}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="product"
+            id={product.id}
+            field="brand"
+            fieldLabel="Brand"
+            value={product.brand ?? ''}
+            display={
+              product.brand ? (
+                <span className="block truncate text-slate-600">{product.brand}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canPrice}
+          />
         )
       case 'sku':
-        return product.sku ? (
-          <span className="whitespace-nowrap text-slate-600">{product.sku}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="product"
+            id={product.id}
+            field="sku"
+            fieldLabel="SKU"
+            value={product.sku ?? ''}
+            display={
+              product.sku ? (
+                <span className="whitespace-nowrap text-slate-600">{product.sku}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canPrice}
+          />
         )
+      /*
+       * Category and condition have option lists behind them — the same ones
+       * the product's own record draws its badges from — so they are picked
+       * rather than typed, and the list shows the badge the record does.
+       */
       case 'category':
-        return product.category ? (
-          <span className="block truncate text-slate-600">{product.category}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="product"
+            id={product.id}
+            field="category"
+            fieldLabel="Category"
+            values={product.category ? [product.category] : []}
+            options={categoryInline}
+            canEdit={canPrice}
+          />
         )
       case 'product_condition':
-        return product.product_condition ? (
-          <span className="block truncate text-slate-600">{product.product_condition}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="product"
+            id={product.id}
+            field="product_condition"
+            fieldLabel="Condition"
+            values={product.product_condition ? [product.product_condition] : []}
+            options={conditionInline}
+            canEdit={canPrice}
+          />
         )
       case 'case_pack':
         return product.case_pack ? (
@@ -474,6 +635,26 @@ export default async function ProductsPage({
         return <CustomCell row={product} columnKey={key} />
     }
   }
+
+  /* One row, named so a sub-group can hand it to the fold that holds it. */
+  const productRow = (product: ProductRow) => (
+    <tr key={product.id}>
+      {columns.map((column) => (
+        <td
+          key={column.key}
+          className={
+            column.align === 'center'
+              ? 'text-center'
+              : column.align === 'right'
+                ? 'text-right'
+                : undefined
+          }
+        >
+          {cell(product, column.key)}
+        </td>
+      ))}
+    </tr>
+  )
 
   return (
     <>
@@ -569,13 +750,18 @@ export default async function ProductsPage({
           {overlap && <GroupOverlapNote label={overlap.label} />}
           <div className="space-y-8">
             {groups.map((group) => (
-            <div key={group.key ?? 'all'}>
-              {config.groupBy && (
-                <div className="group-header flex items-baseline justify-between gap-3">
-                  <h2>{group.label}</h2>
+            <CollapsibleGroup
+              key={group.key ?? 'all'}
+              scope="product"
+              id={group.key ?? 'all'}
+              /* No heading when the list is not grouped — and then nothing to fold. */
+              label={config.groupBy ? group.label : undefined}
+              summary={
+                config.groupBy ? (
                   <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>
-                </div>
-              )}
+                ) : undefined
+              }
+            >
               {/*
                 The card starts here rather than around the heading, so the
                 rounded corners land on the column header row.
@@ -608,46 +794,29 @@ export default async function ProductsPage({
                   </thead>
                   <tbody>
                     {/*
-                      With a sub-group, each one gets a heading row and then its
-                      rows; without, the rows go straight in. Same table either
-                      way, so the columns keep their widths.
+                      With a sub-group, each one gets a band it can be folded
+                      away by and then its rows; without, the rows go straight
+                      in. Same table either way, so the columns keep their
+                      widths.
                     */}
-                    {(group.subGroups ?? [{ key: null, label: '', rows: group.rows }]).flatMap(
-                      (sub) => [
-                        ...(group.subGroups
-                          ? [
-                              <SubGroupRow
-                                key={`sub-${sub.key ?? 'none'}`}
-                                label={sub.label}
-                                count={sub.rows.length}
-                                columns={columns.length}
-                              />,
-                            ]
-                          : []),
-                        ...sub.rows.map((product) => (
-                          <tr key={product.id}>
-                            {columns.map((column) => (
-                              <td
-                                key={column.key}
-                                className={
-                                  column.align === 'center'
-                                    ? 'text-center'
-                                    : column.align === 'right'
-                                      ? 'text-right'
-                                      : undefined
-                                }
-                              >
-                                {cell(product, column.key)}
-                              </td>
-                            ))}
-                          </tr>
-                        )),
-                      ],
-                    )}
+                    {group.subGroups
+                      ? group.subGroups.map((sub) => (
+                          <CollapsibleSubGroup
+                            key={`sub-${sub.key ?? 'none'}`}
+                            scope="product"
+                            id={`${group.key ?? 'all'}/${sub.key ?? 'none'}`}
+                            label={sub.label}
+                            count={sub.rows.length}
+                            columns={columns.length}
+                          >
+                            {sub.rows.map(productRow)}
+                          </CollapsibleSubGroup>
+                        ))
+                      : group.rows.map(productRow)}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </CollapsibleGroup>
           ))}
           </div>
         </>

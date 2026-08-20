@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  chosenValues,
   definitionsFor,
   definitionsOnCard,
   displayValue,
@@ -123,5 +124,31 @@ describe('showing a value', () => {
     expect(hasAnyValue(fields, {})).toBe(false)
     expect(hasAnyValue(fields, { incoterm: '' })).toBe(false)
     expect(hasAnyValue(fields, { incoterm: 'FOB' })).toBe(true)
+  })
+})
+
+describe('a stored value as the list an editable cell picks from', () => {
+  it('wraps a single value', () => {
+    expect(chosenValues('Champion')).toEqual(['Champion'])
+  })
+
+  it('keeps a multiselect as it is', () => {
+    expect(chosenValues(['Champion', 'Decision maker'])).toEqual(['Champion', 'Decision maker'])
+  })
+
+  it('reads absence as nothing chosen', () => {
+    expect(chosenValues(null)).toEqual([])
+    expect(chosenValues(undefined)).toEqual([])
+    expect(chosenValues('')).toEqual([])
+    expect(chosenValues([])).toEqual([])
+  })
+
+  it('drops the blanks inside a list rather than offering an empty chip', () => {
+    expect(chosenValues(['Champion', '', null])).toEqual(['Champion'])
+  })
+
+  it('stringifies what is not text, because an option list can be numbers', () => {
+    expect(chosenValues(3)).toEqual(['3'])
+    expect(chosenValues(false)).toEqual(['false'])
   })
 })

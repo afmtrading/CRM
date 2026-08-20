@@ -64,3 +64,44 @@ export function parseYesNo(value: FormDataEntryValue | null): boolean | null {
   if (text === '') return null
   return text === 'true' || text === 'yes' || text === 'on'
 }
+
+/**
+ * Which of a marketplace's fields a submitted form is carrying.
+ *
+ * The record is edited from three cards — what the channel is, what it costs,
+ * and the account behind it — and each is its own form posting to one action.
+ * That is only safe if a form leaves the fields it does not carry alone, and
+ * HTML gives the server no way to tell "this box was cleared" from "this box
+ * was not on the page": an unticked checkbox and an absent one both post
+ * nothing, and an empty text input and an absent one both arrive as ''.
+ *
+ * So each form names itself, and everything outside the named group is sent as
+ * null — which `update_marketplace` reads as "leave it". Without this, saving
+ * the fees card would empty the marketplace type, the audience and the store
+ * name, because those are exactly the shapes that cannot speak for themselves.
+ *
+ * A form that names nothing carries everything, which is what the single form
+ * this replaced did. A name nobody recognises carries nothing, so a typo
+ * writes no fields rather than the wrong ones.
+ */
+export type MarketplaceSection = 'detail' | 'fees' | 'account'
+
+const MARKETPLACE_SECTIONS: MarketplaceSection[] = ['detail', 'fees', 'account']
+
+export function marketplaceSections(
+  raw: FormDataEntryValue | null | undefined,
+): Record<MarketplaceSection, boolean> {
+  const name = String(raw ?? '').trim()
+  if (name === '') return { detail: true, fees: true, account: true }
+
+  return {
+    detail: name === 'detail',
+    fees: name === 'fees',
+    account: name === 'account',
+  }
+}
+
+/** Whether a name is one of the three, for a caller that wants to check first. */
+export function isMarketplaceSection(name: string): name is MarketplaceSection {
+  return (MARKETPLACE_SECTIONS as string[]).includes(name)
+}

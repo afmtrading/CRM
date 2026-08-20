@@ -20,8 +20,8 @@ import {
   PageHeader,
   StatCard,
   StatGrid,
-  SubGroupRow,
 } from '@/components/ui'
+import { CollapsibleGroup, CollapsibleSubGroup } from '@/components/collapsible'
 import { FilterBar } from '@/components/filter-bar'
 import {
   MARKETPLACE_FIELDS,
@@ -487,6 +487,17 @@ export default async function MarketplacesPage({
     }
   }
 
+  /* One row, named so a sub-group can hand it to the fold that holds it. */
+  const marketplaceRow = (row: Row) => (
+    <tr key={row.id} className="transition-colors hover:bg-slate-50/70">
+      {columns.map((column) => (
+        <td key={column.key} className={column.align === 'right' ? 'text-right' : undefined}>
+          <div className="min-w-0 max-w-xs">{cell(row, column.key)}</div>
+        </td>
+      ))}
+    </tr>
+  )
+
   return (
     <>
       <PageHeader
@@ -549,13 +560,18 @@ export default async function MarketplacesPage({
           {overlap && <GroupOverlapNote label={overlap.label} />}
           <div className="space-y-8">
             {groups.map((group) => (
-            <div key={group.key ?? 'all'}>
-              {config.groupBy && (
-                <div className="group-header flex items-baseline justify-between gap-3">
-                  <h2>{group.label}</h2>
+            <CollapsibleGroup
+              key={group.key ?? 'all'}
+              scope="marketplace"
+              id={group.key ?? 'all'}
+              /* No heading when the list is not grouped — and then nothing to fold. */
+              label={config.groupBy ? group.label : undefined}
+              summary={
+                config.groupBy ? (
                   <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>
-                </div>
-              )}
+                ) : undefined
+              }
+            >
               {/*
                 The card starts here rather than around the heading, so the
                 rounded corners land on the column header row.
@@ -576,40 +592,29 @@ export default async function MarketplacesPage({
                   </thead>
                   <tbody>
                     {/*
-                      With a sub-group, each one gets a heading row and then its
-                      rows; without, the rows go straight in. Same table either
-                      way, so the columns keep their widths.
+                      With a sub-group, each one gets a band it can be folded
+                      away by and then its rows; without, the rows go straight
+                      in. Same table either way, so the columns keep their
+                      widths.
                     */}
-                    {(group.subGroups ?? [{ key: null, label: '', rows: group.rows }]).flatMap(
-                      (sub) => [
-                        ...(group.subGroups
-                          ? [
-                              <SubGroupRow
-                                key={`sub-${sub.key ?? 'none'}`}
-                                label={sub.label}
-                                count={sub.rows.length}
-                                columns={columns.length}
-                              />,
-                            ]
-                          : []),
-                        ...sub.rows.map((row) => (
-                          <tr key={row.id} className="transition-colors hover:bg-slate-50/70">
-                            {columns.map((column) => (
-                              <td
-                                key={column.key}
-                                className={column.align === 'right' ? 'text-right' : undefined}
-                              >
-                                <div className="min-w-0 max-w-xs">{cell(row, column.key)}</div>
-                              </td>
-                            ))}
-                          </tr>
-                        )),
-                      ],
-                    )}
+                    {group.subGroups
+                      ? group.subGroups.map((sub) => (
+                          <CollapsibleSubGroup
+                            key={`sub-${sub.key ?? 'none'}`}
+                            scope="marketplace"
+                            id={`${group.key ?? 'all'}/${sub.key ?? 'none'}`}
+                            label={sub.label}
+                            count={sub.rows.length}
+                            columns={columns.length}
+                          >
+                            {sub.rows.map(marketplaceRow)}
+                          </CollapsibleSubGroup>
+                        ))
+                      : group.rows.map(marketplaceRow)}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </CollapsibleGroup>
           ))}
           </div>
         </>

@@ -2,23 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireSession, scoped, firstRow } from "@/lib/tenancy";
-import { contactName, formatDay } from "@/lib/format";
 import { placeNames, type Place } from "@/lib/geography";
 import { DateTime } from "@/components/date-time";
-import { Money } from "@/components/money";
-import {
-  COMPANY_CARDS,
-  optionsForField,
-  renderMarkdown,
-  safeUrl,
-  socialUrl,
-} from "@/lib/field-options";
+import { COMPANY_CARDS, optionsForField, safeUrl } from "@/lib/field-options";
 import type {
   ActivityRow,
-  CompanyAddress,
   CompanyRow,
   ContactCard,
-  ContactLink,
   ContactRow,
   CustomFieldDefinitionRow,
   DealRow,
@@ -30,18 +20,17 @@ import {
   ActivityComposer,
   ActivityTimeline,
 } from "@/components/activity-timeline";
-import {
-  DealStatusBadge,
-  PageHeader,
-  Section,
-} from "@/components/ui";
-import { MailIcon, PhoneIcon } from "@/components/icons";
+import { PageHeader, Section } from "@/components/ui";
 import { TagPicker } from "@/components/tag-picker";
 import { CompanyRatingRows } from "@/components/company-rating";
 import {
-  ContactMethod,
-  CustomFieldValues,
-  Empty,
+  CompanyAdditionalRows,
+  CompanyContactsTable,
+  CompanyDealsTable,
+  CompanyDigitalRows,
+  CompanyInfoRows,
+} from "@/components/company-cards";
+import {
   ExternalLink,
   Field,
   FieldRow,
@@ -151,7 +140,6 @@ export default async function CompanyDetailPage({
    * wearing another record type's colour.
    */
   const optionsFor = (key: string) => optionsForField(options, "company", key);
-  const contactOptionsFor = (key: string) => optionsForField(options, "contact", key);
 
   const userName = (userId: string | null) => {
     if (!userId) return null;
@@ -162,18 +150,10 @@ export default async function CompanyDetailPage({
   const customFields = (customFieldDefs ?? []) as CustomFieldDefinitionRow[];
   const customByCard = (card: ContactCard) =>
     customFields.filter((field) => field.card === card);
-  const customValues = (company.custom_fields ?? {}) as Record<string, unknown>;
 
   const places = placeNames((countryRows ?? []) as Place[]);
 
   const website = safeUrl(company.domain);
-  const notesHtml = renderMarkdown(company.notes);
-  const extraLinks = Array.isArray(company.links)
-    ? (company.links as ContactLink[])
-    : [];
-  const addresses = Array.isArray(company.addresses)
-    ? (company.addresses as CompanyAddress[])
-    : [];
 
   return (
     <>
@@ -315,69 +295,12 @@ export default async function CompanyDetailPage({
             }
           >
             <dl className="divide-y divide-slate-100">
-              <FieldRow>
-                <Field label="Company name">{company.name}</Field>
-                <Field label="Website">
-                  <ExternalLink url={website} />
-                </Field>
-              </FieldRow>
-              {/* Owner is in this card's header now, as on a contact. */}
-              <FieldRow>
-                <Field label="Company phone">
-                  <ContactMethod
-                    value={company.phone}
-                    kind="phone"
-                    label={company.name}
-                  />
-                </Field>
-                <Field label="Company email">
-                  <ContactMethod
-                    value={company.email}
-                    kind="email"
-                    label={company.name}
-                  />
-                </Field>
-              </FieldRow>
-              {/* Specialty market and company type moved to Company Rating —
-                  what a business is, rather than how to reach it. */}
-              {/*
-                Contacts rides along as the last field rather than a row of its
-                own near the top. A headcount is what you check after knowing
-                how to reach the business, and passed as `trailing` it lands
-                beside the last custom field — Buyer / Vendor today — instead of
-                taking a half-empty row under the name.
-              */}
-              <CustomFieldValues
-                fields={customByCard("details")}
-                values={customValues}
-                fieldOptions={options}
-                trailing={<Field label="Contacts">{contactRows.length}</Field>}
+              <CompanyInfoRows
+                company={company}
+                options={options}
+                customFields={customByCard("details")}
+                contactCount={contactRows.length}
               />
-
-              {addresses.length > 0 && (
-                <FieldRow columns={1}>
-                  <div>
-                    <dt className="text-xs font-medium text-slate-500">
-                      Addresses
-                    </dt>
-                    <dd className="mt-1 grid gap-3 sm:grid-cols-2">
-                      {addresses.map((entry, index) => (
-                        <div
-                          key={`${entry.label}-${index}`}
-                          className="rounded-xl bg-slate-50 p-3"
-                        >
-                          <p className="text-xs font-medium text-slate-500">
-                            {entry.label || `Address ${index + 1}`}
-                          </p>
-                          <p className="mt-0.5 text-sm whitespace-pre-line text-slate-800">
-                            {entry.address}
-                          </p>
-                        </div>
-                      ))}
-                    </dd>
-                  </div>
-                </FieldRow>
-              )}
             </dl>
           </Section>
         </div>
@@ -400,110 +323,7 @@ export default async function CompanyDetailPage({
               </Link>
             }
           >
-            {contactRows.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No contacts at this company yet.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Job title</th>
-                      {/*
-                        Priority, role and credibility rather than stage and
-                        lead score. On a company's own page the question is who
-                        to call and how much weight to give them, which is what
-                        these three answer; the stage is about a pipeline this
-                        table is not showing.
-                      */}
-                      <th>Priority</th>
-                      <th>Role type</th>
-                      <th>Credibility</th>
-                      <th className="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contactRows.map((contact) => {
-                      const name = contactName(contact);
-                      return (
-                        <tr
-                          key={contact.id}
-                          className="transition-colors hover:bg-slate-50/70"
-                        >
-                          <td>
-                            <div className="flex items-center gap-3">
-                              <Link
-                                href={`/contacts/${contact.id}`}
-                                className="truncate font-medium text-slate-900 hover:text-brand-700"
-                              >
-                                {name}
-                              </Link>
-                            </div>
-                          </td>
-                          <td className="text-slate-600">
-                            {contact.job_title ?? "—"}
-                          </td>
-                          <td>
-                            {contact.priority ? (
-                              <OptionBadges
-                                values={[contact.priority]}
-                                options={contactOptionsFor("priority")}
-                              />
-                            ) : (
-                              <Empty />
-                            )}
-                          </td>
-                          <td>
-                            <OptionBadges
-                              values={contact.role_type}
-                              options={contactOptionsFor("role_type")}
-                            />
-                          </td>
-                          <td>
-                            {contact.credibility ? (
-                              <OptionBadges
-                                values={[contact.credibility]}
-                                options={contactOptionsFor("credibility")}
-                              />
-                            ) : (
-                              <Empty />
-                            )}
-                          </td>
-                          {/* The email column is gone: the icon does the job it
-                              was doing, and the row gets the space back. */}
-                          <td>
-                            <div className="flex items-center justify-end gap-1">
-                              {contact.phone && (
-                                <a
-                                  href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}
-                                  aria-label={`Call ${name}`}
-                                  title={contact.phone}
-                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                >
-                                  <PhoneIcon className="h-4 w-4" />
-                                </a>
-                              )}
-                              {contact.email && (
-                                <a
-                                  href={`mailto:${contact.email}`}
-                                  aria-label={`Email ${name}`}
-                                  title={contact.email}
-                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                >
-                                  <MailIcon className="h-4 w-4" />
-                                </a>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <CompanyContactsTable contacts={contactRows} options={options} />
           </Section>
 
           <Section
@@ -518,73 +338,7 @@ export default async function CompanyDetailPage({
               </Link>
             }
           >
-            {dealRows.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No deals linked to this company.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Deal</th>
-                      {/*
-                        Who it is with and who is running it. On a company with
-                        several open deals those are the two things that tell
-                        them apart, and both meant opening each deal to find out.
-                      */}
-                      <th>Contact</th>
-                      <th>Owner</th>
-                      <th>Stage</th>
-                      <th>Value</th>
-                      <th>Status</th>
-                      <th>Expected close</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dealRows.map((deal) => (
-                      <tr key={deal.id}>
-                        <td>
-                          <Link
-                            href={`/deals/${deal.id}`}
-                            className="font-medium text-brand-700 hover:underline"
-                          >
-                            {deal.name}
-                          </Link>
-                        </td>
-                        <td>
-                          {deal.contacts ? (
-                            <Link
-                              href={`/contacts/${deal.contacts.id}`}
-                              className="text-slate-600 hover:text-brand-700"
-                            >
-                              {contactName(deal.contacts)}
-                            </Link>
-                          ) : (
-                            <Empty />
-                          )}
-                        </td>
-                        <td className="text-slate-600">
-                          {userName(deal.owner_id) ?? <Empty />}
-                        </td>
-                        <td>{deal.stages?.name ?? "—"}</td>
-                        <td>
-                          <Money
-                            value={Number(deal.value ?? 0)}
-                            currency={deal.currency}
-                            amountClassName="font-medium"
-                          />
-                        </td>
-                        <td>
-                          <DealStatusBadge status={deal.status} />
-                        </td>
-                        <td>{formatDay(deal.expected_close_date)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <CompanyDealsTable deals={dealRows} userName={userName} />
           </Section>
 
           <Section title="Activity" className="order-10">
@@ -634,62 +388,11 @@ export default async function CompanyDetailPage({
               disagrees with itself. This card is the social profiles.
             */}
             <dl className="divide-y divide-slate-100">
-              <FieldRow columns={1}>
-                <Field label="LinkedIn">
-                  <ExternalLink url={socialUrl("linkedin", company.linkedin)} />
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="Facebook">
-                  <ExternalLink url={socialUrl("facebook", company.facebook)} />
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="Instagram">
-                  <ExternalLink url={socialUrl("instagram", company.instagram)} />
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="TikTok">
-                  <ExternalLink url={socialUrl("tiktok", company.tiktok)} />
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="X (Twitter)">
-                  <ExternalLink url={socialUrl("x_twitter", company.x_twitter)} />
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="YouTube">
-                  <ExternalLink url={socialUrl("youtube", company.youtube)} />
-                </Field>
-              </FieldRow>
-              <CustomFieldValues
-                fields={customByCard("digital")}
-                values={customValues}
-                fieldOptions={options}
-                columns={1}
+              <CompanyDigitalRows
+                company={company}
+                options={options}
+                customFields={customByCard("digital")}
               />
-
-              {extraLinks.length > 0 && (
-                <FieldRow columns={1}>
-                  <div>
-                    <dt className="text-xs font-medium text-slate-500">
-                      Other links
-                    </dt>
-                    <dd className="mt-1 space-y-1 text-sm">
-                      {extraLinks.map((link, index) => (
-                        <div key={`${link.url}-${index}`}>
-                          <ExternalLink
-                            url={safeUrl(link.url)}
-                            label={link.label || undefined}
-                          />
-                        </div>
-                      ))}
-                    </dd>
-                  </div>
-                </FieldRow>
-              )}
             </dl>
           </Section>
 
@@ -709,26 +412,11 @@ export default async function CompanyDetailPage({
 
           <Section title={COMPANY_CARDS[1].label} className="order-7">
             <dl className="divide-y divide-slate-100">
-              <CustomFieldValues
-                fields={customByCard("additional")}
-                values={customValues}
-                fieldOptions={options}
-                columns={1}
+              <CompanyAdditionalRows
+                company={company}
+                options={options}
+                customFields={customByCard("additional")}
               />
-              <FieldRow columns={1}>
-                <Field label="Notes">
-                  {notesHtml ? (
-                    <div
-                      className="space-y-2 leading-relaxed text-slate-700"
-                      // Safe by construction: renderMarkdown escapes the stored
-                      // text before applying formatting.
-                      dangerouslySetInnerHTML={{ __html: notesHtml }}
-                    />
-                  ) : (
-                    <Empty />
-                  )}
-                </Field>
-              </FieldRow>
             </dl>
           </Section>
 
