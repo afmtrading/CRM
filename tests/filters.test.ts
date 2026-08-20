@@ -511,7 +511,7 @@ describe('the multi-valued columns a list can be grouped by', () => {
   const byKey = (fields: typeof COMPANY_FIELDS, key: string) =>
     fields.find((field) => field.key === key)
 
-  it.each(['sells_in', 'specialty_market', 'stock_type'])(
+  it.each(['sells_in', 'specialty_market', 'stock_type', 'customer_type'])(
     'offers %s as a grouping on companies, and declares that it repeats a row',
     (key) => {
       const field = byKey(COMPANY_FIELDS, key)
@@ -546,11 +546,13 @@ describe('the multi-valued columns a list can be grouped by', () => {
   })
 
   /*
-   * based_in is one country per company, and customer_type was left alone. A
-   * heading count that can be trusted should not carry the warning.
+   * based_in is one country per company however many it sells to, so it files
+   * each of them once. A heading count that can be trusted must not carry the
+   * warning, or the warning stops meaning anything.
    */
   it('says nothing for a grouping that files each company once', () => {
     expect(overlappingGroupField(COMPANY_FIELDS, 'based_in', null)).toBeNull()
+    expect(overlappingGroupField(COMPANY_FIELDS, 'priority', null)).toBeNull()
   })
 })
 

@@ -171,7 +171,7 @@ export const COMPANY_FIELDS: FieldDef[] = [
   { key: 'sells_in', label: 'Sells To', type: 'array', groupable: true, multi: true },
   { key: 'specialty_market', label: 'Merchandise', type: 'array', groupable: true, multi: true },
   { key: 'stock_type', label: 'Stock type', type: 'array', groupable: true, multi: true },
-  { key: 'customer_type', label: 'Company type', type: 'array' },
+  { key: 'customer_type', label: 'Company type', type: 'array', groupable: true, multi: true },
   { key: 'created_at', label: 'Created', type: 'date', sortable: true },
   TAGS_FIELD,
 ]
