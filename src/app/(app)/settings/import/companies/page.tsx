@@ -22,10 +22,7 @@ export default async function ImportBuyersPage() {
 
   return (
     <>
-      <PageHeader
-        title="Import a buyer list"
-        description="For a contact list with the company repeated down the rows — the shape a bought or blended list usually arrives in. It groups the rows into companies, works out which ones you already have, and shows you every change before writing anything."
-      />
+      <PageHeader title="Import a buyer list" />
       <ImportBuyers
         customFields={(definitions ?? []) as { key: string; label: string; entity_type: string }[]}
       />

@@ -31,10 +31,7 @@ export default async function DuplicatesPage() {
 
   return (
     <>
-      <PageHeader
-        title="Duplicate contacts"
-        description="Contacts sharing an email address, or a name and phone number. Merging keeps the target record and moves the duplicate's deals, activities and tags onto it."
-      />
+      <PageHeader title="Duplicate contacts" />
 
       {error && (
         <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

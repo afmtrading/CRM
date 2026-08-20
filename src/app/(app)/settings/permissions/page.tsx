@@ -36,10 +36,7 @@ export default async function PermissionSettingsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Permissions"
-        description="What each set of people can do. These are the rules the database enforces, not a description of them — a box unticked here is refused by the server, not merely hidden by the interface."
-      />
+      <PageHeader title="Permissions" />
 
       <div className="card mb-5 p-4">
         <p className="mb-3 text-sm text-slate-600">

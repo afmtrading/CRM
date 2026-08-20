@@ -66,7 +66,6 @@ export default async function InvoicesPage({
     <>
       <PageHeader
         title="Invoices"
-        description="What has been billed, and what is still owed. An invoice is fixed at issue — editing the order behind it does not move it."
         actions={
           <>
             <Link href="/sales-orders" className="btn-secondary">

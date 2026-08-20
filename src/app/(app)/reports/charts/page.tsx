@@ -91,7 +91,6 @@ export default async function ReportChartsPage({
     <>
       <PageHeader
         title="Charts"
-        description="The same deals the ledger holds, drawn. Closed figures cover the selected period; open pipeline is where it stands today."
         actions={
           <>
             <Link href="/reports/deals" className="btn-secondary">

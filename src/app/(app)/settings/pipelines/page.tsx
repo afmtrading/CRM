@@ -82,10 +82,7 @@ export default async function PipelineSettingsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Pipelines & stages"
-        description="Each pipeline has its own ordered stages. A stage's default probability is what deals inherit when they land in it, and its outcome is what reaching it means — a stage that closes a deal as won stamps the close date, credits the owner and releases the stock the deal was holding."
-      />
+      <PageHeader title="Pipelines & stages" />
 
       <ActionForm action={createPipeline} className="card mb-5 flex flex-wrap items-end gap-2 p-4">
         <div>

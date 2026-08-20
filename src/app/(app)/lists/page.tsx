@@ -44,10 +44,7 @@ export default async function ListsPage({
 
   return (
     <>
-      <PageHeader
-        title="Lists"
-        description="Saved audiences for email. A list is either a fixed set of people or a filter that re-reads itself."
-      />
+      <PageHeader title="Lists" />
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {ok && (

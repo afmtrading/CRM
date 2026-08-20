@@ -25,11 +25,6 @@ export default async function NotificationsPage() {
     <>
       <PageHeader
         title="Notifications"
-        description={
-          unread.length > 0
-            ? `${unread.length} unread`
-            : 'Everything here has been read.'
-        }
         actions={
           unread.length > 0 ? (
             <form action={markAllNotificationsRead}>

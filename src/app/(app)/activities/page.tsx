@@ -61,10 +61,7 @@ export default async function ActivitiesPage({
 
   return (
     <>
-      <PageHeader
-        title="Activities"
-        description="Calls, emails, meetings, notes and tasks logged against contacts, companies and deals."
-      />
+      <PageHeader title="Activities" />
 
       <div className="mb-4 flex gap-2">
         {TABS.map((item) => (

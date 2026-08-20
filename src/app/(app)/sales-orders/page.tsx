@@ -100,7 +100,6 @@ export default async function SalesOrdersPage({
     <>
       <PageHeader
         title="Sales orders"
-        description="What customers have bought. Separate from deals — an order can exist for a company that never had one."
         actions={
           <>
             <Link href="/invoices" className="btn-secondary">

@@ -48,10 +48,7 @@ export default async function TagsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Tags"
-        description="Free-form segmentation, shared by contacts, companies and products. Renaming one keeps it on every record that carries it."
-      />
+      <PageHeader title="Tags" />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">

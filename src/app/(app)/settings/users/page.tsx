@@ -65,10 +65,7 @@ export default async function UserSettingsPage({
 
   return (
     <>
-      <PageHeader
-        title="Users"
-        description="People in this organization. Accounts are provisioned here — there is no public signup."
-      />
+      <PageHeader title="Users" />
 
       {params.error && (
         <div className="mb-5">

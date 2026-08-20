@@ -50,7 +50,6 @@ export default async function LeadScoringPage() {
     <>
       <PageHeader
         title="Lead scoring"
-        description="A contact's score is the sum of the points from every rule it matches. Rules take effect immediately — no deploy needed."
         actions={
           <form action={recalculateScores}>
             <button type="submit" className="btn-secondary">

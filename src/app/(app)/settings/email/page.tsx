@@ -21,10 +21,7 @@ export default async function EmailSettingsPage({
 
   return (
     <>
-      <PageHeader
-        title="Email"
-        description="Who campaigns go out as, and a way to prove it works before anybody else receives one."
-      />
+      <PageHeader title="Email" />
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {ok && (
