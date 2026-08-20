@@ -225,6 +225,63 @@ export const OPTION_FIELDS: {
   { key: 'loss_reason', label: 'Loss reason', card: 'details', multiple: false, entity: 'deal' },
 ]
 
+/**
+ * Where each list's chosen values actually land.
+ *
+ * OPTION_FIELDS says a list exists and who it belongs to. This says which
+ * column holds what somebody picked from it, which is a different fact and not
+ * a derivable one: a product's category is stored in `category` under the key
+ * product_category, its status in `status` under product_status, and every
+ * marketplace list drops the prefix its key carries — marketplace_fulfilment
+ * into `fulfilment`, marketplace_account_status into `account_status`.
+ *
+ * Written down because the data-integrity check has to join the two, and until
+ * it was written down the only statements of it were a JSX attribute sitting
+ * next to an optionsFor() call and a lookup keyed by filter path. Neither is
+ * reachable from SQL, so the check restated the pairing a third time and
+ * nothing would have said if it drifted. tests/data-integrity-sql.test.ts now
+ * holds the check to this list.
+ *
+ * `entity` is the field_options entity_type to match on, which is not always
+ * the record the value sits on: a marketplace's lists are the company's,
+ * because a marketplace is a company with a profile attached.
+ */
+export const OPTION_VALUE_COLUMNS: {
+  entity: OptionEntity
+  key: OptionFieldKey
+  /** The table the value is stored on, as the check names it. */
+  table: 'contacts' | 'companies' | 'marketplace_profiles' | 'products' | 'deals'
+  column: string
+  multiple: boolean
+}[] = [
+  { entity: 'contact', key: 'priority', table: 'contacts', column: 'priority', multiple: false },
+  { entity: 'contact', key: 'credibility', table: 'contacts', column: 'credibility', multiple: false },
+  { entity: 'contact', key: 'role_type', table: 'contacts', column: 'role_type', multiple: true },
+
+  { entity: 'company', key: 'priority', table: 'companies', column: 'priority', multiple: false },
+  { entity: 'company', key: 'customer_type', table: 'companies', column: 'customer_type', multiple: true },
+  { entity: 'company', key: 'specialty_market', table: 'companies', column: 'specialty_market', multiple: true },
+  { entity: 'company', key: 'stock_type', table: 'companies', column: 'stock_type', multiple: true },
+
+  // The prefix is the key's, not the column's. Every one of these differs.
+  { entity: 'company', key: 'marketplace_type', table: 'marketplace_profiles', column: 'marketplace_type', multiple: true },
+  { entity: 'company', key: 'marketplace_fulfilment', table: 'marketplace_profiles', column: 'fulfilment', multiple: true },
+  { entity: 'company', key: 'marketplace_audience', table: 'marketplace_profiles', column: 'audience', multiple: true },
+  { entity: 'company', key: 'marketplace_inventory_type', table: 'marketplace_profiles', column: 'inventory_type', multiple: true },
+  { entity: 'company', key: 'marketplace_payment', table: 'marketplace_profiles', column: 'payment', multiple: false },
+  { entity: 'company', key: 'marketplace_selling_cost', table: 'marketplace_profiles', column: 'selling_cost', multiple: false },
+  { entity: 'company', key: 'marketplace_account_status', table: 'marketplace_profiles', column: 'account_status', multiple: false },
+
+  // category and status are the two that do not read the way the key does.
+  { entity: 'product', key: 'product_category', table: 'products', column: 'category', multiple: false },
+  { entity: 'product', key: 'product_type', table: 'products', column: 'product_type', multiple: false },
+  { entity: 'product', key: 'product_condition', table: 'products', column: 'product_condition', multiple: false },
+  { entity: 'product', key: 'product_status', table: 'products', column: 'status', multiple: false },
+  { entity: 'product', key: 'priority', table: 'products', column: 'priority', multiple: false },
+
+  { entity: 'deal', key: 'loss_reason', table: 'deals', column: 'loss_reason', multiple: false },
+]
+
 export const OPTION_FIELD_LABELS = Object.fromEntries(
   OPTION_FIELDS.map((field) => [field.key, field.label]),
 ) as Record<OptionFieldKey, string>
