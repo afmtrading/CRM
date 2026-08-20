@@ -79,3 +79,51 @@ Same organization, same run.
 
 Neither is destructive: the first adds a row, the second changes one element of
 a one-element array on a single company.
+
+## 2026-08-20 — nine company domains filled in
+
+Organization: AFM CRM (`e4739794-7ce0-41c5-a2a8-b6819cd3dc92`).
+
+Context: the Digital card on a contact showed "Company website —" for a
+contact at GovDeals, whose `domain` was empty. Eleven of 178 live companies had
+no domain; the other 167 did, so the card's fallback was working and these were
+a data gap rather than a bug.
+
+Every value is the corporate email domain of contacts at that company, not a
+guess from the name. `https://` prefixes match the dominant existing format.
+
+```sql
+-- companies.domain, set where it was previously null
+59a45e01-58bd-41b6-998f-c498a5393f4b  B-Stock                              https://bstock.com
+6f89343f-66ed-4b5c-a53c-7e4d4d67eef6  B-Stock Solutions                    https://bstock.com
+2289d3e3-7f49-451b-8bb8-ba0e5b6716a5  Direct Auctions                      https://directliquidation.ca
+b83310dd-9eee-4965-a87b-8fb520095bcd  Direct Auctions / Direct Liquidation https://directliquidation.ca
+0cd8eeaf-2695-431e-8df1-6c4a7c3af3a8  Direct Liquidation                   https://directliquidation.ca
+8425275d-c3ce-43c6-a4f8-f79caf6abaa7  GovDeals.ca / GovDeals.com           https://govdeals.com
+c3c23529-1ee8-4c97-9496-1e9d395d4e4d  Hilco Global                         https://hilcoglobal.com
+922fa08a-51a3-4504-95b5-b179056af20f  MaxSold                              https://maxsold.com
+36d4fd2d-7a27-4329-8a1f-eeebe0c50e54  McDougall Auctioneers                https://mcdougallauction.com
+```
+
+Reverting means setting `domain` back to null for those ids. Coverage went from
+167/178 to 176/178.
+
+### The two left empty, and why
+
+`bibi` and `Yoyo`. Their only contacts use gmail.com, and a personal address
+says nothing about a company's website — writing `gmail.com` into a domain
+field would point every visitor at Gmail, which is worse than the dash. These
+need somebody who knows the business.
+
+### One judgement call
+
+McDougall Auctioneers' four contacts split exactly two and two between
+`mcdauction.com` and `mcdougallauction.com`. Nothing in the data breaks the
+tie, so the one matching the company's name was taken. If the other is the real
+site it is a one-line change.
+
+### Noticed while checking the format, not fixed
+
+One company holds `acme@acme.com` in `domain` — an email address in a column
+that is read as a URL, so `safeUrl` renders it as a `mailto:` link where a
+website should be.
