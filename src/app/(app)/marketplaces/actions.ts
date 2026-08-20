@@ -4,8 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { assertCanWrite, requireSession } from '@/lib/tenancy'
-import { parseYesNo } from '@/lib/marketplace'
+import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
+import { marketplaceSections, parseYesNo } from '@/lib/marketplace'
 import type { ActionState } from '@/components/action-form'
 
 /**
@@ -110,39 +110,64 @@ export async function updateMarketplace(
 
   const openedOn = String(formData.get('opened_on') ?? '').trim()
 
+  /*
+   * Which of the three cards this came from. Everything outside it is sent as
+   * null, which the function reads as "leave it alone" — see
+   * marketplaceSections for why a form cannot simply omit a field and be
+   * understood.
+   */
+  const carries = marketplaceSections(formData.get('section'))
+
+  /*
+   * The one field that cannot follow that rule: `buyers_premium` is written
+   * unconditionally, because null is a real answer there — nobody has looked
+   * it up — rather than an absence. A form that does not carry the field has
+   * to re-assert what is stored, or saving the fees card would erase an answer
+   * given on the detail card. One small read, only when the field is absent.
+   */
+  let buyersPremium = parseYesNo(formData.get('buyers_premium'))
+  if (!formData.has('buyers_premium')) {
+    const { data: current } = await scoped(context, 'marketplace_profiles')
+      .select('buyers_premium')
+      .eq('company_id', companyId)
+      .maybeSingle()
+    buyersPremium = (current as { buyers_premium: boolean | null } | null)?.buyers_premium ?? null
+  }
+
   const { error } = await context.supabase.rpc('update_marketplace', {
     p_company_id: companyId,
-    p_sells: formData.get('sells_through') !== null,
-    p_sources: formData.get('sources_from') !== null,
-    p_store_name: parsed.data.store_name,
-    p_seller_account_id: parsed.data.seller_account_id,
-    p_store_url: parsed.data.store_url,
-    p_account_status: parsed.data.account_status,
+    p_sells: carries.detail ? formData.get('sells_through') !== null : null,
+    p_sources: carries.detail ? formData.get('sources_from') !== null : null,
+    p_store_name: carries.account ? parsed.data.store_name : null,
+    p_seller_account_id: carries.account ? parsed.data.seller_account_id : null,
+    p_store_url: carries.account ? parsed.data.store_url : null,
+    p_account_status: carries.account ? parsed.data.account_status : null,
     // A date has no empty string, so a cleared box reaches the function as null
     // — which means "leave it". Clearing a date is not offered rather than
     // offered and silently ignored.
     p_opened_on: openedOn || null,
-    p_settlement_terms: parsed.data.settlement_terms,
-    p_payout_method: parsed.data.payout_method,
-    p_payout_currency: parsed.data.payout_currency,
+    p_settlement_terms: carries.account ? parsed.data.settlement_terms : null,
+    p_payout_method: carries.account ? parsed.data.payout_method : null,
+    p_payout_currency: carries.account ? parsed.data.payout_currency : null,
     p_reserve_percent: parsed.data.reserve_percent,
     p_minimum_lot_value: parsed.data.minimum_lot_value,
-    p_notes: parsed.data.notes,
+    p_notes: carries.account ? parsed.data.notes : null,
 
-    p_fee_notes: parsed.data.fee_notes,
+    p_fee_notes: carries.fees ? parsed.data.fee_notes : null,
     /*
      * getAll, because these are multi-selects: a single get would keep the
      * first value and silently drop the rest. An empty array is a real answer —
      * "none of these" — and reaches the function as [] rather than as null,
-     * which is what makes clearing one possible.
+     * which is what makes clearing one possible. That is also why they have to
+     * be withheld when the card that draws them was not the one submitted.
      */
-    p_marketplace_type: formData.getAll('marketplace_type').map(String),
-    p_fulfilment: formData.getAll('fulfilment').map(String),
-    p_payment: parsed.data.payment,
-    p_buyers_premium: parseYesNo(formData.get('buyers_premium')),
-    p_selling_cost: parsed.data.selling_cost,
-    p_audience: formData.getAll('audience').map(String),
-    p_inventory_type: formData.getAll('inventory_type').map(String),
+    p_marketplace_type: carries.detail ? formData.getAll('marketplace_type').map(String) : null,
+    p_fulfilment: carries.detail ? formData.getAll('fulfilment').map(String) : null,
+    p_payment: carries.detail ? parsed.data.payment : null,
+    p_buyers_premium: buyersPremium,
+    p_selling_cost: carries.detail ? parsed.data.selling_cost : null,
+    p_audience: carries.detail ? formData.getAll('audience').map(String) : null,
+    p_inventory_type: carries.detail ? formData.getAll('inventory_type').map(String) : null,
   })
 
   if (error) return { error: error.message }

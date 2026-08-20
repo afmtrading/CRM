@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { directionLabel, parseYesNo, yesNo } from '@/lib/marketplace'
+import {
+  directionLabel,
+  isMarketplaceSection,
+  marketplaceSections,
+  parseYesNo,
+  yesNo,
+} from '@/lib/marketplace'
 
 describe('directionLabel', () => {
   it('names both directions', () => {
@@ -47,5 +53,39 @@ describe('yes, no, or nothing said', () => {
     for (const value of [true, false, null]) {
       expect(parseYesNo(value === null ? '' : String(value))).toBe(value)
     }
+  })
+})
+
+describe('which fields a marketplace form is carrying', () => {
+  it('carries everything when it names nothing', () => {
+    expect(marketplaceSections(null)).toEqual({ detail: true, fees: true, account: true })
+    expect(marketplaceSections('')).toEqual({ detail: true, fees: true, account: true })
+    expect(marketplaceSections('  ')).toEqual({ detail: true, fees: true, account: true })
+  })
+
+  it('carries only the group it names', () => {
+    expect(marketplaceSections('detail')).toEqual({ detail: true, fees: false, account: false })
+    expect(marketplaceSections('fees')).toEqual({ detail: false, fees: true, account: false })
+    expect(marketplaceSections('account')).toEqual({ detail: false, fees: false, account: true })
+  })
+
+  /*
+   * The important one. A form claiming a group nobody defined must write no
+   * fields at all — writing every field would empty the two cards it never
+   * showed, which is the exact failure this function exists to prevent.
+   */
+  it('carries nothing when it names something unrecognised', () => {
+    expect(marketplaceSections('payouts')).toEqual({
+      detail: false,
+      fees: false,
+      account: false,
+    })
+  })
+
+  it('knows the three names', () => {
+    expect(isMarketplaceSection('detail')).toBe(true)
+    expect(isMarketplaceSection('fees')).toBe(true)
+    expect(isMarketplaceSection('account')).toBe(true)
+    expect(isMarketplaceSection('payouts')).toBe(false)
   })
 })
