@@ -244,7 +244,19 @@ export default async function ContactDetailPage({
     <>
       <PageHeader
         title={name}
-        description={contact.job_title ?? undefined}
+        /*
+          The company under the name, and a link to it. The job title used to
+          sit here and now sits beside the name inside the card, where it is
+          labelled — under the title it was an unlabelled line of text that
+          could be read as part of the name.
+        */
+        description={
+          contact.companies ? (
+            <CardLink href={`/companies/${contact.companies.id}`}>
+              {contact.companies.name}
+            </CardLink>
+          ) : undefined
+        }
         actions={
           <>
             {context.canWrite && (
@@ -391,80 +403,52 @@ export default async function ContactDetailPage({
           {/*
             Owner sits in this card's header rather than beside the page title
             or down in Additional info. Who owns the relationship belongs with
-            who the person is, and the name is louder than its label because the
-            name is the answer — the label only says what it answers.
+            who the person is.
+
+            One line, label and name together. Stacked, a two-line block in the
+            corner of a header read as a heading of its own rather than as one
+            small fact about the card underneath it.
           */}
           <Section
             title={CONTACT_CARDS[0].label}
             className="order-1"
             actions={
-              <div className="min-w-0 text-right">
-                <p className="text-xs text-slate-500">Owner</p>
-                <p className="truncate text-sm font-semibold text-slate-900">
+              <p className="min-w-0 truncate text-sm text-slate-500">
+                Owner:{" "}
+                <span className="font-semibold text-slate-900">
                   {userName(contact.owner_id) ?? "—"}
-                </p>
-              </div>
+                </span>
+              </p>
             }
           >
-            <div className="mb-4">
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-900">{name}</p>
-                <p className="truncate text-xs text-slate-500">
-                  {contact.job_title ?? "No job title"}
-                </p>
-              </div>
-            </div>
-
             {/*
-              Two columns rather than four, for the narrower card, and only
-              where a pair actually reads as one thing: the two phone numbers
-              do, so they sit side by side. Everything else here is a long
-              value or a heading in its own right and keeps a row.
+              Every fact in this card is labelled, the name included. It used to
+              lead as bold text with the job title grey underneath, which said
+              what the two were but not which was which — and repeated a name
+              the page title already carries two lines above.
+
+              Paired left to right: who they are and what they do, then the two
+              ways to write to them, then the two ways to call. The company is
+              not here at all; it is under the page title, where it belongs to
+              the person rather than sitting in a list of their details.
             */}
             <dl className="divide-y divide-slate-100">
-              {/*
-                Job title above the company, each on its own row, rather than
-                the two sharing one. What someone does is read before who they
-                do it for, and side by side the pair only stacked that way
-                below the sm breakpoint — on the wide view the card is designed
-                around, the title sat to the right of the company instead.
-              */}
-              <FieldRow columns={1}>
+              <FieldRow>
+                <Field label="Name">{name}</Field>
                 <Field label="Job title">{contact.job_title || <Empty />}</Field>
               </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="Company">
-                  {contact.companies ? (
-                    <CardLink href={`/companies/${contact.companies.id}`}>
-                      {contact.companies.name}
-                    </CardLink>
-                  ) : (
-                    <Empty />
-                  )}
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
+              <FieldRow>
                 <Field label="Primary email">
                   <ContactMethod value={contact.email} kind="email" label={name} />
                 </Field>
+                <Field label="Secondary email">
+                  <ContactMethod
+                    value={contact.secondary_email}
+                    kind="email"
+                    label={name}
+                  />
+                </Field>
               </FieldRow>
-              {/*
-                Only when there is one. A dash here would say a contact has no
-                second address, which is the ordinary case and not worth a row
-                — the same reason the Company Rating card is hidden outright
-                when a contact has no company.
-              */}
-              {contact.secondary_email && (
-                <FieldRow columns={1}>
-                  <Field label="Secondary email">
-                    <ContactMethod
-                      value={contact.secondary_email}
-                      kind="email"
-                      label={name}
-                    />
-                  </Field>
-                </FieldRow>
-              )}
               <FieldRow>
                 <Field label="Mobile phone">
                   <ContactMethod value={contact.phone} kind="phone" label={name} />
