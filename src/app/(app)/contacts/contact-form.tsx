@@ -140,13 +140,7 @@ export function ContactForm({
           </label>
           <input id="last_name" name="last_name" className="input" defaultValue={contact?.last_name ?? ''} />
         </div>
-        <div>
-          <span className="label">Company</span>
-          <CompanyPicker
-            companies={companies}
-            defaultValue={contact?.company_id ?? prefillCompanyId}
-          />
-        </div>
+        {/* Job title first, the order the record reads them in. */}
         <div>
           <label className="label" htmlFor="job_title">
             Job title
@@ -157,6 +151,13 @@ export function ContactForm({
             className="input"
             placeholder="Head of Purchasing"
             defaultValue={contact?.job_title ?? ''}
+          />
+        </div>
+        <div>
+          <span className="label">Company</span>
+          <CompanyPicker
+            companies={companies}
+            defaultValue={contact?.company_id ?? prefillCompanyId}
           />
         </div>
         <div>
