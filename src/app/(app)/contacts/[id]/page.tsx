@@ -234,11 +234,6 @@ export default async function ContactDetailPage({
     ? (contact.links as ContactLink[])
     : [];
 
-  // The Digital card falls back to the company's domain, so a contact inherits
-  // their employer's website without it being typed twice.
-  const companyWebsite = safeUrl(
-    contact.website ?? contact.companies?.domain ?? null,
-  );
 
   return (
     <>
@@ -562,7 +557,15 @@ export default async function ContactDetailPage({
           straight after it on a narrow one — ahead of the activity feed, which
           is long and is not what most visits are for. Influence leads it: how
           much weight this person carries is the first thing worth knowing
-          about them after who they are.
+          about them after who they are, and the business it carries that
+          weight in comes straight after.
+
+          The order-N classes below only decide the narrow layout. This div is
+          `contents` there, so the cards are flex children of the page grid and
+          order applies; at lg it is `block`, where order does nothing at all
+          and the cards render in the order they are written. Moving a card on
+          a wide screen means moving its JSX, and the class has to be changed
+          to match or the two layouts disagree.
         */}
         <div className="contents lg:block lg:space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
           <Section title={CONTACT_CARDS[1].label} className="order-2">
@@ -602,7 +605,68 @@ export default async function ContactDetailPage({
             </dl>
           </Section>
 
-          <Section title="Tags" className="order-3">
+          {/*
+            What kind of business this person works for, directly under how much
+            weight they carry in it. Read from the company rather than stored
+            again on the contact, so the two can never disagree.
+
+            Shown only when there is one. The card's own header links to the
+            company, and with no company there is nothing to link to and nothing
+            to say — a card of dashes would only repeat what the missing link
+            under the page title already says.
+          */}
+          {company && (
+            <Section
+              title={COMPANY_CARDS[3].label}
+              className="order-3"
+              actions={
+                <CardLink href={`/companies/${company.id}`}>
+                  {company.name}
+                </CardLink>
+              }
+            >
+              <dl className="divide-y divide-slate-100">
+                <FieldRow columns={1}>
+                  <Field label="Market">
+                    <OptionBadges
+                      values={company.specialty_market}
+                      options={companyOptionsFor("specialty_market")}
+                    />
+                  </Field>
+                </FieldRow>
+                {/*
+                  Between the two it belongs between: what category of goods a
+                  business deals in, then what condition they arrive in, then
+                  what kind of business it is. The company's own card orders
+                  merchandise and stock type the same way round.
+                */}
+                <FieldRow columns={1}>
+                  <Field label="Stock type">
+                    <OptionBadges
+                      values={company.stock_type}
+                      options={companyOptionsFor("stock_type")}
+                    />
+                  </Field>
+                </FieldRow>
+                <FieldRow columns={1}>
+                  <Field label="Company type">
+                    <OptionBadges
+                      values={company.customer_type}
+                      options={companyOptionsFor("customer_type")}
+                    />
+                  </Field>
+                </FieldRow>
+                <CustomFieldValues
+                  fields={companyCustomFields}
+                  values={companyCustomValues}
+                  fieldOptions={options}
+                  columns={1}
+                />
+              </dl>
+            </Section>
+          )}
+
+          <Section title="Tags" className="order-4">
             {/*
               The same control the contact form carries, so tagging looks the
               same wherever it is done. Here it saves itself once the clicking
@@ -621,14 +685,18 @@ export default async function ContactDetailPage({
             </form>
           </Section>
 
-          {/* ---------------------------------------------------------------- */}
+          {/*
+            Where to find this person, which is what every row here is: their
+            profile on each network.
+
+            Company website was the odd one out and has been taken off. It read
+            the contact's own website and fell back to the employer's domain, so
+            a row labelled as the company's showed the person's when they had
+            one — and the company is a link under the page title and again in
+            the Company Rating header, where its own record holds the domain.
+          */}
           <Section title={CONTACT_CARDS[3].label} className="order-5">
             <dl className="divide-y divide-slate-100">
-              <FieldRow columns={1}>
-                <Field label="Company website">
-                  <ExternalLink url={companyWebsite} />
-                </Field>
-              </FieldRow>
               <FieldRow columns={1}>
                 <Field label="LinkedIn">
                   <ExternalLink url={socialUrl("linkedin", contact.linkedin)} />
@@ -687,63 +755,6 @@ export default async function ContactDetailPage({
               )}
             </dl>
           </Section>
-
-          {/*
-            What kind of business this person works for. Read from the company
-            rather than stored again on the contact, so the two can never
-            disagree — and shown only when there is one, since a card of dashes
-            says nothing that the empty Company field above has not said.
-          */}
-          {company && (
-            <Section
-              title={COMPANY_CARDS[3].label}
-              className="order-4"
-              actions={
-                <CardLink href={`/companies/${company.id}`}>
-                  {company.name}
-                </CardLink>
-              }
-            >
-              <dl className="divide-y divide-slate-100">
-                <FieldRow columns={1}>
-                  <Field label="Market">
-                    <OptionBadges
-                      values={company.specialty_market}
-                      options={companyOptionsFor("specialty_market")}
-                    />
-                  </Field>
-                </FieldRow>
-                {/*
-                  Between the two it belongs between: what category of goods a
-                  business deals in, then what condition they arrive in, then
-                  what kind of business it is. The company's own card orders
-                  merchandise and stock type the same way round.
-                */}
-                <FieldRow columns={1}>
-                  <Field label="Stock type">
-                    <OptionBadges
-                      values={company.stock_type}
-                      options={companyOptionsFor("stock_type")}
-                    />
-                  </Field>
-                </FieldRow>
-                <FieldRow columns={1}>
-                  <Field label="Company type">
-                    <OptionBadges
-                      values={company.customer_type}
-                      options={companyOptionsFor("customer_type")}
-                    />
-                  </Field>
-                </FieldRow>
-                <CustomFieldValues
-                  fields={companyCustomFields}
-                  values={companyCustomValues}
-                  fieldOptions={options}
-                  columns={1}
-                />
-              </dl>
-            </Section>
-          )}
 
           {/* ---------------------------------------------------------------- */}
           <Section title={CONTACT_CARDS[2].label} className="order-7">
