@@ -134,6 +134,58 @@ export function ContactMethod({
   )
 }
 
+/**
+ * Call and email, as the two icons at the end of a row.
+ *
+ * The counterpart to <ContactMethod>, which is the same two actions on a
+ * record page where there is room to show the value beside them. In a table
+ * there is not, so the row ends with the actions alone.
+ *
+ * It matters more than it looks now that a list can be edited in place: the
+ * Email cell is a box to correct the address that bounced, and this is the way
+ * to write to it. One definition, because it appears on the contacts list, the
+ * companies list and the contacts table inside a company — and three copies of
+ * a phone number being stripped is three chances to strip it differently.
+ */
+export function ReachActions({
+  phone,
+  email,
+  label,
+}: {
+  phone: string | null | undefined
+  email: string | null | undefined
+  /** Whose they are, for the labels a screen reader reads out. */
+  label: string
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      {phone && (
+        <a
+          /* Stripped, like every other tel: link in the app: a stored number
+             may carry the spaces and dashes that make it readable, and a space
+             in a URI is not a dialable digit. */
+          href={`tel:${phone.replace(/[^\d+]/g, '')}`}
+          aria-label={`Call ${label}`}
+          title={phone}
+          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        >
+          <PhoneIcon className="h-4 w-4" />
+        </a>
+      )}
+      {email && (
+        <a
+          href={`mailto:${email}`}
+          aria-label={`Email ${label}`}
+          title={email}
+          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        >
+          <MailIcon className="h-4 w-4" />
+        </a>
+      )}
+    </div>
+  )
+}
+
 /** An external link shown by its domain rather than its full URL. */
 export function ExternalLink({ url, label }: { url: string | null; label?: string }) {
   if (!url) return <Empty />

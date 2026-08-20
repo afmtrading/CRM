@@ -39,7 +39,7 @@ import { ColumnPicker } from "@/components/column-picker";
 import { readColumns } from "../column-actions";
 import { ConsentBar } from "@/components/consent-bar";
 import { FilterBar } from "@/components/filter-bar";
-import { CustomCell, Empty, OptionBadges } from "@/components/contact-cards";
+import { CustomCell, Empty, OptionBadges, ReachActions } from "@/components/contact-cards";
 import {
   EmptyState,
   ErrorNote,
@@ -55,8 +55,6 @@ import {
   AwardIcon,
   ContactsIcon,
   ImportIcon,
-  MailIcon,
-  PhoneIcon,
   PlusIcon,
   TrendingUpIcon,
 } from "@/components/icons";
@@ -673,31 +671,7 @@ export default async function ContactsPage({
         ))}
 
         <td>
-          <div className="flex items-center justify-end gap-1">
-            {contact.phone && (
-              <a
-                // Stripped, like every other tel: link in the app: a stored
-                // number may carry the spaces and dashes that make it
-                // readable, and a space in a URI is not a dialable digit.
-                href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}
-                aria-label={`Call ${name}`}
-                title={contact.phone}
-                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <PhoneIcon className="h-4 w-4" />
-              </a>
-            )}
-            {contact.email && (
-              <a
-                href={`mailto:${contact.email}`}
-                aria-label={`Email ${name}`}
-                title={contact.email}
-                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <MailIcon className="h-4 w-4" />
-              </a>
-            )}
-          </div>
+          <ReachActions phone={contact.phone} email={contact.email} label={name} />
         </td>
       </tr>
     );
