@@ -73,6 +73,27 @@ export interface FieldDef {
   sortable?: boolean
 }
 
+/**
+ * The key a tag condition is filed under.
+ *
+ * Tags are not a column on any of the four records that carry them — they are
+ * rows in a join table — so this key names a field that no query can address
+ * directly. Everything that reads a filter has to recognise it: the query path
+ * turns it into a predicate on `id`, and the in-memory path reads a list the
+ * page attached to the row.
+ */
+export const TAGS_FIELD_KEY = 'tags'
+
+/**
+ * The same entry on every list that offers tags.
+ *
+ * Typed as an array because that is the shape of the answer — a record carries
+ * several — which also gets it the right operators: includes any, includes all,
+ * includes none, is empty. The options are tag ids rather than names, so
+ * renaming a tag does not break a saved view that filters on it.
+ */
+export const TAGS_FIELD: FieldDef = { key: TAGS_FIELD_KEY, label: 'Tags', type: 'array' }
+
 export const CONTACT_FIELDS: FieldDef[] = [
   { key: 'first_name', label: 'First name', type: 'text', sortable: true },
   { key: 'last_name', label: 'Last name', type: 'text', sortable: true },
@@ -103,6 +124,7 @@ export const CONTACT_FIELDS: FieldDef[] = [
   { key: 'company_id', label: 'Company', type: 'uuid', groupable: true },
   { key: 'created_at', label: 'Created', type: 'date', sortable: true },
   { key: 'updated_at', label: 'Updated', type: 'date', sortable: true },
+  TAGS_FIELD,
 ]
 
 export const COMPANY_FIELDS: FieldDef[] = [
@@ -124,6 +146,7 @@ export const COMPANY_FIELDS: FieldDef[] = [
   { key: 'stock_type', label: 'Stock type', type: 'array' },
   { key: 'customer_type', label: 'Company type', type: 'array' },
   { key: 'created_at', label: 'Created', type: 'date', sortable: true },
+  TAGS_FIELD,
 ]
 
 export const DEAL_FIELDS: FieldDef[] = [
@@ -167,6 +190,7 @@ export const PRODUCT_FIELDS: FieldDef[] = [
    * each other the moment they disagree.
    */
   { key: 'created_at', label: 'Created', type: 'date', sortable: true },
+  TAGS_FIELD,
 ]
 
 /*
@@ -212,6 +236,7 @@ export const MARKETPLACE_FIELDS: FieldDef[] = [
   { key: 'marketplace_profiles.sources_from', label: 'Source from', type: 'boolean' },
   { key: 'marketplace_profiles.settlement_terms', label: 'Settlement terms', type: 'text' },
   { key: 'marketplace_profiles.opened_on', label: 'Opened', type: 'date', sortable: true },
+  TAGS_FIELD,
 ]
 
 export function baseFieldsFor(entity: FilterEntityType): FieldDef[] {
@@ -391,6 +416,96 @@ export function conditionToPredicate(condition: FilterCondition): Predicate | nu
 }
 
 /**
+ * Whether one record's tags satisfy a tag condition.
+ *
+ * The single definition of what a tag filter means, used by both paths — the
+ * in-memory one calls it per row, and tagPredicate calls it per record to work
+ * out which ids the query should ask for. Two implementations would drift, and
+ * a list that filters differently depending on which screen you are on is worse
+ * than one that does not filter at all.
+ *
+ * "Includes none of" deliberately admits a record with no tags at all: it
+ * plainly includes none of them, and somebody asking for everything not tagged
+ * Reseller means the untagged ones too. That is the opposite of how an array
+ * column behaves — a company that sells nowhere is not a company that sells
+ * outside Canada — which is why tags do not go through the generic path.
+ */
+export function tagsMatch(tagIds: string[], condition: FilterCondition): boolean {
+  const list = toList(condition.value)
+
+  switch (condition.operator) {
+    case 'is_empty':
+      return tagIds.length === 0
+    case 'is_not_empty':
+      return tagIds.length > 0
+    case 'has_all':
+      return list.length > 0 && list.every((tagId) => tagIds.includes(tagId))
+    case 'has_any':
+      return list.length > 0 && list.some((tagId) => tagIds.includes(tagId))
+    case 'has_none':
+      return list.length > 0 && !list.some((tagId) => tagIds.includes(tagId))
+    case 'is_exactly': {
+      if (list.length === 0) return false
+      const held = [...new Set(tagIds)].sort()
+      const wanted = [...new Set(list)].sort()
+      return held.length === wanted.length && held.every((tagId, i) => tagId === wanted[i])
+    }
+    default:
+      return false
+  }
+}
+
+/**
+ * The predicate on `id` that a tag condition becomes.
+ *
+ * A condition is normally packed into `column.operator.value`, which needs the
+ * thing being filtered to be a column. Tags are rows in a join table, so what a
+ * tag condition can become instead is a list of record ids — and `id.in.(…)` is
+ * a predicate like any other, which keeps the whole filter in one query. The
+ * alternative, filtering the rows the query returned, would narrow the 200 rows
+ * fetched rather than choosing 200 from the rows that match: a list that hides
+ * matching records because they sorted below the cut.
+ *
+ * `tagsByRecord` covers only records that carry at least one tag, which is all
+ * this needs. The operators that would match an untagged record are answered
+ * with `id.not.in.(…)` over the records that fail instead, so the ones absent
+ * from the map pass without ever being named.
+ *
+ * The list goes into the query string, so it is bounded by what a URL will
+ * carry — a few hundred ids is nothing, tens of thousands would not fit. The
+ * page has already read every one of those join rows into memory to draw the
+ * Tags column, so that ceiling arrives no sooner here than it does there.
+ */
+export function tagPredicate(
+  condition: FilterCondition,
+  tagsByRecord: Map<string, string[]>,
+): Predicate | null {
+  const negated = condition.operator === 'has_none' || condition.operator === 'is_empty'
+  const takesValue = condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty'
+
+  // A condition somebody has added but not filled in narrows nothing, the same
+  // way conditionToPredicate returns null for one.
+  if (takesValue && toList(condition.value).length === 0) return null
+
+  const ids: string[] = []
+  for (const [recordId, tagIds] of tagsByRecord) {
+    // For the negated pair, collect the records that fail rather than the ones
+    // that pass — `id.not.in.(those)` is the same set plus the untagged.
+    if (tagsMatch(tagIds, condition) !== negated) ids.push(recordId)
+  }
+
+  if (negated) {
+    // Nothing to exclude is not a filter. Emitting `id.not.in.()` would be a
+    // syntax error, and excluding nothing is what "no offending records" means.
+    return ids.length === 0 ? null : { expression: `id.not.in.(${ids.join(',')})` }
+  }
+
+  // Nothing matched, which has to narrow the list to nothing rather than to
+  // everything. A primary key is never null, so this predicate holds for no row.
+  return ids.length === 0 ? { expression: 'id.is.null' } : { expression: `id.in.(${ids.join(',')})` }
+}
+
+/**
  * Free-text search across an entity's obvious text columns. Kept separate from
  * conditions so a saved filter can carry both.
  */
@@ -443,11 +558,26 @@ export function applyFilter<T extends QueryLike>(
    * caller knows which of the two it is.
    */
   defaultOrder: { column: string; ascending: boolean } = { column: 'created_at', ascending: false },
+  /*
+   * Every tagged record's tags, when the caller has them. A tag condition is
+   * not a predicate on a column, so it can only become one — a list of ids —
+   * with the join in hand. A caller that leaves this out gets its tag
+   * conditions dropped here, which is what the marketplaces list wants: it
+   * evaluates the same FilterConfig in memory and would otherwise apply the
+   * condition twice.
+   */
+  tagsByRecord?: Map<string, string[]>,
 ): T {
   let result = query
 
   const predicates = config.conditions
-    .map(conditionToPredicate)
+    .map((condition) =>
+      condition.field === TAGS_FIELD_KEY
+        ? tagsByRecord
+          ? tagPredicate(condition, tagsByRecord)
+          : null
+        : conditionToPredicate(condition),
+    )
     .filter((p): p is Predicate => p !== null)
 
   if (config.match === 'any' && predicates.length > 0) {
@@ -460,13 +590,21 @@ export function applyFilter<T extends QueryLike>(
       const column = predicate.expression.slice(0, firstDot)
       const rest = predicate.expression.slice(firstDot + 1)
       const secondDot = rest.indexOf('.')
-      const [operator, value] =
-        rest.startsWith('not.is.')
-          ? ['not.is', rest.slice('not.is.'.length)]
-          : [rest.slice(0, secondDot), rest.slice(secondDot + 1)]
+      /*
+       * A negated operator is two segments rather than one — `not.is`,
+       * `not.in` — so the split has to take both. This used to name `not.is.`
+       * outright; a tag condition can produce `id.not.in.(…)`, and splitting
+       * that on the first two dots would have asked PostgREST for an operator
+       * called `not`.
+       */
+      const [operator, value] = rest.startsWith('not.')
+        ? [rest.slice(0, rest.indexOf('.', 4)), rest.slice(rest.indexOf('.', 4) + 1)]
+        : [rest.slice(0, secondDot), rest.slice(secondDot + 1)]
 
+      // An `in` list arrives already parenthesised and must stay that way.
+      const isList = operator === 'in' || operator === 'not.in'
       const unquoted = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value
-      result = result.filter(column, operator, operator === 'in' ? value : unquoted) as T
+      result = result.filter(column, operator, isList ? value : unquoted) as T
     }
   }
 
@@ -660,6 +798,15 @@ function compare(raw: unknown, value: unknown): number {
 function matchesCondition(row: Record<string, unknown>, condition: FilterCondition): boolean {
   const raw = rowValue(row, condition.field)
   const { operator, value } = condition
+
+  /*
+   * Tags answer for themselves. The row carries them because the page attached
+   * them — they are not a column — and their empty case means something the
+   * generic array path would get wrong. See tagsMatch.
+   */
+  if (condition.field === TAGS_FIELD_KEY) {
+    return tagsMatch(Array.isArray(raw) ? raw.map(String) : [], condition)
+  }
 
   if (operator === 'is_empty') return isBlank(raw)
   if (operator === 'is_not_empty') return !isBlank(raw)

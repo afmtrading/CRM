@@ -9,6 +9,7 @@ import type {
   CustomFieldDefinitionRow,
   FieldOptionRow,
   MarketplaceProfileRow,
+  TagRow,
   UserRow,
 } from '@/lib/database.types'
 import { ColumnPicker } from '@/components/column-picker'
@@ -21,6 +22,7 @@ import {
   groupRowsNested,
   labelFromFields,
   matchesFilter,
+  TAGS_FIELD_KEY,
   parseFilterConfig,
   sortRows,
 } from '@/lib/filters'
@@ -86,6 +88,8 @@ export default async function MarketplacesPage({
     { data: pickable },
     { data: savedFilterRows },
     { data: countryRows },
+    { data: tagRows },
+    { data: companyTagRows },
   ] = await Promise.all([
       query.order('name').limit(500),
       scoped(context, 'users').select('*').order('name'),
@@ -128,6 +132,13 @@ export default async function MarketplacesPage({
         .select('code, name, kind')
         .order('sort_order')
         .order('name'),
+      /*
+       * The company's tags, both halves of the join. A marketplace is a
+       * company, so these are the same rows the Companies list shows — read
+       * here so the column can be offered and the filter can ask about them.
+       */
+      scoped(context, 'tags').select('id, name, color').order('name'),
+      scoped(context, 'company_tags').select('company_id, tag_id'),
     ])
 
   type Row = CompanyRow & {
@@ -155,8 +166,37 @@ export default async function MarketplacesPage({
    * actually on screen; without a chosen sort the alphabetical order the query
    * asked for is left alone.
    */
+  const tagList = (tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]
+  const tagsById = new Map(tagList.map((tag) => [tag.id, tag]))
+
+  /* Each marketplace's tags, once as the badges a cell draws and once as ids. */
+  const tagsByCompany = new Map<string, Pick<TagRow, 'id' | 'name' | 'color'>[]>()
+  const tagIdsByCompany = new Map<string, string[]>()
+  for (const link of (companyTagRows ?? []) as { company_id: string; tag_id: string }[]) {
+    const tag = tagsById.get(link.tag_id)
+    if (!tag) continue
+    const tags = tagsByCompany.get(link.company_id)
+    if (tags) tags.push(tag)
+    else tagsByCompany.set(link.company_id, [tag])
+    const ids = tagIdsByCompany.get(link.company_id)
+    if (ids) ids.push(tag.id)
+    else tagIdsByCompany.set(link.company_id, [tag.id])
+  }
+
   const rows = sortRows(
-    everything.filter((row) => matchesFilter(row, config, 'marketplace')),
+    everything.filter((row) =>
+      /*
+       * Tags handed to the filter on the row rather than fetched by it. They
+       * are not a column on the company, so matchesFilter has no way to reach
+       * them otherwise — and the copy is thrown away, leaving the row that goes
+       * on to be rendered untouched.
+       */
+      matchesFilter(
+        { ...row, [TAGS_FIELD_KEY]: tagIdsByCompany.get(row.id) ?? [] },
+        config,
+        'marketplace',
+      ),
+    ),
     config.sort,
   )
 
@@ -215,6 +255,14 @@ export default async function MarketplacesPage({
      */
     if (field.key === 'based_in' || field.key === 'sells_in') {
       return { ...field, options: places.countryOptions }
+    }
+
+    /*
+     * Tags are offered by id and read by name. A saved view that named them
+     * would stop matching the moment somebody renamed one in Settings.
+     */
+    if (field.key === TAGS_FIELD_KEY) {
+      return { ...field, options: tagList.map((tag) => ({ value: tag.id, label: tag.name })) }
     }
 
     const optionKey = fieldOptionsByKey[field.key]
@@ -381,6 +429,28 @@ export default async function MarketplacesPage({
         )
       case 'specialty_market':
         return <OptionBadges values={row.specialty_market} options={optionsFor('specialty_market')} />
+      case 'tags': {
+        /*
+         * The tag's own colour, which an admin chose in Settings → Tags, so it
+         * is an inline style rather than a class — Tailwind cannot see a hex
+         * that only exists in the database.
+         */
+        const tags = tagsByCompany.get(row.id) ?? []
+        if (tags.length === 0) return <Empty />
+        return (
+          <span className="flex flex-wrap gap-1">
+            {tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="badge"
+                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </span>
+        )
+      }
       case 'domain':
         return row.domain ? (
           <a
