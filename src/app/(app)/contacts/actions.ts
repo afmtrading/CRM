@@ -20,6 +20,12 @@ const contactSchema = z.object({
   first_name: z.string().trim().max(120).default(''),
   last_name: z.string().trim().max(120).default(''),
   email: z.string().trim().email().or(z.literal('')).default(''),
+  /*
+   * Held to the same shape as the primary, because an address nobody
+   * validated is worth less than no address — somebody reads it off this
+   * field and types it into a mail client by hand.
+   */
+  secondary_email: z.string().trim().email().or(z.literal('')).default(''),
   phone: z.string().trim().max(60).default(''),
   company_id: z.string().uuid().or(z.literal('')).default(''),
   owner_id: z.string().uuid().or(z.literal('')).default(''),
@@ -112,6 +118,7 @@ function contactColumns(input: z.infer<typeof contactSchema>, formData: FormData
     first_name: input.first_name,
     last_name: input.last_name,
     email: input.email || null,
+    secondary_email: input.secondary_email || null,
     phone: input.phone || null,
     lifecycle_stage: input.lifecycle_stage as LifecycleStage,
     source: input.source || null,

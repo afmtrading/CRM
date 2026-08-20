@@ -167,6 +167,26 @@ export function ContactForm({
           <input id="email" name="email" type="email" className="input" defaultValue={contact?.email ?? ''} />
         </div>
         <div>
+          <label className="label" htmlFor="secondary_email">
+            Secondary email
+          </label>
+          <input
+            id="secondary_email"
+            name="secondary_email"
+            type="email"
+            className="input"
+            defaultValue={contact?.secondary_email ?? ''}
+          />
+          {/*
+            Worth saying on the field itself: a second address looks like a
+            second place to send to, and it is not one. Consent, campaigns and
+            suppressions all read the primary.
+          */}
+          <p className="mt-1 text-xs text-slate-400">
+            Kept on the record. Campaigns and consent use the primary address only.
+          </p>
+        </div>
+        <div>
           <label className="label" htmlFor="phone">
             Mobile phone
           </label>
