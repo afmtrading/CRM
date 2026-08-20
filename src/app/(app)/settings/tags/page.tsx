@@ -52,7 +52,7 @@ export default async function TagsPage() {
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Section title={`${usage.length} tag${usage.length === 1 ? '' : 's'}`}>
+          <Section title="Tags">
             <TagRows tags={usage} />
           </Section>
         </div>

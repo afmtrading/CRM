@@ -283,7 +283,7 @@ export default async function FieldsPage({
             </Section>
           )}
 
-          <Section title={`All custom fields (${customFields.length})`}>
+          <Section title="All custom fields">
             {customFields.length === 0 ? (
               <p className="text-sm text-slate-500">No custom fields defined yet.</p>
             ) : (

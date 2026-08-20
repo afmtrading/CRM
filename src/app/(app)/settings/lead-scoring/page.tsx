@@ -61,7 +61,7 @@ export default async function LeadScoringPage() {
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Section title={`${ruleList.length} rule${ruleList.length === 1 ? '' : 's'}`}>
+          <Section title="Rules">
             {ruleList.length === 0 ? (
               <p className="text-sm text-slate-500">
                 No rules yet. Every contact scores 0 until you add one.
