@@ -309,7 +309,7 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
           </Section>
 
           {/* -------------------------------------------------------------- */}
-          <Section title={`Contacts (${contacts.length})`}>
+          <Section title="Contacts">
             {contacts.length === 0 ? (
               <p className="text-sm text-slate-500">
                 Nobody on file here yet. Add them to{' '}

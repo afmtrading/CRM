@@ -81,7 +81,7 @@ export default async function UserSettingsPage({
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <Section title={`${userList.length} user${userList.length === 1 ? '' : 's'}`}>
+          <Section title="Users">
             <div className="-mx-5 overflow-x-auto px-5">
               <table className="table min-w-[46rem]">
                 <thead>

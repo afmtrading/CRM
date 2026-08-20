@@ -32,7 +32,7 @@ export default async function LocationsPage() {
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <Section title={`${locationList.length} location${locationList.length === 1 ? '' : 's'}`}>
+          <Section title="Locations">
             {locationList.length === 0 ? (
               <p className="text-sm text-slate-500">
                 No locations yet. Add one before counting anything.

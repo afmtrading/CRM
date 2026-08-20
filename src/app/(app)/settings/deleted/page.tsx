@@ -108,7 +108,7 @@ export default async function DeletedRecordsPage() {
       ) : (
         <div className="space-y-5">
           {contactRows.length > 0 && (
-            <Section title={`Contacts (${contactRows.length})`}>
+            <Section title="Contacts">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -156,7 +156,7 @@ export default async function DeletedRecordsPage() {
           )}
 
           {companyRows.length > 0 && (
-            <Section title={`Companies (${companyRows.length})`}>
+            <Section title="Companies">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -205,7 +205,7 @@ export default async function DeletedRecordsPage() {
             was part of — so it is the one somebody is most likely here to undo.
           */}
           {dealRows.length > 0 && (
-            <Section title={`Deals (${dealRows.length})`}>
+            <Section title="Deals">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -258,7 +258,7 @@ export default async function DeletedRecordsPage() {
           )}
 
           {productRows.length > 0 && (
-            <Section title={`Products (${productRows.length})`}>
+            <Section title="Products">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -305,7 +305,7 @@ export default async function DeletedRecordsPage() {
           )}
 
           {salesOrderRows.length > 0 && (
-            <Section title={`Sales orders (${salesOrderRows.length})`}>
+            <Section title="Sales orders">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
