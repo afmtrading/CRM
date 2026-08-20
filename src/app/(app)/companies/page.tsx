@@ -193,7 +193,7 @@ export default async function CompaniesPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query = applyFilter(query as any, config, 'company') as any
 
-  const { data, count } = await query.limit(200)
+  const { data } = await query.limit(200)
   const [totalStat, newThisMonth, unassigned] = await statsPromise
   const customerRows = await customerSignals
   const customers = new Set(
@@ -319,12 +319,6 @@ export default async function CompaniesPage({
         ) : (
           <Empty />
         )
-      case 'industry':
-        return company.industry ? (
-          <span className="block truncate text-slate-600">{company.industry}</span>
-        ) : (
-          <Empty />
-        )
       case 'domain':
         return company.domain ? (
           <a
@@ -376,7 +370,6 @@ export default async function CompaniesPage({
     <>
       <PageHeader
         title="Companies"
-        description={count ? `${count} compan${count === 1 ? 'y' : 'ies'}` : undefined}
         actions={
           <>
             <ColumnPicker

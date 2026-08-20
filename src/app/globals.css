@@ -80,9 +80,11 @@ body {
 /* Shadows here are the same +8% as the scale above: 0.04 → 0.0432, and so on. */
 @utility card {
   @apply rounded-2xl border border-slate-200/80 bg-white;
+  /* Lifted a step: enough for a card to sit above the page rather than lie flat
+     on it, still short of the drop that makes a list of them look cluttered. */
   box-shadow:
-    0 1px 2px rgb(16 24 40 / 0.043),
-    0 1px 3px rgb(16 24 40 / 0.065);
+    0 1px 2px rgb(16 24 40 / 0.06),
+    0 2px 6px -1px rgb(16 24 40 / 0.10);
 }
 
 /* Lifts on hover — for cards that are themselves links. */
@@ -113,8 +115,10 @@ body {
 @utility group-header {
   @apply px-0.5 pb-3;
 
+  /* A step under the page title, not over it. This was text-3xl against the
+     title's text-2xl, so a group inside a page shouted louder than the page. */
   & > h2 {
-    @apply text-3xl font-extrabold tracking-tight text-slate-900;
+    @apply text-2xl font-bold tracking-tight text-slate-900;
   }
 }
 
