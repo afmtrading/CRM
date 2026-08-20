@@ -524,21 +524,26 @@ export default async function CompaniesPage({
       <td>
         <SelectRow id={company.id} label={`Select ${company.name}`} />
       </td>
+      {/*
+        The way to write to the address in the Email cell, now that the cell
+        itself is the box for correcting it — and ahead of the name, where the
+        horizontal scroll cannot hide it once somebody adds a few columns. The
+        contacts list is arranged the same way, for the same reason.
+      */}
+      <td className="w-16">
+        <ReachActions
+          phone={company.phone}
+          email={company.email}
+          label={company.name}
+          align="start"
+        />
+      </td>
+
       {columns.map((column) => (
         <td key={column.key} className={column.align === 'right' ? 'text-right' : undefined}>
           <div className="min-w-0 max-w-xs">{cell(company, column.key)}</div>
         </td>
       ))}
-
-      {/*
-        The way to write to the address in the Email cell, now that the cell
-        itself is the box for correcting it. The contacts list has ended this
-        way since it was written; this is the companies list catching up,
-        rather than a mailto link inside a control that is also a text input.
-      */}
-      <td>
-        <ReachActions phone={company.phone} email={company.email} label={company.name} />
-      </td>
     </tr>
   )
 
@@ -645,6 +650,9 @@ export default async function CompaniesPage({
                     <th className="w-10">
                       <SelectAll label="Select every company shown" />
                     </th>
+                    {/* See the note on the cell: ahead of the name, where the
+                        horizontal scroll cannot reach it. */}
+                    <th className="w-16">Actions</th>
                     {columns.map((column) => (
                       <th
                         key={column.key}
@@ -653,7 +661,6 @@ export default async function CompaniesPage({
                         {column.label}
                       </th>
                     ))}
-                    <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

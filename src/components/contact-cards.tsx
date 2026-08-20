@@ -151,14 +151,24 @@ export function ReachActions({
   phone,
   email,
   label,
+  align = 'end',
 }: {
   phone: string | null | undefined
   email: string | null | undefined
   /** Whose they are, for the labels a screen reader reads out. */
   label: string
+  /**
+   * Which way the pair sits in its cell.
+   *
+   * 'end' where the column is the last one, which is where it began. 'start'
+   * where it leads the row instead — the lists put it ahead of the name so a
+   * horizontal scroll cannot take it away, and icons hugging the right of a
+   * narrow first column would sit oddly against the name beside them.
+   */
+  align?: 'start' | 'end'
 }) {
   return (
-    <div className="flex items-center justify-end gap-1">
+    <div className={`flex items-center gap-1 ${align === 'start' ? '' : 'justify-end'}`}>
       {phone && (
         <a
           /* Stripped, like every other tel: link in the app: a stored number
