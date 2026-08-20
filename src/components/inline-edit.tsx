@@ -5,9 +5,11 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 
 import type { OptionColor } from '@/lib/database.types'
+import type { BulkEntity } from '@/lib/bulk-edit'
+import type { TaggableEntity } from '@/lib/tags'
 import { OPTION_COLOR_CLASSES } from '@/lib/field-options'
 import { CheckIcon, ChevronDownIcon } from '@/components/icons'
-import { updateCell } from '@/app/(app)/inline-actions'
+import { updateCell, updateCellTags } from '@/app/(app)/inline-actions'
 
 /**
  * Editing a field from the list, without opening the record.
@@ -29,6 +31,12 @@ export interface InlineOption {
   label: string
   /** Draws the option as the badge it is in the table. Absent means plain text. */
   color?: OptionColor
+  /**
+   * A colour from the database rather than one of the ten named ones — a tag's
+   * own hex, chosen in Settings → Tags. Inline styles rather than classes,
+   * because Tailwind cannot see a value that only exists in a row.
+   */
+  swatch?: string
   /**
    * Where this value goes, when it is a record of its own rather than a word.
    *
@@ -73,11 +81,62 @@ function menuPosition(anchor: DOMRect) {
 }
 
 function Badge({ option }: { option: InlineOption }) {
+  if (option.swatch) {
+    return (
+      <span
+        className="badge"
+        style={{ backgroundColor: `${option.swatch}1f`, color: option.swatch }}
+      >
+        {option.label}
+      </span>
+    )
+  }
+
   return option.color ? (
     <span className={`badge ${OPTION_COLOR_CLASSES[option.color]}`}>{option.label}</span>
   ) : (
     <span className="truncate text-slate-700">{option.label}</span>
   )
+}
+
+/**
+ * The shape every editable cell shares: what it is showing, whether the last
+ * write was refused, and whether one is in flight.
+ *
+ * The optimistic value is held here rather than read from the props on every
+ * render, because a save is two renders — the click, and the server's answer
+ * once the list has re-rendered — and the cell has to show the new value
+ * across both. A refusal puts the old one back.
+ */
+function useCellValue<T>(settled: T, serialise: (value: T) => string) {
+  const [value, setValue] = useState(settled)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, startTransition] = useTransition()
+
+  const key = serialise(settled)
+  useEffect(() => {
+    setValue(settled)
+    // Compared by content: a fresh array or string holding the same answer is
+    // the same answer, and re-running this on every render would fight the
+    // optimistic update it is meant to confirm.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  const commit = (next: T, write: () => Promise<{ error?: string }>) => {
+    const previous = value
+    setValue(next)
+    setError(null)
+
+    startTransition(async () => {
+      const result = await write()
+      if (result.error) {
+        setValue(previous)
+        setError(result.error)
+      }
+    })
+  }
+
+  return { value, error, saving, commit }
 }
 
 export function InlineEdit({
@@ -90,8 +149,9 @@ export function InlineEdit({
   multiple = false,
   clearable = true,
   canEdit,
+  as = 'field',
 }: {
-  entity: 'contact' | 'company'
+  entity: BulkEntity
   id: string
   /** The column, named as `bulk_update_records` names it. */
   field: string
@@ -108,19 +168,23 @@ export function InlineEdit({
   clearable?: boolean
   /** False renders the value and nothing else — no button, no hover. */
   canEdit: boolean
-}) {
-  /*
-   * What the cell is showing, which is not always what the server last said:
-   * a click updates this immediately and the write follows. A refused write
-   * puts it back, which is why the server's answer is kept rather than
-   * discarded once it has been applied.
+  /**
+   * Which write this picker performs.
+   *
+   * 'tags' is the same menu over a different table: tags are a join rather than
+   * a column, so there is no field name to send and `bulk_update_records` has
+   * nothing to write. The interaction is identical, which is the point — a
+   * reader should not have to know which of their record's words live in a
+   * column and which in a join.
    */
-  const [chosen, setChosen] = useState(values)
-  const [error, setError] = useState<string | null>(null)
+  as?: 'field' | 'tags'
+}) {
+  const { value: chosen, error, saving, commit } = useCellValue(values, (list) =>
+    JSON.stringify(list),
+  )
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [position, setPosition] = useState<React.CSSProperties | null>(null)
-  const [saving, startTransition] = useTransition()
 
   const trigger = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
@@ -131,18 +195,6 @@ export function InlineEdit({
    * hanging the menu off that would put it in the wrong place.
    */
   const cell = useRef<HTMLSpanElement>(null)
-
-  /*
-   * The list re-renders on the server after every save — the row may even have
-   * moved to another group — so whatever it says last is the truth.
-   * Compared as JSON rather than by identity: a fresh array holding the same
-   * values is the same answer, and re-running this on every render would fight
-   * the optimistic update it is meant to confirm.
-   */
-  const settled = JSON.stringify(values)
-  useEffect(() => {
-    setChosen(JSON.parse(settled) as string[])
-  }, [settled])
 
   // Placed after the browser has measured the trigger, before it paints, so
   // the menu never appears in the top-left corner for a frame first.
@@ -186,19 +238,12 @@ export function InlineEdit({
     }
   }, [open])
 
-  const save = (next: string[]) => {
-    const previous = chosen
-    setChosen(next)
-    setError(null)
-
-    startTransition(async () => {
-      const result = await updateCell({ entity, id, field, values: next })
-      if (result.error) {
-        setChosen(previous)
-        setError(result.error)
-      }
-    })
-  }
+  const save = (next: string[]) =>
+    commit(next, () =>
+      as === 'tags'
+        ? updateCellTags({ entity: entity as TaggableEntity, id, tagIds: next })
+        : updateCell({ entity, id, field, values: next }),
+    )
 
   const choose = (value: string) => {
     if (multiple) {
@@ -388,6 +433,144 @@ export function InlineEdit({
           </div>,
           document.body,
         )}
+    </>
+  )
+}
+
+/**
+ * A typed value, edited where it is shown.
+ *
+ * The other half of the same idea: a job title, an address, a phone number, a
+ * price. There is no vocabulary to pick from, so the cell becomes an input
+ * rather than a menu — click, type, Enter. Escape puts back what was there;
+ * clicking away saves, because a cell somebody typed into and then clicked out
+ * of has been answered, and throwing that away is the more surprising of the
+ * two behaviours.
+ *
+ * What is *shown* is the caller's business, not this component's. A price
+ * reads as $1,250.00 and a derived one reads greyed; both are passed in as
+ * `display`. Only while a save is in flight does this draw the raw text it is
+ * sending, because that is the moment the two genuinely differ.
+ */
+export function InlineText({
+  entity,
+  id,
+  field,
+  fieldLabel,
+  value,
+  display,
+  placeholder,
+  kind = 'text',
+  align,
+  canEdit,
+}: {
+  entity: BulkEntity
+  id: string
+  field: string
+  fieldLabel: string
+  /** What is stored, as text. Empty means nothing is. */
+  value: string
+  /** What the cell shows when it is not being edited. */
+  display: React.ReactNode
+  /**
+   * Shown inside the empty input. For a price that derives from another one,
+   * this is that derived figure — so somebody typing over it can see what they
+   * are replacing, and clearing the box goes back to it.
+   */
+  placeholder?: string
+  kind?: 'text' | 'email' | 'phone' | 'number'
+  align?: 'right' | 'center'
+  canEdit: boolean
+}) {
+  const { value: current, error, saving, commit } = useCellValue(value, (text) => text)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const input = useRef<HTMLInputElement>(null)
+
+  /*
+   * Escape has to beat blur. Cancelling moves focus off the input, which fires
+   * blur, which would otherwise save the very text Escape just discarded.
+   */
+  const cancelled = useRef(false)
+
+  const start = () => {
+    setDraft(current)
+    cancelled.current = false
+    setEditing(true)
+  }
+
+  const finish = () => {
+    setEditing(false)
+    if (cancelled.current) return
+
+    const next = draft.trim()
+    if (next === current.trim()) return
+    commit(next, () => updateCell({ entity, id, field, values: next === '' ? [] : [next] }))
+  }
+
+  useEffect(() => {
+    if (editing) input.current?.select()
+  }, [editing])
+
+  if (!canEdit) return display
+
+  if (editing) {
+    return (
+      <input
+        ref={input}
+        autoFocus
+        // A number field on a phone brings up the number pad, and an email one
+        // the @ key. Worth the two attributes.
+        type={kind === 'number' ? 'number' : kind === 'email' ? 'email' : 'text'}
+        inputMode={kind === 'phone' ? 'tel' : undefined}
+        step={kind === 'number' ? '0.01' : undefined}
+        min={kind === 'number' ? '0' : undefined}
+        value={draft}
+        placeholder={placeholder}
+        aria-label={fieldLabel}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={finish}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            /*
+              The list sits inside the bulk-edit form, where Enter in a text
+              input submits. Stopped here, or correcting a phone number would
+              apply whatever the bulk bar happened to be showing.
+            */
+            event.preventDefault()
+            finish()
+          }
+          if (event.key === 'Escape') {
+            cancelled.current = true
+            setEditing(false)
+          }
+        }}
+        className={`-mx-1.5 -my-1 w-full rounded-lg border border-brand-500 bg-white px-1.5 py-1 text-sm text-slate-900 focus:outline-none ${
+          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : ''
+        }`}
+      />
+    )
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={start}
+        aria-label={`${fieldLabel}: ${current || 'empty'}`}
+        className={`group/cell -mx-1.5 -my-1 flex w-full min-w-0 items-center gap-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-brand-50 ${
+          saving ? 'opacity-60' : ''
+        } ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : ''}`}
+      >
+        <span className="min-w-0 truncate">
+          {/* Mid-flight the typed text is the honest thing to show: the server
+              has not answered yet, and the formatted display still describes
+              the old value. */}
+          {saving && current !== value ? current || '—' : display}
+        </span>
+      </button>
+
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </>
   )
 }

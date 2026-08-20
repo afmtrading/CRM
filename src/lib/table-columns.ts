@@ -15,6 +15,7 @@
  */
 
 import type { CustomFieldDefinitionRow } from '@/lib/database.types'
+import { findCompanyField } from '@/lib/company-fields'
 
 export type TableEntity = 'contact' | 'company' | 'product' | 'marketplace'
 
@@ -192,8 +193,30 @@ export function columnCatalogue(
    */
   const owner = entity === 'marketplace' ? 'company' : entity
 
+  /*
+   * The company's Region and Size columns are not columns of the table — they
+   * render whichever custom field an organization named that, found by name.
+   * So the field behind them would otherwise be offered twice: once as the
+   * built-in column and again at the bottom as a custom one, two entries with
+   * the same heading drawing the same values. The picker showed "Size" twice
+   * for exactly this reason.
+   *
+   * The built-in column wins, because it is the one the defaults name and the
+   * one the record pages agree with. Matched by id rather than by key so this
+   * stays in step with findCompanyField however forgiving that match becomes.
+   */
+  const mirrored = new Set(
+    owner === 'company'
+      ? [
+          findCompanyField(customFields, 'regions', 'region')?.id,
+          findCompanyField(customFields, 'size')?.id,
+        ].filter((id): id is string => Boolean(id))
+      : [],
+  )
+
   const custom = customFields
     .filter((definition) => definition.entity_type === owner)
+    .filter((definition) => !mirrored.has(definition.id))
     .map((definition) => ({
       key: `custom_fields.${definition.key}`,
       label: definition.label,

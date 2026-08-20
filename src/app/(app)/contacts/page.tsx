@@ -49,7 +49,7 @@ import {
   StatGrid,
 } from "@/components/ui";
 import { CollapsibleGroup, CollapsibleSubGroup } from "@/components/collapsible";
-import { InlineEdit, type InlineOption } from "@/components/inline-edit";
+import { InlineEdit, InlineText, type InlineOption } from "@/components/inline-edit";
 import {
   AlertIcon,
   AwardIcon,
@@ -251,6 +251,17 @@ export default async function ContactsPage({
   const canAssign = context.canManage;
 
   /*
+   * The tags an organization has, as options. Their colours are hexes an admin
+   * chose in Settings → Tags rather than one of the ten named ones, so they
+   * ride as a swatch — see InlineOption.
+   */
+  const tagOptions: InlineOption[] = tagList.map((tag) => ({
+    value: tag.id,
+    label: tag.name,
+    swatch: tag.color,
+  }));
+
+  /*
    * Region is a field of the company rather than the contact, so the column
    * finds it by name — the same lookup the companies list uses.
    */
@@ -356,18 +367,11 @@ export default async function ContactsPage({
     [TAGS_FIELD_KEY]: tagIdsByContact.get(contact.id) ?? [],
   }));
 
-  /* Tag ids to the tag, and each contact to the tags on it. */
-  const tagsById = new Map(
-    tagList.map((tag) => [tag.id, tag]),
-  );
-  const tagsByContact = new Map<string, Pick<TagRow, "id" | "name" | "color">[]>();
-  for (const link of (contactTagRows ?? []) as { contact_id: string; tag_id: string }[]) {
-    const tag = tagsById.get(link.tag_id);
-    if (!tag) continue;
-    const list = tagsByContact.get(link.contact_id);
-    if (list) list.push(tag);
-    else tagsByContact.set(link.contact_id, [tag]);
-  }
+  /*
+   * Which tags each contact carries is already `tagIdsByContact`, built above
+   * for the filter. The cell draws them from the option list by id, so there
+   * is no second map from contact to tag rows any more.
+   */
   /*
    * Region is not offered here. It belongs to the company, so setting it on a
    * selection of contacts would quietly edit their employers — including for
@@ -448,19 +452,49 @@ export default async function ContactsPage({
             canEdit={canEditCell}
           />
         );
+      /*
+       * Typed where it is shown. The mailto and tel links are not lost with
+       * the anchor — they are the two icons at the end of every row, which is
+       * where somebody reaches for them anyway. What the cell is for is fixing
+       * the address that bounced.
+       */
       case "email":
-        return contact.email ? (
-          <a href={`mailto:${contact.email}`} className="text-brand-700 hover:underline">
-            {contact.email}
-          </a>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="contact"
+            id={contact.id}
+            field="email"
+            fieldLabel="Email"
+            kind="email"
+            value={contact.email ?? ""}
+            display={
+              contact.email ? (
+                <span className="block truncate text-slate-600">{contact.email}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         );
       case "phone":
-        return contact.phone ? (
-          <span className="whitespace-nowrap text-slate-600">{contact.phone}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="contact"
+            id={contact.id}
+            field="phone"
+            fieldLabel="Phone"
+            kind="phone"
+            value={contact.phone ?? ""}
+            display={
+              contact.phone ? (
+                <span className="whitespace-nowrap text-slate-600">{contact.phone}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         );
       /*
        * Owner, priority, role type, credibility, lifecycle stage and any
@@ -519,29 +553,25 @@ export default async function ContactsPage({
             canEdit={canEditCell}
           />
         );
-      case "tags": {
+      case "tags":
         /*
-         * The tag's own colour, which an admin chose in Settings → Tags, so it
-         * is an inline style rather than a class — Tailwind cannot see a hex
-         * that only exists in the database. Tinted background, solid text, the
-         * same shape every other badge on this row has.
+         * The same menu the other vocabulary fields use, over a different
+         * table: tags are a join rather than a column. Nobody reading a list
+         * should have to know which of their record's words live where.
          */
-        const tags = tagsByContact.get(contact.id) ?? [];
-        if (tags.length === 0) return <Empty />;
         return (
-          <span className="flex flex-wrap gap-1">
-            {tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="badge"
-                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
-              >
-                {tag.name}
-              </span>
-            ))}
-          </span>
+          <InlineEdit
+            as="tags"
+            entity="contact"
+            id={contact.id}
+            field="tags"
+            fieldLabel="Tags"
+            values={tagIdsByContact.get(contact.id) ?? []}
+            options={tagOptions}
+            multiple
+            canEdit={canEditCell}
+          />
         );
-      }
       case "lifecycle_stage":
         return (
           <InlineEdit
@@ -564,10 +594,22 @@ export default async function ContactsPage({
           <Empty />
         );
       case "job_title":
-        return contact.job_title ? (
-          <span className="block truncate text-slate-600">{contact.job_title}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="contact"
+            id={contact.id}
+            field="job_title"
+            fieldLabel="Job title"
+            value={contact.job_title ?? ""}
+            display={
+              contact.job_title ? (
+                <span className="block truncate text-slate-600">{contact.job_title}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         );
       case "region":
         // The company's, not the person's — a contact has no region of its own.

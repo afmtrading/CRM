@@ -99,6 +99,7 @@ declare
   v_c3       uuid;
   v_theirs   uuid;
   v_company  uuid;
+  v_product  uuid;
 begin
   insert into organizations (name, slug) values ('Bulk Co', 'bulk-co') returning id into v_org;
   insert into organizations (name, slug) values ('Other Bulk Co', 'other-bulk-co') returning id into v_other;
@@ -135,13 +136,18 @@ begin
   insert into companies (organization_id, name, owner_id)
   values (v_org, 'Bulk Client', v_admin) returning id into v_company;
 
+  -- Org-wide reference data rather than anybody's record, which is the whole
+  -- point of the product case below: its policy asks a different question.
+  insert into products (organization_id, name, unit_price)
+  values (v_org, 'Pallet of scrubs', 100) returning id into v_product;
+
   insert into fixture values
     ('org', v_org), ('other', v_other),
     ('admin_auth', v_admin_a), ('rep_auth', v_rep_a), ('rep2_auth', v_rep2_a),
     ('badmin_auth', v_badmin_a),
     ('admin', v_admin), ('rep', v_rep), ('rep2', v_rep2),
     ('c1', v_c1), ('c2', v_c2), ('c3', v_c3), ('theirs', v_theirs),
-    ('company', v_company);
+    ('company', v_company), ('product', v_product);
 end;
 $$;
 
@@ -262,6 +268,61 @@ end;
 $$;
 
 -- =============================================================================
+-- Products, which are not anybody's records.
+--
+-- A contact belongs to the rep who owns it; a product belongs to the desk. The
+-- function is the same one and the whitelist is the same whitelist, so the only
+-- thing standing between a rep and the price list is the products policy —
+-- which is exactly what this checks, because widening a whitelist must not
+-- widen a permission.
+-- =============================================================================
+do $$
+declare
+  v_product uuid := (select id from fixture where key = 'product');
+  v_failed  boolean;
+begin
+  raise notice 'A product:';
+  perform sign_in_as('admin_auth');
+
+  perform test_assert(
+    bulk_update_records('product', array[v_product], 'unit_price', 'set', array['250.00']) = 1,
+    'a manager can reprice from the list'
+  );
+  perform test_assert(
+    (select unit_price = 250.00 from products where id = v_product),
+    'and the price lands'
+  );
+
+  perform test_assert(
+    bulk_update_records('product', array[v_product], 'price_showroom', 'clear', '{}') = 1,
+    'a derived price can be sent back to being derived'
+  );
+  perform test_assert(
+    (select price_showroom is null from products where id = v_product),
+    'which means the override going away rather than becoming zero'
+  );
+
+  v_failed := false;
+  begin
+    perform bulk_update_records('product', array[v_product], 'currency', 'set', array['USD']);
+  exception when others then v_failed := true;
+  end;
+  perform test_assert(v_failed, 'the currency the prices are in is not on the list');
+
+  -- The rep, whose policy does not let them write reference data at all.
+  perform sign_in_as('rep_auth');
+  perform test_assert(
+    bulk_update_records('product', array[v_product], 'unit_price', 'set', array['1.00']) = 0,
+    'a rep changes nothing, and is told so by the count rather than by an error'
+  );
+  perform test_assert(
+    (select unit_price = 250.00 from products where id = v_product),
+    'and the catalogue still says what the manager set'
+  );
+end;
+$$;
+
+-- =============================================================================
 -- Reach. The heart of it.
 -- =============================================================================
 do $$
@@ -319,12 +380,32 @@ begin
   raise notice 'The whitelist:';
   perform sign_in_as('admin_auth');
 
+  /*
+   * lead_score rather than email, which the lists edit in place as of
+   * 20260262 — a whitelist test has to name something that is still off the
+   * list, and a score the rules derive is the clearest example of one: writing
+   * it by hand would be overwritten the next time scoring ran.
+   */
   v_failed := false;
   begin
-    perform bulk_update_records('contact', array[v_c1], 'email', 'set', array['x@example.com']);
+    perform bulk_update_records('contact', array[v_c1], 'lead_score', 'set', array['99']);
   exception when others then v_failed := true;
   end;
   perform test_assert(v_failed, 'a column nobody chose to expose cannot be written');
+
+  -- …and the ones that were added to it do work, on all three record types.
+  perform test_assert(
+    bulk_update_records('contact', array[v_c1], 'email', 'set', array['x@example.com']) = 1,
+    'a contact''s email can be corrected from the list'
+  );
+  perform test_assert(
+    bulk_update_records('contact', array[v_c1], 'job_title', 'set', array['Buyer']) = 1,
+    'and so can a job title'
+  );
+  perform test_assert(
+    (select email = 'x@example.com' and job_title = 'Buyer' from contacts where id = v_c1),
+    'and both land on the row rather than being reported and dropped'
+  );
 
   v_failed := false;
   begin

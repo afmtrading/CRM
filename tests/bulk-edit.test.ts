@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { bulkFieldsFor, bulkResultMessage, validateBulkChange } from '../src/lib/bulk-edit'
+import {
+  bulkFieldsFor,
+  bulkResultMessage,
+  inlineFieldsFor,
+  validateBulkChange,
+} from '../src/lib/bulk-edit'
 import type { CustomFieldDefinitionRow, FieldOptionRow } from '../src/lib/database.types'
 
 /*
@@ -176,5 +181,127 @@ describe('bulkResultMessage', () => {
 
   it('explains a change that reached nothing', () => {
     expect(bulkResultMessage(0, 5, 'contact')).toMatch(/nothing changed/i)
+  })
+})
+
+/*
+ * The bar and the cell read one catalogue and see different halves of it. The
+ * point of these is that widening what a cell offers cannot widen what the bar
+ * offers by accident — an email address set across forty records at once is
+ * the mistake the split exists to prevent.
+ */
+describe('what a cell may change, against what the bar may', () => {
+  const empty = { owners: [], companies: [], customFields: [], fieldOptions: [] }
+
+  it('offers a contact the typed fields the bar does not', () => {
+    const inline = inlineFieldsFor('contact', empty).map((field) => field.key)
+    const bulk = bulkFieldsFor('contact', empty).map((field) => field.key)
+
+    expect(inline).toEqual(expect.arrayContaining(['job_title', 'email', 'phone']))
+    expect(bulk).not.toEqual(expect.arrayContaining(['job_title', 'email', 'phone']))
+  })
+
+  it('keeps everything the bar offers offered in a cell too', () => {
+    const inline = new Set(inlineFieldsFor('contact', empty).map((field) => field.key))
+
+    for (const field of bulkFieldsFor('contact', empty)) {
+      expect(inline.has(field.key)).toBe(true)
+    }
+  })
+
+  it('gives a company stock type, an address and a number', () => {
+    const keys = inlineFieldsFor('company', empty).map((field) => field.key)
+
+    expect(keys).toEqual(expect.arrayContaining(['stock_type', 'email', 'phone']))
+  })
+
+  it('gives a product everything, and the bar nothing', () => {
+    const inline = inlineFieldsFor('product', empty).map((field) => field.key)
+
+    expect(inline).toEqual([
+      'status',
+      'category',
+      'product_condition',
+      'priority',
+      'brand',
+      'sku',
+      'unit_price',
+      'unit_cost',
+      'price_showroom',
+      'price_wholesale',
+    ])
+    expect(bulkFieldsFor('product', empty)).toEqual([])
+  })
+
+  /* Retail and cost are NOT NULL with a zero default, so there is no clearing
+     them — a price of nothing is zero, and the column would refuse null. */
+  it('does not offer to clear a price that cannot be empty', () => {
+    const fields = inlineFieldsFor('product', empty)
+
+    expect(fields.find((field) => field.key === 'unit_price')?.modes).toEqual(['set'])
+    expect(fields.find((field) => field.key === 'price_showroom')?.modes).toEqual(['set', 'clear'])
+  })
+})
+
+describe('checking what was typed', () => {
+  const field = (over: Record<string, unknown> = {}) =>
+    inlineFieldsFor('contact', {
+      owners: [],
+      companies: [],
+      customFields: [],
+      fieldOptions: [],
+    }).find((candidate) => candidate.key === (over.key ?? 'email'))!
+
+  it('refuses something that is not an address', () => {
+    expect(validateBulkChange(field(), 'set', ['acme.com'])).toBe(
+      'acme.com is not an email address.',
+    )
+  })
+
+  it('takes one that is', () => {
+    expect(validateBulkChange(field(), 'set', ['buyer@acme.com'])).toBeNull()
+  })
+
+  it('still allows clearing, which is not a value to check', () => {
+    expect(validateBulkChange(field(), 'clear', [])).toBeNull()
+  })
+
+  it('refuses a price that is not a number, and one below nothing', () => {
+    const price = inlineFieldsFor('product', {
+      owners: [],
+      companies: [],
+      customFields: [],
+      fieldOptions: [],
+    }).find((candidate) => candidate.key === 'unit_price')!
+
+    expect(validateBulkChange(price, 'set', ['ninety'])).toBe('Retail price has to be a number.')
+    expect(validateBulkChange(price, 'set', ['-1'])).toBe('Retail price cannot be negative.')
+    expect(validateBulkChange(price, 'set', ['12.50'])).toBeNull()
+  })
+
+  it('holds a typed value to a length, so a paste cannot become a job title', () => {
+    const title = inlineFieldsFor('contact', {
+      owners: [],
+      companies: [],
+      customFields: [],
+      fieldOptions: [],
+    }).find((candidate) => candidate.key === 'job_title')!
+
+    expect(validateBulkChange(title, 'set', ['x'.repeat(201)])).toBe(
+      'Job title is longer than 200 characters.',
+    )
+  })
+})
+
+describe('a field that cannot be emptied', () => {
+  it('says so in words rather than in the mode name', () => {
+    const price = inlineFieldsFor('product', {
+      owners: [],
+      companies: [],
+      customFields: [],
+      fieldOptions: [],
+    }).find((field) => field.key === 'unit_price')!
+
+    expect(validateBulkChange(price, 'clear', [])).toBe('Retail price cannot be emptied.')
   })
 })

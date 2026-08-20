@@ -35,7 +35,7 @@ import {
   StatGrid,
 } from '@/components/ui'
 import { CollapsibleGroup, CollapsibleSubGroup } from '@/components/collapsible'
-import { InlineEdit, type InlineOption } from '@/components/inline-edit'
+import { InlineEdit, InlineText, type InlineOption } from '@/components/inline-edit'
 import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
@@ -278,16 +278,17 @@ export default async function CompaniesPage({
   )
 
 
-  /* Tag ids to the tag, and each company to the tags on it. */
-  const tagsById = new Map(tagList.map((tag) => [tag.id, tag]))
-  const tagsByCompany = new Map<string, Pick<TagRow, 'id' | 'name' | 'color'>[]>()
-  for (const link of (companyTagRows ?? []) as { company_id: string; tag_id: string }[]) {
-    const tag = tagsById.get(link.tag_id)
-    if (!tag) continue
-    const list = tagsByCompany.get(link.company_id)
-    if (list) list.push(tag)
-    else tagsByCompany.set(link.company_id, [tag])
-  }
+  /*
+   * The tags an organization has, as options. Their colours are hexes an admin
+   * chose in Settings → Tags rather than one of the ten named ones, so they
+   * ride as a swatch — see InlineOption. Which company carries which is
+   * already `tagIdsByCompany`, built above for the filter.
+   */
+  const tagOptions: InlineOption[] = tagList.map((tag) => ({
+    value: tag.id,
+    label: tag.name,
+    swatch: tag.color,
+  }))
 
   const bulkFields = bulkFieldsFor('company', {
     owners: ownerList.map((user) => ({ value: user.id, label: user.name || user.email })),
@@ -365,10 +366,17 @@ export default async function CompaniesPage({
           />
         )
       case 'stock_type':
-        return company.stock_type?.length ? (
-          <span className="block truncate text-slate-600">{company.stock_type.join(', ')}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="company"
+            id={company.id}
+            field="stock_type"
+            fieldLabel="Stock type"
+            values={company.stock_type ?? []}
+            options={inlineOptions('stock_type')}
+            multiple
+            canEdit={canEditCell}
+          />
         )
       case 'owner':
         return (
@@ -382,28 +390,25 @@ export default async function CompaniesPage({
             canEdit={canAssign}
           />
         )
-      case 'tags': {
+      case 'tags':
         /*
-         * The tag's own colour, which an admin chose in Settings → Tags, so it
-         * is an inline style rather than a class — Tailwind cannot see a hex
-         * that only exists in the database.
+         * The same menu the other vocabulary fields use, over a different
+         * table: tags are a join rather than a column. Nobody reading a list
+         * should have to know which of their record's words live where.
          */
-        const tags = tagsByCompany.get(company.id) ?? []
-        if (tags.length === 0) return <Empty />
         return (
-          <span className="flex flex-wrap gap-1">
-            {tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="badge"
-                style={{ backgroundColor: `${tag.color}1f`, color: tag.color }}
-              >
-                {tag.name}
-              </span>
-            ))}
-          </span>
+          <InlineEdit
+            as="tags"
+            entity="company"
+            id={company.id}
+            field="tags"
+            fieldLabel="Tags"
+            values={tagIdsByCompany.get(company.id) ?? []}
+            options={tagOptions}
+            multiple
+            canEdit={canEditCell}
+          />
         )
-      }
       case 'contacts':
         return <span className="text-slate-600">{company.contacts?.[0]?.count ?? 0}</span>
       case 'size':
@@ -441,18 +446,42 @@ export default async function CompaniesPage({
           <Empty />
         )
       case 'email':
-        return company.email ? (
-          <a href={`mailto:${company.email}`} className="block truncate text-brand-700 hover:underline">
-            {company.email}
-          </a>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="company"
+            id={company.id}
+            field="email"
+            fieldLabel="Email"
+            kind="email"
+            value={company.email ?? ''}
+            display={
+              company.email ? (
+                <span className="block truncate text-slate-600">{company.email}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         )
       case 'phone':
-        return company.phone ? (
-          <span className="whitespace-nowrap text-slate-600">{company.phone}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineText
+            entity="company"
+            id={company.id}
+            field="phone"
+            fieldLabel="Phone"
+            kind="phone"
+            value={company.phone ?? ''}
+            display={
+              company.phone ? (
+                <span className="whitespace-nowrap text-slate-600">{company.phone}</span>
+              ) : (
+                <Empty />
+              )
+            }
+            canEdit={canEditCell}
+          />
         )
       case 'created_at':
         return <span className="text-slate-600">{formatDay(company.created_at)}</span>
