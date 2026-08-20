@@ -153,15 +153,6 @@ export default async function CompaniesPage({
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
 
   /*
-   * Scoped by entity, not just by key. `priority` is a list on companies,
-   * another on contacts and another on products; matching the key alone drew
-   * all three, and the colour a badge got depended on which came back first.
-   */
-  const marketOptions = optionsForField(allOptions, 'company', 'specialty_market')
-  const typeOptions = optionsForField(allOptions, 'company', 'customer_type')
-  const priorityOptions = optionsForField(allOptions, 'company', 'priority')
-
-  /*
    * Region and size are the organization's own fields, so the columns look them
    * up by name. See findCompanyField for how forgiving that match is and why.
    */
@@ -177,12 +168,32 @@ export default async function CompaniesPage({
   const sizeOptions = customFieldOptions(sizeField)
 
   /*
-   * The same lists, in the shape an editable cell wants: the value, the word
-   * to show for it, and the colour an admin gave it in Settings → Fields, so
-   * the menu offers exactly the badges the column is already drawing.
+   * A field's option list, in the shape an editable cell wants: the value, the
+   * word to show for it, and the colour an admin gave it in Settings → Fields,
+   * so the menu offers exactly the badges the column is already drawing.
+   *
+   * Scoped by entity, not just by key. `priority` is a list on companies,
+   * another on contacts and another on products; matching the key alone drew
+   * all three, and the colour a badge got depended on which came back first.
+   *
+   * Built once per field and handed to every row that shows it. React writes
+   * an object it has already written as a back-reference, so one shared array
+   * costs one copy in the payload while a fresh array per row costs one per
+   * row — which is why this is cached rather than mapped inside the cell.
    */
-  const inlineOptions = (rows: FieldOptionRow[]): InlineOption[] =>
-    rows.map((option) => ({ value: option.value, label: option.value, color: option.color }))
+  const inlineOptionCache = new Map<string, InlineOption[]>()
+  const inlineOptions = (key: string): InlineOption[] => {
+    const built = inlineOptionCache.get(key)
+    if (built) return built
+
+    const options = optionsForField(allOptions, 'company', key).map((option) => ({
+      value: option.value,
+      label: option.value,
+      color: option.color,
+    }))
+    inlineOptionCache.set(key, options)
+    return options
+  }
 
   /*
    * Which cells can be changed from the list. Ownership is a manager's
@@ -199,6 +210,15 @@ export default async function CompaniesPage({
   const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
 
   const ownerList = (owners ?? []) as UserRow[]
+
+  /**
+   * The people a record can be assigned to, built once and handed to every
+   * row — see the note on inlineOptions above.
+   */
+  const ownerOptions: InlineOption[] = ownerList.map((user) => ({
+    value: user.id,
+    label: user.name || user.email,
+  }))
   const tagList = (tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]
 
   /*
@@ -314,7 +334,7 @@ export default async function CompaniesPage({
             field="priority"
             fieldLabel="Priority"
             values={company.priority ? [company.priority] : []}
-            options={inlineOptions(priorityOptions)}
+            options={inlineOptions('priority')}
             canEdit={canEditCell}
           />
         )
@@ -326,7 +346,7 @@ export default async function CompaniesPage({
             field="customer_type"
             fieldLabel="Company type"
             values={company.customer_type ?? []}
-            options={inlineOptions(typeOptions)}
+            options={inlineOptions('customer_type')}
             multiple
             canEdit={canEditCell}
           />
@@ -339,7 +359,7 @@ export default async function CompaniesPage({
             field="specialty_market"
             fieldLabel="Merchandise"
             values={company.specialty_market ?? []}
-            options={inlineOptions(marketOptions)}
+            options={inlineOptions('specialty_market')}
             multiple
             canEdit={canEditCell}
           />
@@ -358,10 +378,7 @@ export default async function CompaniesPage({
             field="owner_id"
             fieldLabel="Owner"
             values={company.owner_id ? [company.owner_id] : []}
-            options={ownerList.map((user) => ({
-              value: user.id,
-              label: user.name || user.email,
-            }))}
+            options={ownerOptions}
             canEdit={canAssign}
           />
         )
@@ -461,7 +478,7 @@ export default async function CompaniesPage({
               field={key}
               fieldLabel={definition.label}
               values={chosenValues(company.custom_fields?.[definition.key])}
-              options={inlineOptions(customFieldOptions(definition))}
+              options={inlineOptions(definition.key)}
               multiple={definition.field_type === 'multiselect'}
               canEdit={canEditCell}
             />

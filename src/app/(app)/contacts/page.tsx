@@ -214,13 +214,32 @@ export default async function ContactsPage({
    * The same list, in the shape an editable cell wants: the value, the word to
    * show for it, and the colour an admin gave it in Settings → Fields, so the
    * menu offers exactly the badges the column is already drawing.
+   *
+   * Built once per field and handed to every row that shows it. React writes
+   * an object it has already written as a back-reference, so one shared array
+   * costs one copy in the payload while a fresh array per row costs two
+   * hundred — which on the company picker below is the difference between
+   * forty kilobytes and four megabytes.
    */
-  const inlineOptions = (key: string): InlineOption[] =>
-    optionsFor(key).map((option) => ({
+  const inlineOptionCache = new Map<string, InlineOption[]>();
+  const inlineOptions = (key: string): InlineOption[] => {
+    const built = inlineOptionCache.get(key);
+    if (built) return built;
+
+    const options = optionsFor(key).map((option) => ({
       value: option.value,
       label: option.value,
       color: option.color,
     }));
+    inlineOptionCache.set(key, options);
+    return options;
+  };
+
+  /** The people a record can be assigned to. Also built once — see above. */
+  const ownerOptions: InlineOption[] = ownerList.map((user) => ({
+    value: user.id,
+    label: user.name || user.email,
+  }));
 
   /*
    * Which cells can be changed from the list at all. Ownership is a manager's
@@ -243,6 +262,35 @@ export default async function ContactsPage({
           option.field_key === regionField.key,
       )
     : [];
+
+  /*
+   * Every company, as options for the cell that moves a contact between them.
+   * Each carries its own link, so the value in the cell stays clickable and
+   * points at whichever company is chosen — see InlineOption.href.
+   */
+  const companyOptions: InlineOption[] = companyList.map((company) => ({
+    value: company.id,
+    label: company.name,
+    href: `/companies/${company.id}`,
+  }));
+  const companyIds = new Set(companyList.map((company) => company.id));
+
+  /*
+   * …and the same list with this contact's own company guaranteed to be in it.
+   *
+   * The picker's list comes back from one query, and PostgREST caps how many
+   * rows that returns. On a book of companies large enough to hit that cap, a
+   * contact can be at one the list does not mention — and an option list
+   * missing the value it is showing would draw a raw id where a name should
+   * be. The copy only happens in that case.
+   */
+  const companyOptionsFor = (company: { id: string; name: string } | null) =>
+    company && !companyIds.has(company.id)
+      ? [
+          { value: company.id, label: company.name, href: `/companies/${company.id}` },
+          ...companyOptions,
+        ]
+      : companyOptions;
 
   const fields = fieldsFor(
     "contact",
@@ -384,15 +432,21 @@ export default async function ContactsPage({
           </Link>
         );
       case "company":
-        return contact.companies ? (
-          <Link
-            href={`/companies/${contact.companies.id}`}
-            className="block truncate text-slate-600 hover:text-brand-700 hover:underline"
-          >
-            {contact.companies.name}
-          </Link>
-        ) : (
-          <Empty />
+        /*
+         * Editable, and still a link. The company name goes on pointing at the
+         * company; the chevron beside it is what opens the picker, so a column
+         * people use to get somewhere did not become one they can only change.
+         */
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="company_id"
+            fieldLabel="Company"
+            values={contact.companies ? [contact.companies.id] : []}
+            options={companyOptionsFor(contact.companies)}
+            canEdit={canEditCell}
+          />
         );
       case "email":
         return contact.email ? (
@@ -424,10 +478,7 @@ export default async function ContactsPage({
             field="owner_id"
             fieldLabel="Owner"
             values={contact.owner_id ? [contact.owner_id] : []}
-            options={ownerList.map((user) => ({
-              value: user.id,
-              label: user.name || user.email,
-            }))}
+            options={ownerOptions}
             canEdit={canAssign}
           />
         );

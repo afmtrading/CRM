@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 
 import type { OptionColor } from '@/lib/database.types'
 import { OPTION_COLOR_CLASSES } from '@/lib/field-options'
@@ -28,11 +29,33 @@ export interface InlineOption {
   label: string
   /** Draws the option as the badge it is in the table. Absent means plain text. */
   color?: OptionColor
+  /**
+   * Where this value goes, when it is a record of its own rather than a word.
+   *
+   * A contact's company is both things at once: something to change from the
+   * list, and something to click through to. Given a link, the value stays one
+   * and only the chevron beside it opens the menu — so gaining an editor does
+   * not cost the way out of the row. It rides on the option rather than being
+   * passed alongside the cell so that it follows the value: pick a different
+   * company and the link points at that one immediately, without waiting for
+   * the server to say so.
+   */
+  href?: string
 }
 
 /** How wide the popover is, and how far it is allowed to hang below the fold. */
 const MENU_WIDTH = 240
 const MENU_MAX_HEIGHT = 288
+
+/*
+ * How many options are drawn at once.
+ *
+ * The company picker offers every company the organization has, which on a
+ * grown book is a four-figure list, and a menu that renders all of it is a
+ * menu that stutters on the way open. Past this the rest are counted rather
+ * than drawn, and the search box above is how you reach them.
+ */
+const MENU_LIMIT = 50
 
 /** Where the menu goes: under the cell, nudged back on screen if it would not fit. */
 function menuPosition(anchor: DOMRect) {
@@ -101,6 +124,13 @@ export function InlineEdit({
 
   const trigger = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
+  /*
+   * The whole cell, which is what the menu is lined up under and what counts
+   * as "inside" for a click. Usually that is the button itself; where the
+   * value is a link the button is only the chevron at the end of the row, and
+   * hanging the menu off that would put it in the wrong place.
+   */
+  const cell = useRef<HTMLSpanElement>(null)
 
   /*
    * The list re-renders on the server after every save — the row may even have
@@ -117,8 +147,9 @@ export function InlineEdit({
   // Placed after the browser has measured the trigger, before it paints, so
   // the menu never appears in the top-left corner for a frame first.
   useLayoutEffect(() => {
-    if (!open || !trigger.current) return
-    setPosition(menuPosition(trigger.current.getBoundingClientRect()))
+    const anchor = cell.current ?? trigger.current
+    if (!open || !anchor) return
+    setPosition(menuPosition(anchor.getBoundingClientRect()))
   }, [open])
 
   useEffect(() => {
@@ -126,7 +157,7 @@ export function InlineEdit({
 
     const close = (event: MouseEvent) => {
       const target = event.target as Node
-      if (menu.current?.contains(target) || trigger.current?.contains(target)) return
+      if (menu.current?.contains(target) || cell.current?.contains(target)) return
       setOpen(false)
     }
     const key = (event: KeyboardEvent) => {
@@ -205,32 +236,76 @@ export function InlineEdit({
   const matches = search.trim()
     ? options.filter((option) => option.label.toLowerCase().includes(search.trim().toLowerCase()))
     : options
+  const drawn = matches.slice(0, MENU_LIMIT)
+
+  /*
+   * The value points somewhere, so it stays a link and the chevron beside it
+   * becomes the editor. Only for a single value with somewhere to go: a list
+   * of links would be a row of separate targets, and an empty cell has nothing
+   * to link to, so both of those get the ordinary whole-cell button.
+   */
+  const single = !multiple && shown.length === 1 ? shown[0] : undefined
+  const href = single?.href
+  const linked = single && href ? { label: single.label, href } : null
+
+  const chevron = (
+    <ChevronDownIcon
+      className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-opacity ${
+        open ? 'opacity-100' : 'opacity-0 group-hover/cell:opacity-100'
+      }`}
+    />
+  )
+
+  const openMenu = () => {
+    setSearch('')
+    setOpen((was) => !was)
+  }
+
+  // The list sits inside the bulk-edit form. A button with no type submits it,
+  // which would apply whatever the bar happens to be showing.
+  const buttonProps = {
+    ref: trigger,
+    type: 'button' as const,
+    onClick: openMenu,
+    'aria-haspopup': 'listbox' as const,
+    'aria-expanded': open,
+  }
 
   return (
     <>
-      <button
-        ref={trigger}
-        // The list sits inside the bulk-edit form. A button with no type
-        // submits it, which would apply whatever the bar happens to be showing.
-        type="button"
-        onClick={() => {
-          setSearch('')
-          setOpen((was) => !was)
-        }}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`${fieldLabel}: ${shown.map((option) => option.label).join(', ') || 'empty'}`}
-        className={`group/cell -mx-1.5 -my-1 flex w-full min-w-0 items-center gap-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-brand-50 ${
+      <span
+        ref={cell}
+        className={`group/cell -mx-1.5 -my-1 flex w-full min-w-0 items-center gap-1 rounded-lg px-1.5 py-1 transition-colors hover:bg-brand-50 ${
           open ? 'bg-brand-50 ring-1 ring-brand-300' : ''
         } ${saving ? 'opacity-60' : ''}`}
       >
-        {display}
-        <ChevronDownIcon
-          className={`ml-auto h-3.5 w-3.5 shrink-0 text-slate-400 transition-opacity ${
-            open ? 'opacity-100' : 'opacity-0 group-hover/cell:opacity-100'
-          }`}
-        />
-      </button>
+        {linked ? (
+          <>
+            <Link
+              href={linked.href}
+              className="min-w-0 flex-1 truncate text-slate-600 hover:text-brand-700 hover:underline"
+            >
+              {linked.label}
+            </Link>
+            <button
+              {...buttonProps}
+              aria-label={`Change ${fieldLabel.toLowerCase()} — currently ${linked.label}`}
+              className="-mr-0.5 shrink-0 rounded p-0.5 hover:bg-brand-100"
+            >
+              {chevron}
+            </button>
+          </>
+        ) : (
+          <button
+            {...buttonProps}
+            aria-label={`${fieldLabel}: ${shown.map((option) => option.label).join(', ') || 'empty'}`}
+            className="flex w-full min-w-0 items-center gap-1 text-left"
+          >
+            {display}
+            <span className="ml-auto">{chevron}</span>
+          </button>
+        )}
+      </span>
 
       {/* Said in the cell rather than in a banner at the top of the page: the
           refusal belongs next to the value that sprang back. */}
@@ -268,7 +343,7 @@ export function InlineEdit({
               <p className="px-2 py-3 text-center text-xs text-slate-400">Nothing matches</p>
             )}
 
-            {matches.map((option) => {
+            {drawn.map((option) => {
               const picked = chosen.includes(option.value)
               return (
                 <button
@@ -286,6 +361,12 @@ export function InlineEdit({
                 </button>
               )
             })}
+
+            {matches.length > drawn.length && (
+              <p className="px-2 py-2 text-center text-xs text-slate-400">
+                {matches.length - drawn.length} more — type to narrow the list
+              </p>
+            )}
 
             {/*
               Clearing is its own row rather than a blank option at the top of
