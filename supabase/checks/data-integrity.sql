@@ -86,10 +86,9 @@ company_scalar_orphans as (
 ),
 
 -- The three option-backed lists a company stores on its own row. The
--- marketplace lists (marketplace_type, marketplace_audience and the rest) are
--- option-backed too, but they live on marketplace_profiles rather than here, so
--- they want a CTE against that table instead of a fourth branch of this one.
--- Nothing covers the product or deal lists yet either.
+-- marketplace lists are option-backed too, but they live on
+-- marketplace_profiles, so marketplace_orphans below reads them instead of this
+-- growing a fourth branch. Nothing covers the product or deal lists yet.
 company_array_orphans as (
   select 'company' as entity, x.key as field, x.v as value, count(*) as rows
   from (
@@ -109,6 +108,53 @@ company_array_orphans as (
       and o.field_key = x.key
       and lower(o.value) = lower(x.v)
   )
+  group by x.key, x.v
+),
+
+-- The seven lists a marketplace draws on. The values sit on marketplace_profiles
+-- while the options are the company's — entity_type is 'company' for every one
+-- of these keys, because a marketplace is a company with a profile attached and
+-- not a record type of its own.
+--
+-- Reported as 'marketplace' regardless. The company is where the row lives, but
+-- the marketplace page is where the value looks wrong and the page somebody has
+-- to open to put it right.
+--
+-- Read through live_companies because a profile has no deleted_at of its own:
+-- soft-delete the company and its marketplace leaves the list with it, so a
+-- value on one is as abandoned as the record holding it.
+--
+-- The key on the left of each pair is the field_options field_key and the one
+-- on the right is the column, and they are not the same word — account_status
+-- is stored under marketplace_account_status, fulfilment under
+-- marketplace_fulfilment. src/lib/marketplace.ts holds the same mapping for the
+-- screens; these two have to agree.
+marketplace_values as (
+  select mp.organization_id, k.key, k.v
+  from marketplace_profiles mp
+  join live_companies co on co.id = mp.company_id
+  cross join lateral (
+    select 'marketplace_type' as key, v from unnest(mp.marketplace_type) v
+    union all select 'marketplace_fulfilment',     v from unnest(mp.fulfilment) v
+    union all select 'marketplace_audience',       v from unnest(mp.audience) v
+    union all select 'marketplace_inventory_type', v from unnest(mp.inventory_type) v
+    union all select 'marketplace_payment',        mp.payment
+    union all select 'marketplace_selling_cost',   mp.selling_cost
+    union all select 'marketplace_account_status', mp.account_status
+  ) k(key, v)
+),
+
+marketplace_orphans as (
+  select 'marketplace' as entity, x.key as field, x.v as value, count(*) as rows
+  from marketplace_values x
+  where x.v is not null and x.v <> ''
+    and not exists (
+      select 1 from field_options o
+      where o.organization_id = x.organization_id
+        and o.entity_type = 'company'
+        and o.field_key = x.key
+        and lower(o.value) = lower(x.v)
+    )
   group by x.key, x.v
 ),
 
@@ -244,6 +290,7 @@ select * from (
   union all select * from contact_array_orphans
   union all select * from company_scalar_orphans
   union all select * from company_array_orphans
+  union all select * from marketplace_orphans
   union all select * from contact_custom_orphans
   union all select * from company_custom_orphans
   union all select * from cross_tenant_owners
