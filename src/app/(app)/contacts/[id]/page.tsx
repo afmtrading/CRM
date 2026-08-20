@@ -416,12 +416,23 @@ export default async function ContactDetailPage({
             </div>
 
             {/*
-              Two columns rather than four, for the narrower card. The email
-              keeps a row of its own because addresses are the long value here;
-              the two phone numbers are short enough to sit side by side.
+              Two columns rather than four, for the narrower card, and only
+              where a pair actually reads as one thing: the two phone numbers
+              do, so they sit side by side. Everything else here is a long
+              value or a heading in its own right and keeps a row.
             */}
             <dl className="divide-y divide-slate-100">
-              <FieldRow>
+              {/*
+                Job title above the company, each on its own row, rather than
+                the two sharing one. What someone does is read before who they
+                do it for, and side by side the pair only stacked that way
+                below the sm breakpoint — on the wide view the card is designed
+                around, the title sat to the right of the company instead.
+              */}
+              <FieldRow columns={1}>
+                <Field label="Job title">{contact.job_title || <Empty />}</Field>
+              </FieldRow>
+              <FieldRow columns={1}>
                 <Field label="Company">
                   {contact.companies ? (
                     <CardLink href={`/companies/${contact.companies.id}`}>
@@ -431,7 +442,6 @@ export default async function ContactDetailPage({
                     <Empty />
                   )}
                 </Field>
-                <Field label="Job title">{contact.job_title || <Empty />}</Field>
               </FieldRow>
               <FieldRow columns={1}>
                 <Field label="Primary email">
