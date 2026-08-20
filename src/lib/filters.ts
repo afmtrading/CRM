@@ -92,6 +92,12 @@ export const CONTACT_FIELDS: FieldDef[] = [
     ],
   },
   { key: 'source', label: 'Source', type: 'text', groupable: true, sortable: true },
+  /*
+   * Groupable like the company's, which it was not — a contact list could be
+   * grouped by stage, source, owner or company, but not by how much the
+   * person matters, which is the split somebody working a list wants first.
+   */
+  { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'lead_score', label: 'Lead score', type: 'number', sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
   { key: 'company_id', label: 'Company', type: 'uuid', groupable: true },
@@ -102,7 +108,6 @@ export const CONTACT_FIELDS: FieldDef[] = [
 export const COMPANY_FIELDS: FieldDef[] = [
   { key: 'name', label: 'Name', type: 'text', sortable: true },
   { key: 'domain', label: 'Domain', type: 'text', sortable: true },
-  { key: 'industry', label: 'Industry', type: 'text', groupable: true, sortable: true },
   { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
   /*
@@ -404,7 +409,8 @@ export function searchPredicate(entity: FilterEntityType, term: string): string 
  */
 const SEARCH_COLUMNS: Partial<Record<FilterEntityType, string[]>> = {
   contact: ['first_name', 'last_name', 'email', 'phone'],
-  company: ['name', 'domain', 'industry'],
+  // industry is not offered as a field anywhere, so it is not searched either.
+  company: ['name', 'domain'],
   deal: ['name'],
   product: ['name', 'sku', 'brand'],
   marketplace: ['name', 'domain', 'marketplace_profiles.store_name'],

@@ -190,23 +190,14 @@ export default async function CompanyDetailPage({
               values={company.customer_type}
               options={optionsFor("customer_type")}
             />
-          ) : (
-            (company.domain ?? undefined)
-          )
+          ) : website ? (
+            /* A web address under the name is worth clicking. It read as plain
+               text before, which is the one thing a URL should never be. */
+            <ExternalLink url={website} />
+          ) : undefined
         }
         actions={
           <>
-            {/*
-              Beside the name, like a deal's. Who owns an account is what
-              somebody checks before acting on it, and the name is louder than
-              its label because the name is the answer.
-            */}
-            <div className="mr-2 min-w-0 text-right">
-              <p className="text-xs text-slate-500">Owner</p>
-              <p className="truncate text-base font-semibold text-slate-900">
-                {userName(company.owner_id) ?? "—"}
-              </p>
-            </div>
             {context.canWrite && (
               <Link
                 href={`/contacts/new?company_id=${id}`}
@@ -309,7 +300,18 @@ export default async function CompanyDetailPage({
         {/* Company info leads, above the activity feed, for the same reason it
             does on a contact: the record is what someone opened the page for. */}
         <div className="contents lg:block lg:col-span-2 lg:col-start-1 lg:row-start-1">
-          <Section title={COMPANY_CARDS[0].label} className="order-1">
+          <Section
+            title={COMPANY_CARDS[0].label}
+            className="order-1"
+            actions={
+              <p className="min-w-0 truncate text-sm text-slate-500">
+                Owner:{" "}
+                <span className="font-semibold text-slate-900">
+                  {userName(company.owner_id) ?? "—"}
+                </span>
+              </p>
+            }
+          >
             <dl className="divide-y divide-slate-100">
               <FieldRow>
                 <Field label="Company name">{company.name}</Field>
@@ -317,10 +319,7 @@ export default async function CompanyDetailPage({
                   <ExternalLink url={website} />
                 </Field>
               </FieldRow>
-              {/* Owner is beside the name now, so it is not repeated here. */}
-              <FieldRow columns={1}>
-                <Field label="Contacts">{contactRows.length}</Field>
-              </FieldRow>
+              {/* Owner is in this card's header now, as on a contact. */}
               <FieldRow>
                 <Field label="Company phone">
                   <ContactMethod
@@ -339,10 +338,18 @@ export default async function CompanyDetailPage({
               </FieldRow>
               {/* Specialty market and company type moved to Company Rating —
                   what a business is, rather than how to reach it. */}
+              {/*
+                Contacts rides along as the last field rather than a row of its
+                own near the top. A headcount is what you check after knowing
+                how to reach the business, and passed as `trailing` it lands
+                beside the last custom field — Buyer / Vendor today — instead of
+                taking a half-empty row under the name.
+              */}
               <CustomFieldValues
                 fields={customByCard("details")}
                 values={customValues}
                 fieldOptions={options}
+                trailing={<Field label="Contacts">{contactRows.length}</Field>}
               />
 
               {addresses.length > 0 && (

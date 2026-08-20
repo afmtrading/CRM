@@ -178,11 +178,21 @@ export function CustomFieldValues({
   values,
   fieldOptions = [],
   columns = 2,
+  trailing,
 }: {
   fields: { id: string; key: string; label: string; field_type: string; entity_type: string }[]
   values: Record<string, unknown>
   fieldOptions?: FieldOptionRow[]
   columns?: FieldColumns
+  /**
+   * One more field, laid out as though it were the last custom one.
+   *
+   * For a card that ends with a column of its own — a company's headcount after
+   * its custom fields — where a row to itself would leave a half-empty line and
+   * a row above them would put it before what it belongs after. It flows, so
+   * defining another custom field pushes it along rather than displacing it.
+   */
+  trailing?: React.ReactNode
 }) {
   const rendered = fields.map((field) => {
     const raw = values[field.key]
@@ -212,7 +222,7 @@ export function CustomFieldValues({
 
   return (
     <>
-      {chunk(rendered, columns).map((group, index) => (
+      {chunk(trailing ? [...rendered, trailing] : rendered, columns).map((group, index) => (
         <FieldRow key={index} columns={columns}>
           {group}
         </FieldRow>

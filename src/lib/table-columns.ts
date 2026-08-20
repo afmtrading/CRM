@@ -69,7 +69,6 @@ const COMPANY_COLUMNS: TableColumn[] = [
   { key: 'region', label: 'Region' },
   { key: 'based_in', label: 'Base Country' },
   { key: 'sells_in', label: 'Sells To' },
-  { key: 'industry', label: 'Industry' },
   { key: 'domain', label: 'Website' },
   { key: 'email', label: 'Email' },
   { key: 'phone', label: 'Phone' },
