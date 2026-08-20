@@ -174,7 +174,7 @@ export function CompanyForm({
           >
             <option value="">Not known</option>
             {/*
-              The nine trading regions lead, under their own heading. They are
+              The trading regions lead, under their own heading. They are
               already first in the list because the query orders them that way;
               the heading is what stops "North America" reading as a country
               somebody has not heard of.

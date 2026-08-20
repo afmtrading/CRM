@@ -45,6 +45,8 @@ import {
 } from "@/components/ui";
 import { CalendarIcon } from "@/components/icons";
 import { TagPicker } from "@/components/tag-picker";
+import { CompanyRatingRows } from "@/components/company-rating";
+import { placeNames, type Place } from "@/lib/geography";
 import {
   CardLink,
   ContactMethod,
@@ -102,9 +104,12 @@ export default async function ContactDetailPage({
             id: string;
             name: string;
             domain: string | null;
+            priority: string | null;
             specialty_market: string[];
             stock_type: string[];
             customer_type: string[];
+            based_in: string | null;
+            sells_in: string[];
             custom_fields: Record<string, unknown>;
           }
         | null;
@@ -112,7 +117,7 @@ export default async function ContactDetailPage({
   >(
     scoped(context, "contacts")
       .select(
-        "*, companies(id, name, domain, specialty_market, stock_type, customer_type, custom_fields)",
+        "*, companies(id, name, domain, priority, specialty_market, stock_type, customer_type, based_in, sells_in, custom_fields)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -130,6 +135,7 @@ export default async function ContactDetailPage({
     { data: customFieldDefs },
     { data: mailability },
     { data: duplicates },
+    { data: countryRows },
   ] = await Promise.all([
     scoped(context, "activities")
       .select("*")
@@ -162,6 +168,16 @@ export default async function ContactDetailPage({
       p_phone: contact.phone,
       p_exclude_id: contact.id,
     }),
+    /*
+     * Reference data, not tenant data, which is why it is not scoped. The
+     * employer's base country and territories are codes; the card spells them
+     * out, the same way the company's own page does.
+     */
+    context.supabase
+      .from("countries")
+      .select("code, name, kind")
+      .order("sort_order")
+      .order("name"),
   ]);
 
 
@@ -177,14 +193,13 @@ export default async function ContactDetailPage({
 
   const options = (fieldOptions ?? []) as FieldOptionRow[];
   /*
-   * Scoped to the record the field belongs to, not just the key. This page
-   * reads both lists — the contact's own fields and the company's, which the
-   * Company card below mirrors — and `priority` is a list on contacts, another
-   * on companies and another on products. Matching the key alone drew all
-   * three, so a badge could take another record type's colour.
+   * Scoped to the record the field belongs to, not just the key. `priority` is
+   * a list on contacts, another on companies and another on products, and
+   * matching the key alone drew all three — which is how a badge ends up
+   * wearing another record type's colour. The company's own options are picked
+   * out the same way inside the Company Rating card, from the same rows.
    */
   const optionsFor = (key: string) => optionsForField(options, "contact", key);
-  const companyOptionsFor = (key: string) => optionsForField(options, "company", key);
 
   const userName = (userId: string | null) => {
     if (!userId) return null;
@@ -217,10 +232,7 @@ export default async function ContactDetailPage({
   const companyCustomFields = allCustomFields.filter(
     (field) => field.entity_type === "company" && field.card === "rating",
   );
-  const companyCustomValues = (company?.custom_fields ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const places = placeNames((countryRows ?? []) as Place[]);
 
   const name = contactName(contact);
   const emailBlock = blockedLabel(
@@ -626,41 +638,11 @@ export default async function ContactDetailPage({
               }
             >
               <dl className="divide-y divide-slate-100">
-                <FieldRow columns={1}>
-                  <Field label="Market">
-                    <OptionBadges
-                      values={company.specialty_market}
-                      options={companyOptionsFor("specialty_market")}
-                    />
-                  </Field>
-                </FieldRow>
-                {/*
-                  Between the two it belongs between: what category of goods a
-                  business deals in, then what condition they arrive in, then
-                  what kind of business it is. The company's own card orders
-                  merchandise and stock type the same way round.
-                */}
-                <FieldRow columns={1}>
-                  <Field label="Stock type">
-                    <OptionBadges
-                      values={company.stock_type}
-                      options={companyOptionsFor("stock_type")}
-                    />
-                  </Field>
-                </FieldRow>
-                <FieldRow columns={1}>
-                  <Field label="Company type">
-                    <OptionBadges
-                      values={company.customer_type}
-                      options={companyOptionsFor("customer_type")}
-                    />
-                  </Field>
-                </FieldRow>
-                <CustomFieldValues
-                  fields={companyCustomFields}
-                  values={companyCustomValues}
-                  fieldOptions={options}
-                  columns={1}
+                <CompanyRatingRows
+                  company={company}
+                  options={options}
+                  customFields={companyCustomFields}
+                  placeName={places.country}
                 />
               </dl>
             </Section>

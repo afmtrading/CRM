@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
+import { placeNames, type Place } from '@/lib/geography'
 import { contactName, formatDay, formatPrice } from '@/lib/format'
 import { renderMarkdown } from '@/lib/field-options'
 import { MARKETPLACE_OPTION_FIELDS, yesNo } from '@/lib/marketplace'
@@ -55,6 +56,7 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
     { data: salesRows },
     { data: tags },
     { data: companyTags },
+    { data: countryRows },
   ] = await Promise.all([
       scoped(context, 'companies').select('*').eq('id', id).is('deleted_at', null).maybeSingle(),
       scoped(context, 'marketplace_profiles').select('*').eq('company_id', id).maybeSingle(),
@@ -87,6 +89,12 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
        */
       scoped(context, 'tags').select('*').order('name'),
       scoped(context, 'company_tags').select('tag_id').eq('company_id', id),
+      /*
+       * Reference data, not tenant data, which is why it is not scoped. The
+       * company's base country and territories are codes, and every screen
+       * that shows one spells it out.
+       */
+      context.supabase.from('countries').select('code, name, kind').order('sort_order').order('name'),
     ])
 
   // Both have to exist: a company with no profile is not a marketplace, and a
@@ -96,6 +104,7 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
   const tagList = (tags ?? []) as TagRow[]
   const selectedTagIds = new Set(((companyTags ?? []) as { tag_id: string }[]).map((t) => t.tag_id))
 
+  const places = placeNames((countryRows ?? []) as Place[])
   const business = company as CompanyRow
   const profile = profileRow as MarketplaceProfileRow
   const contacts = (contactRows ?? []) as ContactRow[]
@@ -244,7 +253,9 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                 */}
                 <InfoField label="Sells in" hint="From the company record">
                   {business.sells_in?.length ? (
-                    <span className="text-slate-700">{business.sells_in.join(', ')}</span>
+                    <span className="text-slate-700">
+                      {business.sells_in.map(places.country).join(', ')}
+                    </span>
                   ) : (
                     <Link
                       href={`/companies/${business.id}/edit`}
@@ -541,7 +552,9 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
 
           <Section title="On the company">
             <dl className="space-y-2 text-sm">
-              <Row label="Based in">{business.based_in ?? <Empty />}</Row>
+              <Row label="Based in">
+                {business.based_in ? places.country(business.based_in) : <Empty />}
+              </Row>
               <Row label="Minimum lot">
                 {profile.minimum_lot_value === null ? (
                   <Empty />

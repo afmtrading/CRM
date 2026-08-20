@@ -43,9 +43,15 @@ export function findCompanyField(
  *
  * A single-select stores a string and a multi-select an array; the callers all
  * want to render the same way, so both arrive here as a list.
+ *
+ * `custom_fields` is required rather than optional, which is load-bearing. When
+ * it was optional a bare `Record<string, unknown>` satisfied this signature, so
+ * passing `company.custom_fields` instead of `company` typechecked and quietly
+ * returned nothing — the company record showed an empty Size for as long as
+ * that call stood. Required, the wrong argument is a compile error.
  */
 export function companyFieldValues(
-  company: { custom_fields?: Record<string, unknown> | null } | null | undefined,
+  company: { custom_fields: Record<string, unknown> | null } | null | undefined,
   field: CustomFieldDefinitionRow | undefined,
 ): string[] {
   if (!company || !field) return []
