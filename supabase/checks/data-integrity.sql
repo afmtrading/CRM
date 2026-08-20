@@ -36,6 +36,14 @@ live_contacts as (
 live_companies as (
   select * from companies where deleted_at is null
 ),
+-- Neither of these carries a duplicate_of_id: only contacts are merged, so
+-- soft deletion is the whole of what makes one of these abandoned.
+live_products as (
+  select * from products where deleted_at is null
+),
+live_deals as (
+  select * from deals where deleted_at is null
+),
 
 -- One row per stored value that no option list accounts for. The screens look
 -- options up by (organization, entity_type, field_key, value); anything missing
@@ -88,7 +96,7 @@ company_scalar_orphans as (
 -- The three option-backed lists a company stores on its own row. The
 -- marketplace lists are option-backed too, but they live on
 -- marketplace_profiles, so marketplace_orphans below reads them instead of this
--- growing a fourth branch. Nothing covers the product or deal lists yet.
+-- growing a fourth branch. product_orphans and deal_orphans cover the rest.
 company_array_orphans as (
   select 'company' as entity, x.key as field, x.v as value, count(*) as rows
   from (
@@ -156,6 +164,52 @@ marketplace_orphans as (
         and lower(o.value) = lower(x.v)
     )
   group by x.key, x.v
+),
+
+-- A product's five lists. Two of the keys are not the column they are stored
+-- in: a category lives in `category` under the key product_category, and a
+-- status in `status` under product_status, while type, condition and priority
+-- match. product-form.tsx pairs them the same way for the screens.
+--
+-- Getting either of those backwards does not fail quietly here the way it would
+-- on a marketplace — production holds real values for four of the five, so a
+-- mismatched key reports every one of them as an orphan on the next run.
+product_orphans as (
+  select 'product' as entity, x.key as field, x.v as value, count(*) as rows
+  from live_products p
+  cross join lateral (values
+    ('product_category',  p.category),
+    ('product_type',      p.product_type),
+    ('product_condition', p.product_condition),
+    ('product_status',    p.status),
+    ('priority',          p.priority)
+  ) x(key, v)
+  where x.v is not null and x.v <> ''
+    and not exists (
+      select 1 from field_options o
+      where o.organization_id = p.organization_id
+        and o.entity_type = 'product'
+        and o.field_key = x.key
+        and lower(o.value) = lower(x.v)
+    )
+  group by x.key, x.v
+),
+
+-- Why a deal was lost, which is the only list a deal draws on. Its status is an
+-- enum and belongs in the header's list of faults the schema already refuses,
+-- not here.
+deal_orphans as (
+  select 'deal' as entity, 'loss_reason' as field, d.loss_reason as value, count(*) as rows
+  from live_deals d
+  where d.loss_reason is not null and d.loss_reason <> ''
+    and not exists (
+      select 1 from field_options o
+      where o.organization_id = d.organization_id
+        and o.entity_type = 'deal'
+        and o.field_key = 'loss_reason'
+        and lower(o.value) = lower(d.loss_reason)
+    )
+  group by d.loss_reason
 ),
 
 -- A custom field's value outlives its definition: the jsonb keeps the key and
@@ -291,6 +345,8 @@ select * from (
   union all select * from company_scalar_orphans
   union all select * from company_array_orphans
   union all select * from marketplace_orphans
+  union all select * from product_orphans
+  union all select * from deal_orphans
   union all select * from contact_custom_orphans
   union all select * from company_custom_orphans
   union all select * from cross_tenant_owners
