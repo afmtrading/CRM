@@ -9,7 +9,8 @@ import type {
   CustomFieldDefinitionRow,
   FieldOptionRow,
 } from '@/lib/database.types'
-import { OPTION_COLOR_CLASSES } from '@/lib/field-options'
+import { OPTION_COLOR_CLASSES, chipHolds, chipsFor } from '@/lib/field-options'
+import type { OptionChip } from '@/lib/field-options'
 import { PlusIcon } from '@/components/icons'
 
 /** One card's worth of form fields, matching the cards on the record itself. */
@@ -51,6 +52,15 @@ export function FormSection({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * A retired chip says so on hover. It is the only cue that separates it from a
+ * live option, the record page having already settled on drawing an unknown
+ * value in neutral rather than hiding it.
+ */
+function chipTitle(chip: OptionChip): string {
+  return chip.retired ? `${chip.value} — no longer in this list` : chip.value
+}
+
 function NoOptions() {
   return (
     <p className="text-xs text-slate-500">
@@ -76,23 +86,28 @@ export function ChipGroup({
   options: FieldOptionRow[]
   selected: string[]
 }) {
-  if (options.length === 0) return <NoOptions />
+  // Drawn from chipsFor, not from options, so a stored value the list no longer
+  // offers still gets a chip — and still posts. Without it the checkbox was
+  // never rendered, the value never came back, and saving any other field on
+  // the record dropped it.
+  const chips = chipsFor(options, selected)
+  if (chips.length === 0) return <NoOptions />
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      {options.map((option) => (
-        <label key={option.id} className="cursor-pointer" title={option.value}>
+      {chips.map((chip) => (
+        <label key={chip.id} className="cursor-pointer" title={chipTitle(chip)}>
           <input
             type="checkbox"
             name={name}
-            value={option.value}
-            defaultChecked={selected.includes(option.value)}
+            value={chip.value}
+            defaultChecked={selected.some((value) => chipHolds(chip, value))}
             className="peer sr-only"
           />
           <span
-            className={`badge transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[option.color]} opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
+            className={`badge transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[chip.color]} ${chip.retired ? 'border border-dashed border-slate-400 ' : ''}opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
           >
-            {option.value}
+            {chip.value}
           </span>
         </label>
       ))}
@@ -110,7 +125,11 @@ export function RadioChips({
   options: FieldOptionRow[]
   selected: string | null
 }) {
-  if (options.length === 0) return <NoOptions />
+  // See ChipGroup: chipsFor carries a stored value the list has stopped
+  // offering, which is what keeps a radio group from checking nothing at all
+  // and posting no entry for the field.
+  const chips = chipsFor(options, selected)
+  if (chips.length === 0) return <NoOptions />
 
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -120,19 +139,19 @@ export function RadioChips({
           None
         </span>
       </label>
-      {options.map((option) => (
-        <label key={option.id} className="cursor-pointer">
+      {chips.map((chip) => (
+        <label key={chip.id} className="cursor-pointer" title={chipTitle(chip)}>
           <input
             type="radio"
             name={name}
-            value={option.value}
-            defaultChecked={selected === option.value}
+            value={chip.value}
+            defaultChecked={chipHolds(chip, selected)}
             className="peer sr-only"
           />
           <span
-            className={`badge transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[option.color]} opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
+            className={`badge transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/40 ${OPTION_COLOR_CLASSES[chip.color]} ${chip.retired ? 'border border-dashed border-slate-400 ' : ''}opacity-45 grayscale peer-checked:opacity-100 peer-checked:grayscale-0`}
           >
-            {option.value}
+            {chip.value}
           </span>
         </label>
       ))}
