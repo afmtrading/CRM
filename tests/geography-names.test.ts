@@ -36,6 +36,23 @@ describe('placeNames', () => {
     expect(places.countryOptions.map((option) => option.value)).toEqual(['XN', 'XE', 'CA', 'US'])
   })
 
+  /*
+   * Global is a region like the other nine, sorted to the front by the column
+   * the query orders on rather than by anything here — placeNames keeps the
+   * order it is given. This asserts it survives the trip, since a catch-all
+   * that lands halfway down the list is one nobody finds.
+   */
+  it('keeps Global at the head of the list it was handed', () => {
+    const withGlobal = placeNames([
+      { code: 'XG', name: 'Global', kind: 'region' },
+      { code: 'XN', name: 'North America', kind: 'region' },
+      { code: 'CA', name: 'Canada', kind: 'country' },
+    ])
+
+    expect(withGlobal.countryOptions[0]).toEqual({ value: 'XG', label: 'Global' })
+    expect(withGlobal.country('XG')).toBe('Global')
+  })
+
   it('keeps the two kinds separable for a form that wants headings', () => {
     expect(places.regions.map((option) => option.label)).toEqual(['North America', 'Europe'])
     expect(places.countries.map((option) => option.label)).toEqual(['Canada', 'United States'])

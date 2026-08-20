@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { requireSession, scoped, firstRow } from "@/lib/tenancy";
 import { contactName, formatDay } from "@/lib/format";
-import { companyFieldValues, findCompanyField } from "@/lib/company-fields";
+import { placeNames, type Place } from "@/lib/geography";
 import { DateTime } from "@/components/date-time";
 import { Money } from "@/components/money";
 import {
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui";
 import { MailIcon, PhoneIcon } from "@/components/icons";
 import { TagPicker } from "@/components/tag-picker";
+import { CompanyRatingRows } from "@/components/company-rating";
 import {
   ContactMethod,
   CustomFieldValues,
@@ -87,6 +88,7 @@ export default async function CompanyDetailPage({
     { data: fieldOptions },
     { data: customFieldDefs },
     { data: marketplace },
+    { data: countryRows },
   ] = await Promise.all([
     scoped(context, "contacts")
       .select("*")
@@ -118,6 +120,15 @@ export default async function CompanyDetailPage({
       .select("company_id, sells_through, sources_from")
       .eq("company_id", id)
       .maybeSingle(),
+    /*
+     * Reference data, not tenant data, which is why it is not scoped. based_in
+     * and sells_in store codes; the card spells them out.
+     */
+    context.supabase
+      .from("countries")
+      .select("code, name, kind")
+      .order("sort_order")
+      .order("name"),
   ]);
 
   const userList = (users ?? []) as UserRow[];
@@ -153,16 +164,7 @@ export default async function CompanyDetailPage({
     customFields.filter((field) => field.card === card);
   const customValues = (company.custom_fields ?? {}) as Record<string, unknown>;
 
-  /*
-   * Size is promoted next to the country, so it is taken out of the list the
-   * card renders generically — otherwise it appears twice, once where it was
-   * asked for and once at the bottom with the rest.
-   */
-  const sizeField = findCompanyField(customFields, "size");
-  const sizeValues = sizeField ? companyFieldValues(company.custom_fields, sizeField) : [];
-  const ratingCustomFields = customByCard("rating").filter(
-    (field) => field.id !== sizeField?.id,
-  );
+  const places = placeNames((countryRows ?? []) as Place[]);
 
   const website = safeUrl(company.domain);
   const notesHtml = renderMarkdown(company.notes);
@@ -616,87 +618,11 @@ export default async function CompanyDetailPage({
           */}
           <Section title={COMPANY_CARDS[3].label} className="order-2">
             <dl className="divide-y divide-slate-100">
-              {/* First on the card, because how much an account matters is the
-                  thing somebody scans a record for before anything else. */}
-              <FieldRow columns={1}>
-                <Field label="Priority">
-                  {company.priority ? (
-                    <OptionBadges
-                      values={[company.priority]}
-                      options={optionsFor("priority")}
-                    />
-                  ) : (
-                    <Empty />
-                  )}
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="Merchandise">
-                  <OptionBadges
-                    values={company.specialty_market}
-                    options={optionsFor("specialty_market")}
-                  />
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="Stock type">
-                  <OptionBadges
-                    values={company.stock_type}
-                    options={optionsFor("stock_type")}
-                  />
-                </Field>
-              </FieldRow>
-              {/*
-                Codes rather than names, deliberately. "CA · US · MX" reads at a
-                glance on a card and is what the filters take; the full names
-                would wrap to three lines and say no more.
-              */}
-              {/*
-                Size sits beside the country rather than down among the custom
-                fields, because "a big US buyer" is one thought and reading it
-                meant jumping the length of the card. It is still whatever field
-                this organization defined — matched by name, not assumed.
-              */}
-              <FieldRow>
-                <Field label="Base Country">
-                  {company.based_in ?? <Empty />}
-                </Field>
-                {sizeField ? (
-                  <Field label={sizeField.label}>
-                    {sizeValues.length > 0 ? (
-                      <OptionBadges
-                        values={sizeValues}
-                        options={options.filter(
-                          (option) =>
-                            option.entity_type === "company" &&
-                            option.field_key === sizeField.key,
-                        )}
-                      />
-                    ) : (
-                      <Empty />
-                    )}
-                  </Field>
-                ) : (
-                  <span />
-                )}
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="Sells To">
-                  {company.sells_in.length > 0 ? company.sells_in.join(" · ") : <Empty />}
-                </Field>
-              </FieldRow>
-              <FieldRow columns={1}>
-                <Field label="Company type">
-                  <OptionBadges
-                    values={company.customer_type}
-                    options={optionsFor("customer_type")}
-                  />
-                </Field>
-              </FieldRow>
-              <CustomFieldValues
-                fields={ratingCustomFields}
-                values={customValues}
-                fieldOptions={options}
+              <CompanyRatingRows
+                company={company}
+                options={options}
+                customFields={customByCard("rating")}
+                placeName={places.country}
               />
             </dl>
           </Section>
