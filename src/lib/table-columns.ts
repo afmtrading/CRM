@@ -128,6 +128,13 @@ const MARKETPLACE_COLUMNS: TableColumn[] = [
   { key: 'specialty_market', label: 'Merchandise' },
   { key: 'domain', label: 'Website' },
   { key: 'opened_on', label: 'Opened' },
+  /*
+   * The company's tags, not a set of its own. A marketplace is a company, so
+   * the word an organization put on the record is the same word on both
+   * screens — offering a separate vocabulary here would be two answers to one
+   * question.
+   */
+  { key: 'tags', label: 'Tags' },
 ]
 
 /** What each list shows before anybody has said otherwise — today's columns. */

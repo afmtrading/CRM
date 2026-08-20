@@ -8,6 +8,7 @@ import {
   groupRowsNested,
   labelFromFields,
   parseFilterConfig,
+  TAGS_FIELD_KEY,
 } from "@/lib/filters";
 import { contactName, formatDay } from "@/lib/format";
 import { startOfMonthIn } from "@/lib/timezone";
@@ -166,6 +167,22 @@ export default async function ContactsPage({
 
   const ownerList = (owners ?? []) as UserRow[];
   const companyList = (companies ?? []) as Pick<CompanyRow, "id" | "name">[];
+  const tagList = (tagRows ?? []) as Pick<TagRow, "id" | "name" | "color">[];
+
+  /*
+   * Which tags each contact carries, as ids, before the query is built. A tag
+   * condition becomes a predicate on `id` and there is nothing to build it from
+   * once the rows have already come back — see tagPredicate.
+   */
+  const tagIdsByContact = new Map<string, string[]>();
+  for (const link of (contactTagRows ?? []) as {
+    contact_id: string;
+    tag_id: string;
+  }[]) {
+    const list = tagIdsByContact.get(link.contact_id);
+    if (list) list.push(link.tag_id);
+    else tagIdsByContact.set(link.contact_id, [link.tag_id]);
+  }
 
   const allDefinitions = (customFields ?? []) as CustomFieldDefinitionRow[];
   const allOptions = (fieldOptionRows ?? []) as FieldOptionRow[];
@@ -215,6 +232,16 @@ export default async function ContactsPage({
         })),
       };
     }
+    /*
+     * Tags are offered by id and read by name. A saved view that named them
+     * would stop matching the moment somebody renamed one in Settings.
+     */
+    if (field.key === TAGS_FIELD_KEY) {
+      return {
+        ...field,
+        options: tagList.map((tag) => ({ value: tag.id, label: tag.name })),
+      };
+    }
     return field;
   });
 
@@ -225,7 +252,7 @@ export default async function ContactsPage({
     .is("deleted_at", null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query = applyFilter(query as any, config, "contact") as any;
+  query = applyFilter(query as any, config, "contact", undefined, tagIdsByContact) as any;
 
   const { data: contacts, count, error } = await query.limit(PAGE_SIZE);
   const [totalStat, newThisMonth, customers, unassigned] = await statsPromise;
@@ -245,7 +272,7 @@ export default async function ContactsPage({
 
   /* Tag ids to the tag, and each contact to the tags on it. */
   const tagsById = new Map(
-    ((tagRows ?? []) as Pick<TagRow, "id" | "name" | "color">[]).map((tag) => [tag.id, tag]),
+    tagList.map((tag) => [tag.id, tag]),
   );
   const tagsByContact = new Map<string, Pick<TagRow, "id" | "name" | "color">[]>();
   for (const link of (contactTagRows ?? []) as { contact_id: string; tag_id: string }[]) {

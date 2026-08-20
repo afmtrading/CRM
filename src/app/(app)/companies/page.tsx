@@ -8,6 +8,7 @@ import {
   groupRowsNested,
   labelFromFields,
   parseFilterConfig,
+  TAGS_FIELD_KEY,
 } from '@/lib/filters'
 import type {
   CompanyRow,
@@ -172,6 +173,19 @@ export default async function CompaniesPage({
   const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
 
   const ownerList = (owners ?? []) as UserRow[]
+  const tagList = (tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]
+
+  /*
+   * Which tags each company carries, as ids, before the query is built. A tag
+   * condition becomes a predicate on `id` and there is nothing to build it from
+   * once the rows have already come back — see tagPredicate.
+   */
+  const tagIdsByCompany = new Map<string, string[]>()
+  for (const link of (companyTagRows ?? []) as { company_id: string; tag_id: string }[]) {
+    const list = tagIdsByCompany.get(link.company_id)
+    if (list) list.push(link.tag_id)
+    else tagIdsByCompany.set(link.company_id, [link.tag_id])
+  }
   /*
    * Owners are uuids and the geography fields are codes, so all four have to be
    * offered as a list — a free-text condition on `based_in` wants "CA", which
@@ -184,6 +198,13 @@ export default async function CompaniesPage({
     if (field.key === 'based_in' || field.key === 'sells_in') {
       return { ...field, options: places.countryOptions }
     }
+    /*
+     * Tags are offered by id and read by name. A saved view that named them
+     * would stop matching the moment somebody renamed one in Settings.
+     */
+    if (field.key === TAGS_FIELD_KEY) {
+      return { ...field, options: tagList.map((tag) => ({ value: tag.id, label: tag.name })) }
+    }
     return field
   })
 
@@ -191,7 +212,7 @@ export default async function CompaniesPage({
     .select('*, contacts(count)', { count: 'exact' })
     .is('deleted_at', null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query = applyFilter(query as any, config, 'company') as any
+  query = applyFilter(query as any, config, 'company', undefined, tagIdsByCompany) as any
 
   const { data } = await query.limit(200)
   const [totalStat, newThisMonth, unassigned] = await statsPromise
@@ -207,9 +228,7 @@ export default async function CompaniesPage({
   const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
 
   /* Tag ids to the tag, and each company to the tags on it. */
-  const tagsById = new Map(
-    ((tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]).map((tag) => [tag.id, tag]),
-  )
+  const tagsById = new Map(tagList.map((tag) => [tag.id, tag]))
   const tagsByCompany = new Map<string, Pick<TagRow, 'id' | 'name' | 'color'>[]>()
   for (const link of (companyTagRows ?? []) as { company_id: string; tag_id: string }[]) {
     const tag = tagsById.get(link.tag_id)

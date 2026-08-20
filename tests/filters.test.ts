@@ -13,6 +13,9 @@ import {
   matchesFilter,
   parseFilterConfig,
   sortRows,
+  TAGS_FIELD_KEY,
+  tagPredicate,
+  tagsMatch,
   toColumn,
   type FilterConfig,
   type QueryLike,
@@ -174,6 +177,150 @@ describe('applyFilter', () => {
     )
 
     expect(calls).toContain('filter(email,eq,a.b@example.com)')
+  })
+})
+
+describe('tagsMatch', () => {
+  const held = ['vip', 'reseller']
+
+  it('answers the array operators over the tags a record holds', () => {
+    expect(tagsMatch(held, { field: 'tags', operator: 'has_any', value: ['vip', 'lapsed'] })).toBe(true)
+    expect(tagsMatch(held, { field: 'tags', operator: 'has_all', value: ['vip', 'lapsed'] })).toBe(false)
+    expect(tagsMatch(held, { field: 'tags', operator: 'has_all', value: ['vip', 'reseller'] })).toBe(true)
+    expect(tagsMatch(held, { field: 'tags', operator: 'has_none', value: ['lapsed'] })).toBe(true)
+    expect(tagsMatch(held, { field: 'tags', operator: 'has_none', value: ['vip'] })).toBe(false)
+  })
+
+  it('treats an untagged record as including none of anything', () => {
+    expect(tagsMatch([], { field: 'tags', operator: 'has_none', value: ['vip'] })).toBe(true)
+    expect(tagsMatch([], { field: 'tags', operator: 'has_any', value: ['vip'] })).toBe(false)
+    expect(tagsMatch([], { field: 'tags', operator: 'is_empty' })).toBe(true)
+    expect(tagsMatch([], { field: 'tags', operator: 'is_not_empty' })).toBe(false)
+  })
+
+  it('compares "is exactly" as a set, not in order', () => {
+    expect(tagsMatch(held, { field: 'tags', operator: 'is_exactly', value: ['reseller', 'vip'] })).toBe(true)
+    expect(tagsMatch(held, { field: 'tags', operator: 'is_exactly', value: ['vip'] })).toBe(false)
+  })
+
+  it('narrows nothing when nothing has been chosen', () => {
+    expect(tagsMatch(held, { field: 'tags', operator: 'has_any', value: [] })).toBe(false)
+    expect(tagsMatch(held, { field: 'tags', operator: 'has_none', value: [] })).toBe(false)
+  })
+})
+
+describe('tagPredicate', () => {
+  const tagsByRecord = new Map([
+    ['a', ['vip']],
+    ['b', ['vip', 'reseller']],
+    ['c', ['lapsed']],
+  ])
+
+  it('names the records that match', () => {
+    expect(tagPredicate({ field: 'tags', operator: 'has_any', value: ['vip'] }, tagsByRecord)).toEqual({
+      expression: 'id.in.(a,b)',
+    })
+    expect(tagPredicate({ field: 'tags', operator: 'has_all', value: ['vip', 'reseller'] }, tagsByRecord)).toEqual(
+      { expression: 'id.in.(b)' },
+    )
+  })
+
+  /*
+   * The one that cannot be a list of matches: a record with no tags at all is
+   * absent from the map, so "includes none of" has to name the records that
+   * fail and exclude those instead.
+   */
+  it('excludes the offenders rather than listing the matches', () => {
+    expect(tagPredicate({ field: 'tags', operator: 'has_none', value: ['vip'] }, tagsByRecord)).toEqual({
+      expression: 'id.not.in.(a,b)',
+    })
+    expect(tagPredicate({ field: 'tags', operator: 'is_empty' }, tagsByRecord)).toEqual({
+      expression: 'id.not.in.(a,b,c)',
+    })
+  })
+
+  it('narrows to nothing when no record matches', () => {
+    expect(tagPredicate({ field: 'tags', operator: 'has_any', value: ['gone'] }, tagsByRecord)).toEqual({
+      expression: 'id.is.null',
+    })
+  })
+
+  it('narrows nothing when there is nothing to exclude or nothing chosen', () => {
+    expect(tagPredicate({ field: 'tags', operator: 'has_none', value: ['gone'] }, tagsByRecord)).toBeNull()
+    expect(tagPredicate({ field: 'tags', operator: 'has_any', value: [] }, tagsByRecord)).toBeNull()
+    expect(tagPredicate({ field: 'tags', operator: 'is_empty' }, new Map())).toBeNull()
+  })
+})
+
+describe('tag conditions through applyFilter', () => {
+  const tagsByRecord = new Map([
+    ['a', ['vip']],
+    ['b', ['lapsed']],
+  ])
+
+  it('sends the id list the tags resolve to', () => {
+    const { query, calls } = recordingQuery()
+
+    applyFilter(
+      query,
+      { match: 'all', conditions: [{ field: TAGS_FIELD_KEY, operator: 'has_any', value: ['vip'] }] },
+      'contact',
+      undefined,
+      tagsByRecord,
+    )
+
+    expect(calls).toContain('filter(id,in,(a))')
+  })
+
+  /* `not.in` is two segments; splitting on the first two dots would send `not`. */
+  it('keeps a negated operator whole', () => {
+    const { query, calls } = recordingQuery()
+
+    applyFilter(
+      query,
+      { match: 'all', conditions: [{ field: TAGS_FIELD_KEY, operator: 'has_none', value: ['vip'] }] },
+      'contact',
+      undefined,
+      tagsByRecord,
+    )
+
+    expect(calls).toContain('filter(id,not.in,(a))')
+  })
+
+  it('still sends "is not empty" as a plain negation', () => {
+    const { query, calls } = recordingQuery()
+
+    applyFilter(
+      query,
+      { match: 'all', conditions: [{ field: 'phone', operator: 'is_not_empty' }] },
+      'contact',
+    )
+
+    expect(calls).toContain('filter(phone,not.is,null)')
+  })
+
+  /* Without the join there is nothing to resolve, so the condition is dropped. */
+  it('drops a tag condition when the caller has no join to resolve it with', () => {
+    const { query, calls } = recordingQuery()
+
+    applyFilter(
+      query,
+      { match: 'all', conditions: [{ field: TAGS_FIELD_KEY, operator: 'has_any', value: ['vip'] }] },
+      'contact',
+    )
+
+    expect(calls.some((call) => call.startsWith('filter('))).toBe(false)
+  })
+
+  it('reads tags off the row on the in-memory path', () => {
+    const config: FilterConfig = {
+      match: 'all',
+      conditions: [{ field: TAGS_FIELD_KEY, operator: 'has_any', value: ['vip'] }],
+    }
+
+    expect(matchesFilter({ id: 'a', tags: ['vip'] }, config, 'marketplace')).toBe(true)
+    expect(matchesFilter({ id: 'b', tags: ['lapsed'] }, config, 'marketplace')).toBe(false)
+    expect(matchesFilter({ id: 'c', tags: [] }, config, 'marketplace')).toBe(false)
   })
 })
 

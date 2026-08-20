@@ -25,6 +25,7 @@ import {
   groupRowsNested,
   labelFromFields,
   parseFilterConfig,
+  TAGS_FIELD_KEY,
 } from '@/lib/filters'
 import type { SavedFilterRow } from '@/lib/database.types'
 import { formatDay } from '@/lib/format'
@@ -80,20 +81,44 @@ export default async function ProductsPage({
       : undefined
   const config = savedView ? parseFilterConfig(savedView.filter_json) : filterFromSearchParams(params)
 
+  /*
+   * Ahead of the query rather than beside it. A tag condition becomes a
+   * predicate on `id` — see tagPredicate — so the join has to be in hand before
+   * the query is built; asked for alongside it, there would be nothing to build
+   * the predicate from. Two small reads for the whole page either way.
+   */
+  const [{ data: tagRows }, { data: productTagRows }] = await Promise.all([
+    scoped(context, 'tags').select('id, name, color').order('name'),
+    scoped(context, 'product_tags').select('product_id, tag_id'),
+  ])
+
+  const tagList = (tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]
+  const tagIdsByProduct = new Map<string, string[]>()
+  for (const link of (productTagRows ?? []) as { product_id: string; tag_id: string }[]) {
+    const list = tagIdsByProduct.get(link.product_id)
+    if (list) list.push(link.tag_id)
+    else tagIdsByProduct.set(link.product_id, [link.tag_id])
+  }
+
   let query = scoped(context, 'products').select('*').is('deleted_at', null)
   if (!showRetired) query = query.eq('active', true)
   // A catalogue is read alphabetically, not newest-first — which is what
   // applyFilter would otherwise fall back to.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query = applyFilter(query as any, config, 'product', { column: 'name', ascending: true }) as any
+  query = applyFilter(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query as any,
+    config,
+    'product',
+    { column: 'name', ascending: true },
+    tagIdsByProduct,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any
 
   const [
     { data },
     { data: fieldOptions },
     { data: stockRows },
     { data: definitionRows },
-    { data: tagRows },
-    { data: productTagRows },
   ] = await Promise.all([
     query.limit(500),
     /*
@@ -116,8 +141,6 @@ export default async function ProductsPage({
       .select('*')
       .eq('entity_type', 'product')
       .order('order'),
-    scoped(context, 'tags').select('id, name, color').order('name'),
-    scoped(context, 'product_tags').select('product_id, tag_id'),
   ])
 
   const products = (data ?? []) as ProductRow[]
@@ -131,7 +154,7 @@ export default async function ProductsPage({
 
   /* Tag ids to the tag, and each product to the tags on it. */
   const tagsById = new Map(
-    ((tagRows ?? []) as Pick<TagRow, 'id' | 'name' | 'color'>[]).map((tag) => [tag.id, tag]),
+    tagList.map((tag) => [tag.id, tag]),
   )
   const tagsByProduct = new Map<string, Pick<TagRow, 'id' | 'name' | 'color'>[]>()
   for (const link of (productTagRows ?? []) as { product_id: string; tag_id: string }[]) {
@@ -222,6 +245,13 @@ export default async function ProductsPage({
     priority: priorityOptions,
   }
   const fields = fieldsFor('product', definitions, allOptions).map((field) => {
+    /*
+     * Tags are offered by id and read by name. A saved view that named them
+     * would stop matching the moment somebody renamed one in Settings.
+     */
+    if (field.key === TAGS_FIELD_KEY) {
+      return { ...field, options: tagList.map((tag) => ({ value: tag.id, label: tag.name })) }
+    }
     const list = listFor[field.key]
     return list ? { ...field, options: list.map((o) => ({ value: o.value, label: o.value })) } : field
   })
