@@ -24,7 +24,6 @@ export default async function ImportPage() {
     <>
       <PageHeader
         title="Import data"
-        description="Map your CSV columns, check the preview, then commit. Rows that fail are reported individually — the rest still import."
         actions={
           <>
             {/*

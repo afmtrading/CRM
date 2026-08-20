@@ -208,15 +208,7 @@ export default async function DealsPage({
     <>
       <PageHeader
         title="Deals"
-        description={
-          <span className="flex flex-wrap items-baseline gap-x-1.5">
-            <span>
-              {dealRows.length} deal{dealRows.length === 1 ? '' : 's'}
-            </span>
-            <span className="text-slate-300">·</span>
-            <MoneyTotals rows={dealRows} />
-          </span>
-        }
+        description={<MoneyTotals rows={dealRows} />}
         actions={
           <>
             <div className="inline-flex overflow-hidden rounded-md border border-slate-300">

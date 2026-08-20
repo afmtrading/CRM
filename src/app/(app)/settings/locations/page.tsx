@@ -28,10 +28,7 @@ export default async function LocationsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Locations"
-        description="Where stock is kept. A location can hold bins — a rack, an aisle, a shelf — and a product's count is recorded against one place at a time."
-      />
+      <PageHeader title="Locations" />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">

@@ -32,7 +32,7 @@ export default async function NewContactPage({
 
   return (
     <>
-      <PageHeader title="New contact" description="Leads and customers are both contacts — the lifecycle stage is what differs." />
+      <PageHeader title="New contact" />
       <ContactForm
         action={createContact}
         prefillCompanyId={companyId}

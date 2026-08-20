@@ -98,10 +98,7 @@ export default async function DeletedRecordsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Deleted records"
-        description="Deleted records. Restoring puts one back where it was, with its owner, activities and deals intact. A deleted product stays readable on the deals that already list it, so their totals never move — and a deleted deal keeps its line items, so restoring it recommits the stock it had spoken for."
-      />
+      <PageHeader title="Deleted records" />
 
       {total === 0 ? (
         <EmptyState

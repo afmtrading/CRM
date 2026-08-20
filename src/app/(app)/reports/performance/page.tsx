@@ -78,11 +78,6 @@ export default async function SalesPerformancePage({
     <>
       <PageHeader
         title="Sales performance"
-        description={
-          scope === 'own'
-            ? 'Your own deals. Closed figures cover the selected period; open pipeline is where it stands today.'
-            : 'Closed figures cover the selected period; open pipeline is where it stands today. A won deal counts for whoever owned it when it closed.'
-        }
         actions={
           <>
             <Link href="/reports/deals" className="btn-secondary">

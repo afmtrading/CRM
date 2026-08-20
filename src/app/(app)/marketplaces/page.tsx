@@ -409,7 +409,6 @@ export default async function MarketplacesPage({
     <>
       <PageHeader
         title="Marketplaces"
-        description="The channels you trade through. Each one is a company — the same record, its contacts and its history — with what it costs to trade there on top."
         actions={
           <>
             <ColumnPicker

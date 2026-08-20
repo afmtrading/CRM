@@ -96,7 +96,6 @@ export default async function PipelineValueReport({
     <>
       <PageHeader
         title="Pipeline value"
-        description="Open deals only, summed live from the deal records — no cached totals."
         actions={
           <>
             <Link href="/reports/deals" className="btn-secondary">

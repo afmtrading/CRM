@@ -26,10 +26,7 @@ export default async function AssignmentSettingsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Assignment & routing"
-        description="Applied in priority order when a new contact arrives without an explicit owner — from the UI, an import, or the API."
-      />
+      <PageHeader title="Assignment & routing" />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">

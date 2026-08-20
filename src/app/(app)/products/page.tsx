@@ -430,7 +430,6 @@ export default async function ProductsPage({
     <>
       <PageHeader
         title="Products"
-        description="What the organization sells. Deals are built from these, and every line item keeps the price it was added at."
         actions={
           <>
             <ColumnPicker

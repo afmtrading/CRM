@@ -18,10 +18,7 @@ export default async function OrganizationSettingsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Organization"
-        description="Name, currency, clock and branding. The defaults every new record starts from."
-      />
+      <PageHeader title="Organization" />
 
       <Section title={context.organization.name}>
         {context.isAdmin ? (

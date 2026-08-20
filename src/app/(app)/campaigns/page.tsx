@@ -48,10 +48,7 @@ export default async function CampaignsPage({
 
   return (
     <>
-      <PageHeader
-        title="Campaigns"
-        description="An email to a list. Nothing is sent until you schedule it, and nothing is sent to somebody who has not agreed to hear from you."
-      />
+      <PageHeader title="Campaigns" />
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {ok && (

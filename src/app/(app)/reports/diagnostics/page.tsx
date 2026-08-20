@@ -83,7 +83,6 @@ export default async function DiagnosticsPage({
     <>
       <PageHeader
         title="Diagnostics"
-        description="Why deals are lost, where they stop, and which ones have gone quiet. Every number here points at deals you can go and work."
         actions={
           <>
             <Link href="/reports/deals" className="btn-secondary">

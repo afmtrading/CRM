@@ -477,7 +477,6 @@ export default async function ContactsPage({
     <>
       <PageHeader
         title="Contacts"
-        description="Manage your contacts"
         actions={
           <>
             <ColumnPicker

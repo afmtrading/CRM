@@ -201,7 +201,6 @@ export default async function MailboxesPage({
     <>
       <PageHeader
         title="Mailboxes"
-        description="Connect Gmail and emails with people already in the CRM appear on their timeline automatically. Nothing is sent from here — you keep writing in Gmail."
         actions={
           configured && context.canWrite ? (
             <Link href="/api/gmail/connect" className="btn-primary">
