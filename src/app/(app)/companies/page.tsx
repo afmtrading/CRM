@@ -21,6 +21,7 @@ import type {
 } from '@/lib/database.types'
 import { companyFieldValues, findCompanyField } from '@/lib/company-fields'
 import { optionsForField } from '@/lib/field-options'
+import { chosenValues } from '@/lib/custom-fields'
 import { startOfMonthIn } from '@/lib/timezone'
 import { placeNames, type Place } from '@/lib/geography'
 import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
@@ -32,9 +33,10 @@ import {
   PageHeader,
   StatCard,
   StatGrid,
-  SubGroupRow,
 } from '@/components/ui'
-import { CustomCell, Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
+import { CollapsibleGroup, CollapsibleSubGroup } from '@/components/collapsible'
+import { InlineEdit, type InlineOption } from '@/components/inline-edit'
+import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
 import { formatDay } from '@/lib/format'
@@ -174,6 +176,22 @@ export default async function CompaniesPage({
   const regionOptions = customFieldOptions(regionField)
   const sizeOptions = customFieldOptions(sizeField)
 
+  /*
+   * The same lists, in the shape an editable cell wants: the value, the word
+   * to show for it, and the colour an admin gave it in Settings → Fields, so
+   * the menu offers exactly the badges the column is already drawing.
+   */
+  const inlineOptions = (rows: FieldOptionRow[]): InlineOption[] =>
+    rows.map((option) => ({ value: option.value, label: option.value, color: option.color }))
+
+  /*
+   * Which cells can be changed from the list. Ownership is a manager's
+   * decision wherever it is made; everything else follows plain write access.
+   * The database checks both again — this only decides what is offered.
+   */
+  const canEditCell = context.canWrite
+  const canAssign = context.canManage
+
   const viewId = typeof params.view === 'string' ? params.view : null
   const savedView = viewId
     ? ((savedFilters ?? []) as SavedFilterRow[]).find((filter) => filter.id === viewId)
@@ -239,7 +257,6 @@ export default async function CompaniesPage({
     (company) => ({ ...company, [TAGS_FIELD_KEY]: tagIdsByCompany.get(company.id) ?? [] }),
   )
 
-  const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
 
   /* Tag ids to the tag, and each company to the tags on it. */
   const tagsById = new Map(tagList.map((tag) => [tag.id, tag]))
@@ -282,23 +299,51 @@ export default async function CompaniesPage({
             {company.name}
           </Link>
         )
+      /*
+       * From here down: the cell is the editor. Click it, pick a value, and it
+       * is written — see components/inline-edit. The columns that offer this
+       * are exactly the ones the database will accept a one-field change to,
+       * which is why the name is still a link to the record rather than a box
+       * to type in.
+       */
       case 'priority':
-        return company.priority ? (
-          <OptionBadge
-            value={company.priority}
-            color={optionColor(priorityOptions, company.priority)}
+        return (
+          <InlineEdit
+            entity="company"
+            id={company.id}
+            field="priority"
+            fieldLabel="Priority"
+            values={company.priority ? [company.priority] : []}
+            options={inlineOptions(priorityOptions)}
+            canEdit={canEditCell}
           />
-        ) : (
-          <Empty />
         )
       case 'customer_type':
-        return company.customer_type?.length ? (
-          <OptionBadges values={company.customer_type} options={typeOptions} />
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="company"
+            id={company.id}
+            field="customer_type"
+            fieldLabel="Company type"
+            values={company.customer_type ?? []}
+            options={inlineOptions(typeOptions)}
+            multiple
+            canEdit={canEditCell}
+          />
         )
       case 'specialty_market':
-        return <OptionBadges values={company.specialty_market} options={marketOptions} />
+        return (
+          <InlineEdit
+            entity="company"
+            id={company.id}
+            field="specialty_market"
+            fieldLabel="Merchandise"
+            values={company.specialty_market ?? []}
+            options={inlineOptions(marketOptions)}
+            multiple
+            canEdit={canEditCell}
+          />
+        )
       case 'stock_type':
         return company.stock_type?.length ? (
           <span className="block truncate text-slate-600">{company.stock_type.join(', ')}</span>
@@ -306,10 +351,19 @@ export default async function CompaniesPage({
           <Empty />
         )
       case 'owner':
-        return company.owner_id ? (
-          <span className="text-slate-600">{ownerNames.get(company.owner_id) ?? '—'}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="company"
+            id={company.id}
+            field="owner_id"
+            fieldLabel="Owner"
+            values={company.owner_id ? [company.owner_id] : []}
+            options={ownerList.map((user) => ({
+              value: user.id,
+              label: user.name || user.email,
+            }))}
+            canEdit={canAssign}
+          />
         )
       case 'tags': {
         /*
@@ -385,8 +439,37 @@ export default async function CompaniesPage({
         )
       case 'created_at':
         return <span className="text-slate-600">{formatDay(company.created_at)}</span>
-      default:
+      default: {
+        /*
+         * An organization's own fields. The ones with a list behind them are
+         * editable in place like the built-in ones; a free-text or number
+         * field is shown as it is stored, because there is nothing to pick
+         * from and nothing here to validate a typed value against.
+         */
+        const definition = definitions.find(
+          (candidate) => `custom_fields.${candidate.key}` === key,
+        )
+
+        if (
+          definition &&
+          (definition.field_type === 'select' || definition.field_type === 'multiselect')
+        ) {
+          return (
+            <InlineEdit
+              entity="company"
+              id={company.id}
+              field={key}
+              fieldLabel={definition.label}
+              values={chosenValues(company.custom_fields?.[definition.key])}
+              options={inlineOptions(customFieldOptions(definition))}
+              multiple={definition.field_type === 'multiselect'}
+              canEdit={canEditCell}
+            />
+          )
+        }
+
         return <CustomCell row={company} columnKey={key} />
+      }
     }
   }
 
@@ -476,13 +559,18 @@ export default async function CompaniesPage({
           {overlap && <GroupOverlapNote label={overlap.label} />}
           <div className="space-y-8">
             {groups.map((group) => (
-            <div key={group.key ?? 'all'}>
-              {config.groupBy && (
-                <div className="group-header flex items-baseline justify-between gap-3">
-                  <h2>{group.label}</h2>
+            <CollapsibleGroup
+              key={group.key ?? 'all'}
+              scope="company"
+              id={group.key ?? 'all'}
+              /* No heading when the list is not grouped — and then nothing to fold. */
+              label={config.groupBy ? group.label : undefined}
+              summary={
+                config.groupBy ? (
                   <span className="badge bg-brand-100 text-brand-700">{group.rows.length}</span>
-                </div>
-              )}
+                ) : undefined
+              }
+            >
               {/*
                 The card starts here rather than around the heading, so the
                 rounded corners land on the column header row, and overflow-x
@@ -512,25 +600,24 @@ export default async function CompaniesPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {(group.subGroups ?? [{ key: null, label: '', rows: group.rows }]).flatMap(
-                    (sub) => [
-                      ...(group.subGroups
-                        ? [
-                            <SubGroupRow
-                              key={`sub-${sub.key ?? 'none'}`}
-                              label={sub.label}
-                              count={sub.rows.length}
-                              columns={COLUMNS}
-                            />,
-                          ]
-                        : []),
-                      ...sub.rows.map(companyRow),
-                    ],
-                  )}
+                  {group.subGroups
+                    ? group.subGroups.map((sub) => (
+                        <CollapsibleSubGroup
+                          key={`sub-${sub.key ?? 'none'}`}
+                          scope="company"
+                          id={`${group.key ?? 'all'}/${sub.key ?? 'none'}`}
+                          label={sub.label}
+                          count={sub.rows.length}
+                          columns={COLUMNS}
+                        >
+                          {sub.rows.map(companyRow)}
+                        </CollapsibleSubGroup>
+                      ))
+                    : group.rows.map(companyRow)}
                 </tbody>
               </table>
               </div>
-            </div>
+            </CollapsibleGroup>
             ))}
           </div>
         </BulkEdit>

@@ -33,6 +33,7 @@ import type {
 } from '@/lib/database.types'
 import { Money, MoneyTotals } from '@/components/money'
 import { DealStatusBadge, EmptyState, ErrorNote, PageHeader } from '@/components/ui'
+import { CollapsibleGroup } from '@/components/collapsible'
 
 import { ColumnPicker } from './column-picker'
 
@@ -417,10 +418,14 @@ export default async function DealLedgerPage({
             const groupSummary = summariseLedger(group.rows)
 
             return (
-              <section key={group.key ?? '—'}>
-                {groupBy && (
-                  <header className="group-header flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <h2>{group.label}</h2>
+              <CollapsibleGroup
+                key={group.key ?? '—'}
+                scope="deal-report"
+                id={group.key ?? '—'}
+                /* No heading when the report is not grouped — and then nothing to fold. */
+                label={groupBy ? group.label : undefined}
+                summary={
+                  groupBy ? (
                     <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
                       <span>{formatNumber(group.rows.length)} deals</span>
                       <span className="text-slate-300">·</span>
@@ -432,9 +437,9 @@ export default async function DealLedgerPage({
                         </>
                       )}
                     </p>
-                  </header>
-                )}
-
+                  ) : undefined
+                }
+              >
                 {/*
                   The card starts here rather than around the heading, so the
                   rounded corners land on the column header row.
@@ -450,12 +455,12 @@ export default async function DealLedgerPage({
                           >
                             <Link
                               href={sortLink(column.key)}
-                              className="hover:text-slate-900"
+                              className="hover:underline"
                               title={`Sort by ${column.label}`}
                             >
                               {column.label}
                               {effectiveSort.key === column.key && (
-                                <span className="ml-1 text-slate-400">
+                                <span className="ml-1 text-white/70">
                                   {effectiveSort.direction === 'asc' ? '↑' : '↓'}
                                 </span>
                               )}
@@ -480,7 +485,7 @@ export default async function DealLedgerPage({
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </CollapsibleGroup>
             )
           })}
         </div>

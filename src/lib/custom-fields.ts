@@ -79,3 +79,24 @@ export function hasAnyValue(
 ): boolean {
   return definitions.some((definition) => displayValue(values[definition.key]) !== '')
 }
+
+/**
+ * A stored value as the list of chosen values an editable cell works in.
+ *
+ * A select holds a string and a multiselect holds an array, and the cell that
+ * edits either has to offer the same shape to the same menu. Everything absent
+ * — no key, null, or the empty string a cleared field can leave behind — comes
+ * back as an empty list, which is what "nothing chosen" means to a picker.
+ *
+ * Numbers and booleans are stringified rather than dropped: an option list can
+ * be `1`/`2`/`3`, and a value that is present must not read as unset.
+ */
+export function chosenValues(value: unknown): string[] {
+  if (value === null || value === undefined || value === '') return []
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== null && item !== undefined && item !== '')
+      .map(String)
+  }
+  return [String(value)]
+}

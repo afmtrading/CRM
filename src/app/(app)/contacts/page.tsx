@@ -12,6 +12,8 @@ import {
   TAGS_FIELD_KEY,
 } from "@/lib/filters";
 import { contactName, formatDay } from "@/lib/format";
+import { LIFECYCLE_LABELS } from "@/lib/field-options";
+import { chosenValues } from "@/lib/custom-fields";
 import { startOfMonthIn } from "@/lib/timezone";
 import type {
   FieldOptionRow,
@@ -37,23 +39,17 @@ import { ColumnPicker } from "@/components/column-picker";
 import { readColumns } from "../column-actions";
 import { ConsentBar } from "@/components/consent-bar";
 import { FilterBar } from "@/components/filter-bar";
-import {
-  CustomCell,
-  Empty,
-  OptionBadge,
-  OptionBadges,
-  optionColor,
-} from "@/components/contact-cards";
+import { CustomCell, Empty, OptionBadges } from "@/components/contact-cards";
 import {
   EmptyState,
   ErrorNote,
   GroupOverlapNote,
-  LifecycleBadge,
   PageHeader,
   StatCard,
   StatGrid,
-  SubGroupRow,
 } from "@/components/ui";
+import { CollapsibleGroup, CollapsibleSubGroup } from "@/components/collapsible";
+import { InlineEdit, type InlineOption } from "@/components/inline-edit";
 import {
   AlertIcon,
   AwardIcon,
@@ -81,6 +77,22 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: "Contacts · FLO CRM" };
 
 const PAGE_SIZE = 200;
+
+/*
+ * The lifecycle stages, for the cell that edits one.
+ *
+ * Not a field_options list — the stages are a column with a check constraint
+ * on it, so the colours are named here to match the badge the record's own
+ * page draws. The cell that uses this offers no way to empty it: a contact
+ * always has a stage, "none" is `lead`, and the database whitelist refuses
+ * `clear` on the column anyway.
+ */
+const LIFECYCLE_OPTIONS: InlineOption[] = [
+  { value: "lead", label: LIFECYCLE_LABELS.lead, color: "slate" },
+  { value: "qualified", label: LIFECYCLE_LABELS.qualified, color: "amber" },
+  { value: "customer", label: LIFECYCLE_LABELS.customer, color: "green" },
+  { value: "other", label: LIFECYCLE_LABELS.other, color: "slate" },
+];
 
 /** Filter conditions travel in the URL as a JSON `f` param (see filterToSearchParams). */
 const UNASSIGNED_VIEW = `/contacts?f=${encodeURIComponent(
@@ -199,6 +211,27 @@ export default async function ContactsPage({
     contactOptions.filter((option) => option.field_key === key);
 
   /*
+   * The same list, in the shape an editable cell wants: the value, the word to
+   * show for it, and the colour an admin gave it in Settings → Fields, so the
+   * menu offers exactly the badges the column is already drawing.
+   */
+  const inlineOptions = (key: string): InlineOption[] =>
+    optionsFor(key).map((option) => ({
+      value: option.value,
+      label: option.value,
+      color: option.color,
+    }));
+
+  /*
+   * Which cells can be changed from the list at all. Ownership is a manager's
+   * decision wherever it is made — the record's own form does not render the
+   * field for a rep either — and everything else follows plain write access.
+   * The database checks both again; this only decides what is offered.
+   */
+  const canEditCell = context.canWrite;
+  const canAssign = context.canManage;
+
+  /*
    * Region is a field of the company rather than the contact, so the column
    * finds it by name — the same lookup the companies list uses.
    */
@@ -274,10 +307,6 @@ export default async function ContactsPage({
     ...contact,
     [TAGS_FIELD_KEY]: tagIdsByContact.get(contact.id) ?? [],
   }));
-
-  const ownerNames = new Map(
-    ownerList.map((user) => [user.id, user.name || user.email]),
-  );
 
   /* Tag ids to the tag, and each contact to the tags on it. */
   const tagsById = new Map(
@@ -379,31 +408,65 @@ export default async function ContactsPage({
         ) : (
           <Empty />
         );
+      /*
+       * Owner, priority, role type, credibility, lifecycle stage and any
+       * custom list below: the cell is the editor. Click it, pick a value, and
+       * it is written — see components/inline-edit. Those are exactly the
+       * columns the database will accept a one-field change to, which is why a
+       * name or an email address is still a link to the record rather than a
+       * box to type in.
+       */
       case "owner":
-        return contact.owner_id ? (
-          <span className="text-slate-600">{ownerNames.get(contact.owner_id) ?? "—"}</span>
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="owner_id"
+            fieldLabel="Owner"
+            values={contact.owner_id ? [contact.owner_id] : []}
+            options={ownerList.map((user) => ({
+              value: user.id,
+              label: user.name || user.email,
+            }))}
+            canEdit={canAssign}
+          />
         );
       case "priority":
-        return contact.priority ? (
-          <OptionBadge
-            value={contact.priority}
-            color={optionColor(optionsFor("priority"), contact.priority)}
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="priority"
+            fieldLabel="Priority"
+            values={contact.priority ? [contact.priority] : []}
+            options={inlineOptions("priority")}
+            canEdit={canEditCell}
           />
-        ) : (
-          <Empty />
         );
       case "role_type":
-        return <OptionBadges values={contact.role_type} options={optionsFor("role_type")} />;
-      case "credibility":
-        return contact.credibility ? (
-          <OptionBadge
-            value={contact.credibility}
-            color={optionColor(optionsFor("credibility"), contact.credibility)}
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="role_type"
+            fieldLabel="Role type"
+            values={contact.role_type ?? []}
+            options={inlineOptions("role_type")}
+            multiple
+            canEdit={canEditCell}
           />
-        ) : (
-          <Empty />
+        );
+      case "credibility":
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="credibility"
+            fieldLabel="Credibility"
+            values={contact.credibility ? [contact.credibility] : []}
+            options={inlineOptions("credibility")}
+            canEdit={canEditCell}
+          />
         );
       case "tags": {
         /*
@@ -429,12 +492,17 @@ export default async function ContactsPage({
         );
       }
       case "lifecycle_stage":
-        // The badge the contact's own page uses. Every other column here with a
-        // fixed vocabulary is a badge; this one was plain lowercase text.
-        return contact.lifecycle_stage ? (
-          <LifecycleBadge stage={contact.lifecycle_stage} />
-        ) : (
-          <Empty />
+        return (
+          <InlineEdit
+            entity="contact"
+            id={contact.id}
+            field="lifecycle_stage"
+            fieldLabel="Lifecycle stage"
+            values={contact.lifecycle_stage ? [contact.lifecycle_stage] : []}
+            options={LIFECYCLE_OPTIONS}
+            clearable={false}
+            canEdit={canEditCell}
+          />
         );
       case "lead_score":
         return <span className="text-slate-600">{contact.lead_score ?? 0}</span>;
@@ -460,8 +528,37 @@ export default async function ContactsPage({
         );
       case "created_at":
         return <span className="text-slate-600">{formatDay(contact.created_at)}</span>;
-      default:
+      default: {
+        /*
+         * An organization's own fields. The ones with a list behind them are
+         * editable in place like the built-in ones; a free-text or number
+         * field is shown as it is stored, because there is nothing to pick
+         * from and nothing here to validate a typed value against.
+         */
+        const definition = contactDefinitions.find(
+          (candidate) => `custom_fields.${candidate.key}` === key,
+        );
+
+        if (
+          definition &&
+          (definition.field_type === "select" || definition.field_type === "multiselect")
+        ) {
+          return (
+            <InlineEdit
+              entity="contact"
+              id={contact.id}
+              field={key}
+              fieldLabel={definition.label}
+              values={chosenValues(contact.custom_fields?.[definition.key])}
+              options={inlineOptions(definition.key)}
+              multiple={definition.field_type === "multiselect"}
+              canEdit={canEditCell}
+            />
+          );
+        }
+
         return <CustomCell row={contact} columnKey={key} />;
+      }
     }
   };
 
@@ -622,15 +719,20 @@ export default async function ContactsPage({
           {overlap && <GroupOverlapNote label={overlap.label} />}
           <div className="space-y-8">
             {groups.map((group) => (
-            <div key={group.key ?? "all"}>
-              {config.groupBy && (
-                <div className="group-header flex items-baseline justify-between gap-3">
-                  <h2>{group.label}</h2>
+            <CollapsibleGroup
+              key={group.key ?? "all"}
+              scope="contact"
+              id={group.key ?? "all"}
+              /* No heading when the list is not grouped — and then nothing to fold. */
+              label={config.groupBy ? group.label : undefined}
+              summary={
+                config.groupBy ? (
                   <span className="badge bg-brand-100 text-brand-700">
                     {group.rows.length}
                   </span>
-                </div>
-              )}
+                ) : undefined
+              }
+            >
               {/*
                 The card starts here rather than around the heading, so the
                 rounded corners land on the column header row. overflow-x is
@@ -664,29 +766,29 @@ export default async function ContactsPage({
                   </thead>
                   <tbody>
                     {/*
-                      With a sub-group, each one gets a heading row and then its
-                      rows; without, the rows go straight in. Same table either
-                      way, so the columns keep their widths.
+                      With a sub-group, each one gets a band it can be folded
+                      away by and then its rows; without, the rows go straight
+                      in. Same table either way, so the columns keep their
+                      widths.
                     */}
-                    {(group.subGroups ?? [{ key: null, label: "", rows: group.rows }]).flatMap(
-                      (sub) => [
-                        ...(group.subGroups
-                          ? [
-                              <SubGroupRow
-                                key={`sub-${sub.key ?? "none"}`}
-                                label={sub.label}
-                                count={sub.rows.length}
-                                columns={COLUMNS}
-                              />,
-                            ]
-                          : []),
-                        ...sub.rows.map(contactRow),
-                      ],
-                    )}
+                    {group.subGroups
+                      ? group.subGroups.map((sub) => (
+                          <CollapsibleSubGroup
+                            key={`sub-${sub.key ?? "none"}`}
+                            scope="contact"
+                            id={`${group.key ?? "all"}/${sub.key ?? "none"}`}
+                            label={sub.label}
+                            count={sub.rows.length}
+                            columns={COLUMNS}
+                          >
+                            {sub.rows.map(contactRow)}
+                          </CollapsibleSubGroup>
+                        ))
+                      : group.rows.map(contactRow)}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </CollapsibleGroup>
             ))}
           </div>
         </BulkEdit>

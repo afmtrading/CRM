@@ -2,45 +2,43 @@
 
 @theme {
   /*
-   * Brand navy. The app reads as one product across organizations, so the
-   * accent is fixed here; an organization's own primary_color is only used for
-   * its logo chip.
+   * The house blues, and the one place they are written down.
    *
-   * This ramp used to be green, and the swap is the whole of the contrast pass:
-   * every primary button, active nav item, focus ring and tinted panel in the
-   * app already reads `brand-*`, so changing these six values moves all of them
-   * at once. It also frees green up. Green currently means both "press this"
-   * and "this is fine", and one colour cannot carry two meanings — after this,
-   * the only green left is the good state.
+   * Five colours were chosen for the product — Dark Blue #004A80, Blue
+   * #0077CC, Medium Blue #0EA5E9, Light Blue #F1F6FD and Clear Blue #E1F5FE —
+   * and they are laid out here as one ramp because every primary button,
+   * active nav item, focus ring, tinted panel and table header in the app
+   * already reads `brand-*`. Changing these nine values moves all of them at
+   * once, and nothing outside this block has to know a hex code.
    *
-   * 600 is the level-1 button. The rest are built around it.
+   * The three steps that are not on that list — 200, 300 and 700 — are the
+   * joins between the ones that are. A ramp with holes in it reads as a set of
+   * unrelated colours the moment two of them land next to each other.
    *
-   * 300 and 800 are new. Both were already being referenced — the funnel
-   * chart's "still there" segment and its legend swatch on 300, the mailbox
-   * nudge on 800 — against a ramp that stopped at 200 and skipped from 500 to
-   * 700. In Tailwind v4 a missing token means the utility is never emitted at
-   * all, so those two elements have been rendering with no colour rather than
-   * the wrong one. Defining them is the fix.
+   * 600 is Dark Blue, and it is the level-1 button: `btn-primary` is
+   * bg-brand-600, so that is what "main buttons" means in practice. 500 is
+   * Blue, and it is what a table's column header row is filled with. 50 is
+   * Light Blue, the quiet surface a sub-category row sits on.
+   *
+   * Green is still free, and still means only "this is fine".
    */
-  --color-brand-50: #f1f6fd;
-  --color-brand-100: #dce9f9;
-  --color-brand-200: #b9cfe8;
-  --color-brand-300: #8fb3da;
-  --color-brand-500: #1f5296;
-  --color-brand-600: #184077;
-  --color-brand-700: #102c55;
-  --color-brand-800: #0b1f3a;
+  --color-brand-50: #f1f6fd; /* Light Blue  — quiet surfaces, sub-category rows */
+  --color-brand-100: #e1f5fe; /* Clear Blue  — tinted chips and panels */
+  --color-brand-200: #b8e4fb;
+  --color-brand-300: #7fcdf4;
+  --color-brand-400: #0ea5e9; /* Medium Blue — charts, accents */
+  --color-brand-500: #0077cc; /* Blue        — main headers, focus rings */
+  --color-brand-600: #004a80; /* Dark Blue   — main buttons */
+  --color-brand-700: #003a66; /* …and its hover */
+  --color-brand-800: #002944;
 
   /*
-   * Level 1 of a grouped list, and the loudest thing on a page. It is not a
-   * step on the brand ramp on purpose: a group header is a landmark rather than
-   * something to press, and giving it the button's navy would make every band
-   * look clickable.
+   * The two levels of a grouped list have no colours of their own any more.
+   * Level 1 is a heading on the page ground, and level 2 is a band filled with
+   * brand-50 — both drawn from the ramp above rather than from a pair of
+   * one-off tokens that nothing referenced and whose comments described a
+   * design that had already been replaced.
    */
-  --color-group: #1276f9;
-
-  /* Level 2. Deliberately quiet — it has to sit under the header, not beside it. */
-  --color-band: #dce9f9;
 
   /* Cards float on a soft grey canvas rather than sitting on flat white. */
   --color-canvas: #f4f5f7;
@@ -116,8 +114,10 @@ body {
   @apply px-0.5 pb-3;
 
   /* A step under the page title, not over it. This was text-3xl against the
-     title's text-2xl, so a group inside a page shouted louder than the page. */
-  & > h2 {
+     title's text-2xl, so a group inside a page shouted louder than the page.
+     A descendant rather than a child: the heading of a foldable group sits
+     inside the button that folds it. */
+  & h2 {
     @apply text-2xl font-bold tracking-tight text-slate-900;
   }
 }
@@ -186,17 +186,21 @@ body {
   @apply w-full border-collapse text-sm;
 
   /*
-   * The column header row, tinted rather than grey.
+   * The column header row, filled rather than tinted.
    *
-   * This is the row the rounded corners now sit on, so its fill is what draws
-   * the top of the panel — a neutral slate against a white card barely reads as
-   * a shape at all. brand-50 is the same tint the rest of the palette uses for
-   * a quiet surface, which keeps the header part of the blue family instead of
-   * a grey visitor in it.
+   * This is the row the rounded corners sit on, so its fill is what draws the
+   * top of the panel, and it is the line somebody reads to work out what the
+   * columns are before reading a single record. Blue at full strength — the
+   * same #0077CC the rest of the app uses for its main headers — makes it the
+   * lid of the table rather than a slightly-off-white row that happens to be
+   * first.
+   *
+   * White text, and the rule under it comes off the next step down the ramp:
+   * a slate hairline on a solid blue fill is a smudge rather than a line.
    */
   & th {
-    @apply border-b border-slate-200 bg-brand-50 px-4 py-3 text-left text-xs font-semibold
-           tracking-wide text-slate-500 uppercase;
+    @apply border-b border-brand-600 bg-brand-500 px-4 py-3 text-left text-xs font-semibold
+           tracking-wide text-white uppercase;
   }
 
   & td {
@@ -243,12 +247,17 @@ body {
 }
 
 /*
- * Level 2 of a grouped list, as a rule rather than a band.
+ * Level 2 of a grouped list — a band in Light Blue, opened by a rule.
  *
- * With level 1 no longer filled, a filled level 2 would have been the loudest
- * thing on the page — the second-strongest signal reading as the strongest.
- * So it becomes a line: a heavier rule opening the sub-group, and the label
- * sitting on it.
+ * The fill is #F1F6FD, the quietest colour in the house set, which is what
+ * lets it be a band at all: level 1 is a heading on the page ground and this
+ * has to sit under it rather than beside it. A stronger tint here and the
+ * second-strongest signal on the page would read as the strongest.
+ *
+ * The air that separates one sub-group from the last stays white, above the
+ * band rather than inside it — see the :has rule at the bottom of this file.
+ * That is why the padding here is tight and even: the band should be the
+ * height of its label, not a block with a label somewhere in it.
  *
  * Written here rather than as classes on the row because `.table td` sets its
  * own padding and bottom border at (0,1,1). A utility on the cell would tie at
@@ -261,9 +270,10 @@ body {
  * 2px replaces the preceding row's 1px hairline instead of stacking on it.
  */
 .table tr.subgroup > td {
+  background: var(--color-brand-50);
   border-top: 2px solid var(--color-brand-200);
   border-bottom: 0;
-  padding-top: 1.75rem;
+  padding-top: 0.625rem;
   padding-bottom: 0.625rem;
 }
 
@@ -274,7 +284,6 @@ body {
  */
 .table tbody tr.subgroup:first-child > td {
   border-top: 0;
-  padding-top: 0.75rem;
 }
 
 /*
@@ -287,7 +296,12 @@ body {
  *
  * Anything that cannot match :has simply gets the old tighter spacing rather
  * than a broken layout, which is the right way for this to fail.
+ *
+ * `:not(.subgroup)` because a band can end up directly above another one: fold
+ * a sub-group shut and its rows go, leaving the two bands adjacent. The gap
+ * belongs between a group's last record and the next band, not inside a run of
+ * bands with nothing between them.
  */
-.table tbody tr:has(+ tr.subgroup) > td {
+.table tbody tr:not(.subgroup):has(+ tr.subgroup) > td {
   padding-bottom: 1.5rem;
 }

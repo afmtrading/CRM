@@ -11,6 +11,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { DealStatusBadge, EmptyState, PageHeader } from '@/components/ui'
+import { CollapsibleGroup } from '@/components/collapsible'
 import { Money, MoneyTotals } from '@/components/money'
 
 import { DealFilters } from './deal-filters'
@@ -283,15 +284,17 @@ export default async function DealsPage({
         <div className="space-y-8">
           {listGroups.map(({ stage, deals: stageDeals }) => {
             return (
-              <section key={stage.id}>
-                {/*
-                  The same heading every other grouped list uses. This one had
-                  its own — 14px and semibold, above a plain card — from before
-                  the grouped lists were given a shape, so the deals list was
-                  the one place a stage looked unlike a group.
-                */}
-                <div className="group-header flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <h2>{stage.name}</h2>
+              /*
+                The same heading every other grouped list uses, and the same
+                fold: a stage nobody is working this week goes away with one
+                click and stays away.
+              */
+              <CollapsibleGroup
+                key={stage.id}
+                scope="deal"
+                id={stage.id}
+                label={stage.name}
+                summary={
                   <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
                     <span>
                       {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'}
@@ -299,8 +302,8 @@ export default async function DealsPage({
                     <span className="text-slate-300">·</span>
                     <MoneyTotals rows={stageDeals} />
                   </p>
-                </div>
-
+                }
+              >
                 <div className="group-panel overflow-x-auto">
                   <table className="table">
                     <thead>
@@ -356,7 +359,7 @@ export default async function DealsPage({
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </CollapsibleGroup>
             )
           })}
         </div>
