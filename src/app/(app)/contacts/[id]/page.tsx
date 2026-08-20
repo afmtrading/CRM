@@ -103,6 +103,7 @@ export default async function ContactDetailPage({
             name: string;
             domain: string | null;
             specialty_market: string[];
+            stock_type: string[];
             customer_type: string[];
             custom_fields: Record<string, unknown>;
           }
@@ -111,7 +112,7 @@ export default async function ContactDetailPage({
   >(
     scoped(context, "contacts")
       .select(
-        "*, companies(id, name, domain, specialty_market, customer_type, custom_fields)",
+        "*, companies(id, name, domain, specialty_market, stock_type, customer_type, custom_fields)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -201,11 +202,16 @@ export default async function ContactDetailPage({
   const customValues = (contact.custom_fields ?? {}) as Record<string, unknown>;
 
   /*
-   * The Company Rating card, mirrored from the business. "Stock type",
-   * "Regions" and "Size" are custom fields rather than columns, so the card
-   * takes whatever is filed under the company's own Company Rating card
-   * instead of naming them — file a fourth one there and it appears here too,
-   * which is the point of mirroring rather than listing.
+   * The Company Rating card, mirrored from the business. Anything an admin
+   * files under the company's own Company Rating card appears here too, which
+   * is the point of mirroring rather than listing — add one there and this
+   * card grows without being edited.
+   *
+   * Only what is genuinely a custom field, though. This once said stock type
+   * was one, and it is a column; nothing rendered it and the card quietly
+   * showed a company's merchandise and type with the condition of its goods
+   * missing. Columns have to be named here the way market and company type
+   * are, so a new one is a change to this file and not an assumption.
    */
   const company = contact.companies;
   const companyCustomFields = allCustomFields.filter(
@@ -696,6 +702,20 @@ export default async function ContactDetailPage({
                     <OptionBadges
                       values={company.specialty_market}
                       options={companyOptionsFor("specialty_market")}
+                    />
+                  </Field>
+                </FieldRow>
+                {/*
+                  Between the two it belongs between: what category of goods a
+                  business deals in, then what condition they arrive in, then
+                  what kind of business it is. The company's own card orders
+                  merchandise and stock type the same way round.
+                */}
+                <FieldRow columns={1}>
+                  <Field label="Stock type">
+                    <OptionBadges
+                      values={company.stock_type}
+                      options={companyOptionsFor("stock_type")}
                     />
                   </Field>
                 </FieldRow>
