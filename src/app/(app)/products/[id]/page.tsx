@@ -748,12 +748,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 selected={selectedTagIds}
                 canManage={context.isAdmin}
                 canCreate={context.canManage}
+                autoSubmit
               />
-              {context.canManage && (
-                <button type="submit" className="btn-secondary">
-                  Save tags
-                </button>
-              )}
             </form>
           </Section>
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFormStatus } from 'react-dom'
 import Link from 'next/link'
 
 import { createTagNamed } from '@/app/(app)/settings/actions'
@@ -29,6 +30,7 @@ export function TagPicker({
   name = 'tag_ids',
   canManage = false,
   canCreate = true,
+  autoSubmit = false,
 }: {
   tags: PickableTag[]
   selected: Set<string> | string[]
@@ -37,6 +39,15 @@ export function TagPicker({
   canManage?: boolean
   /** A read-only viewer can still see the chips, but not add to them. */
   canCreate?: boolean
+  /**
+   * Post the enclosing form as soon as the selection settles, rather than
+   * waiting for a button. For the record pages, where this control is the only
+   * editable thing on an otherwise read-only page and its own save step was
+   * easy to walk away from. The create and edit forms leave this off: there the
+   * tags ride along with everything else, and submitting early would save half
+   * a record.
+   */
+  autoSubmit?: boolean
 }) {
   const initial = useMemo(
     () => (selected instanceof Set ? [...selected] : selected),
@@ -57,6 +68,32 @@ export function TagPicker({
   const [error, setError] = useState<string | null>(null)
 
   const box = useRef<HTMLDivElement>(null)
+
+  /*
+   * Autosave, once the clicking stops.
+   *
+   * The delay is not for the network's sake but for correctness: every submit
+   * posts the whole selection, so two in flight at once can land out of order
+   * and leave the earlier one's set behind. Restarting the timer on each change
+   * means a burst of picks becomes one write of the final set.
+   *
+   * The first run is the mount, where `chosen` has only just been read off the
+   * props — saving there would post the record back to itself on every view.
+   */
+  const settled = useRef(false)
+  const { pending } = useFormStatus()
+
+  useEffect(() => {
+    if (!autoSubmit) return
+    if (!settled.current) {
+      settled.current = true
+      return
+    }
+    const form = box.current?.closest('form')
+    if (!form) return
+    const timer = setTimeout(() => form.requestSubmit(), 500)
+    return () => clearTimeout(timer)
+  }, [chosen, autoSubmit])
 
   // Clicking anywhere else closes the list. Escape does too, from the input.
   useEffect(() => {
@@ -192,6 +229,7 @@ export function TagPicker({
       </div>
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {autoSubmit && pending && <p className="mt-1 text-xs text-slate-400">Saving…</p>}
 
       {open && canCreate && (matches.length > 0 || offerCreate) && (
         <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">

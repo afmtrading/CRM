@@ -535,12 +535,8 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
                 selected={selectedTagIds}
                 canManage={context.isAdmin}
                 canCreate={context.canWrite}
+                autoSubmit
               />
-              {context.canWrite && (
-                <button type="submit" className="btn-secondary">
-                  Save tags
-                </button>
-              )}
             </form>
           </Section>
 
