@@ -6,6 +6,8 @@ import {
   OPTION_FIELDS,
   PRODUCT_CARDS,
   cardLabel,
+  chipHolds,
+  chipsFor,
   daysUntilBirthday,
   optionOwners,
   optionsForField,
@@ -297,6 +299,108 @@ describe('priority, asked the same way everywhere', () => {
     ]
     for (const entity of ['contact', 'company', 'product']) {
       expect(optionsForField(options, entity, 'priority')).toHaveLength(1)
+    }
+  })
+})
+
+/*
+ * The regression these cover is not a rendering one. A form drew a chip per
+ * option and checked one on an exact match, so a record holding a value the
+ * list had stopped offering checked nothing; an unchecked group posts no entry,
+ * and the action's empty default was written over the stored value. Production
+ * had fifteen records on a priority of "Standard" that no list contained, each
+ * one save away from losing it.
+ */
+describe('chipsFor', () => {
+  const options = [
+    { id: 'a', value: 'Critical', color: 'red' as const },
+    { id: 'b', value: 'Low', color: 'slate' as const },
+  ]
+
+  it('offers the list as it stands when the stored value is in it', () => {
+    expect(chipsFor(options, 'Critical')).toEqual([
+      { id: 'a', value: 'Critical', color: 'red', retired: false },
+      { id: 'b', value: 'Low', color: 'slate', retired: false },
+    ])
+  })
+
+  it('carries a stored value no option accounts for, so the form can post it back', () => {
+    const chips = chipsFor(options, 'Standard')
+    expect(chips).toHaveLength(3)
+    expect(chips[2]).toEqual({
+      id: 'retired:Standard',
+      value: 'Standard',
+      color: 'slate',
+      retired: true,
+    })
+  })
+
+  it('carries every unaccounted value of a multi-select, and only those', () => {
+    const chips = chipsFor(options, ['Low', 'Influencer', 'Standard'])
+    expect(chips.filter((chip) => chip.retired).map((chip) => chip.value)).toEqual([
+      'Influencer',
+      'Standard',
+    ])
+  })
+
+  // Case is how the integrity check asks the question, so a value differing
+  // only in case is that option rather than a second one beside it.
+  it('treats a case variant as the option it is', () => {
+    expect(chipsFor(options, 'critical').every((chip) => !chip.retired)).toBe(true)
+  })
+
+  it('does not repeat a value stored twice', () => {
+    const chips = chipsFor(options, ['Standard', 'standard', '  Standard  '])
+    expect(chips.filter((chip) => chip.retired)).toHaveLength(1)
+  })
+
+  it('ignores nothing-at-all, which is a cleared field rather than a lost one', () => {
+    for (const stored of [null, undefined, '', '   ', []]) {
+      expect(chipsFor(options, stored)).toHaveLength(options.length)
+    }
+  })
+
+  // An empty list and a stored value is the case that used to render the
+  // "no options defined" hint and silently drop the value on save.
+  it('still carries the value when the list is empty', () => {
+    expect(chipsFor([], 'Standard')).toEqual([
+      { id: 'retired:Standard', value: 'Standard', color: 'slate', retired: true },
+    ])
+  })
+
+  it('leaves an empty list empty when there is nothing stored', () => {
+    expect(chipsFor([], null)).toEqual([])
+  })
+})
+
+describe('chipHolds', () => {
+  const chip = { id: 'a', value: 'Critical', color: 'red' as const, retired: false }
+
+  it('matches its own value, whatever the case or padding', () => {
+    expect(chipHolds(chip, 'Critical')).toBe(true)
+    expect(chipHolds(chip, 'critical')).toBe(true)
+    expect(chipHolds(chip, '  Critical ')).toBe(true)
+  })
+
+  it('does not match another value, or none', () => {
+    expect(chipHolds(chip, 'Low')).toBe(false)
+    expect(chipHolds(chip, '')).toBe(false)
+    expect(chipHolds(chip, null)).toBe(false)
+    expect(chipHolds(chip, undefined)).toBe(false)
+  })
+
+  /*
+   * The whole point, stated once: every stored value finds exactly one chip to
+   * check. Nothing checked is what posted nothing and lost the value.
+   */
+  it('finds exactly one chip for any stored value, listed or not', () => {
+    const options = [
+      { id: 'a', value: 'Critical', color: 'red' as const },
+      { id: 'b', value: 'Low', color: 'slate' as const },
+    ]
+    for (const stored of ['Critical', 'low', 'Standard', 'Influencer']) {
+      const checked = chipsFor(options, stored).filter((candidate) => chipHolds(candidate, stored))
+      expect(checked).toHaveLength(1)
     }
   })
 })

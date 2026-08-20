@@ -1,6 +1,7 @@
 import type {
   ContactCard,
   DealStatus,
+  FieldOptionRow,
   ImportStatus,
   LifecycleStage,
   OptionColor,
@@ -465,6 +466,71 @@ export function optionsForField<T extends { entity_type: string; field_key: stri
   key: string,
 ): T[] {
   return options.filter((option) => option.entity_type === entity && option.field_key === key)
+}
+
+/** One chip on a form: an option to pick, or a stored value that outlived its option. */
+export type OptionChip = {
+  id: string
+  value: string
+  color: OptionColor
+  /**
+   * True when nothing in the list accounts for this value. It still renders, and
+   * still posts, so editing a record does not quietly discard it.
+   */
+  retired: boolean
+}
+
+/**
+ * The chips a select or multi-select has to draw: every option in the list,
+ * followed by any stored value the list no longer accounts for.
+ *
+ * The second half is the point. A chip group only ever rendered the options,
+ * and a radio group only checked one on an exact match, so a record holding a
+ * value an admin had since renamed — or an import had invented — checked
+ * nothing at all. An unchecked radio group posts no entry, `Object.fromEntries`
+ * leaves the key out, and the action writes its empty default over the top: the
+ * value disappeared on the next save of an unrelated field, with nothing on
+ * screen to say it had been there. Carrying it as a chip of its own means the
+ * form round-trips what it cannot offer.
+ *
+ * Matching is case-insensitive, the same way the data-integrity check asks the
+ * question. A value differing from its option only in case is that option, not
+ * a second one, so it checks the real chip and converges on the list's spelling
+ * when saved.
+ */
+export function chipsFor(
+  options: Pick<FieldOptionRow, 'id' | 'value' | 'color'>[],
+  stored: string | string[] | null | undefined,
+): OptionChip[] {
+  const chips: OptionChip[] = options.map((option) => ({
+    id: option.id,
+    value: option.value,
+    color: option.color,
+    retired: false,
+  }))
+
+  const listed = new Set(options.map((option) => option.value.toLowerCase()))
+  const seen = new Set<string>()
+
+  for (const raw of Array.isArray(stored) ? stored : [stored]) {
+    const value = typeof raw === 'string' ? raw.trim() : ''
+    if (!value) continue
+
+    const key = value.toLowerCase()
+    if (listed.has(key) || seen.has(key)) continue
+    seen.add(key)
+
+    chips.push({ id: `retired:${value}`, value, color: 'slate', retired: true })
+  }
+
+  return chips
+}
+
+/** Whether a chip carries this stored value, ignoring case. See chipsFor. */
+export function chipHolds(chip: OptionChip, stored: string | null | undefined): boolean {
+  if (typeof stored !== 'string') return false
+  const value = stored.trim()
+  return value !== '' && chip.value.toLowerCase() === value.toLowerCase()
 }
 
 
