@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { placeNames, type Place } from '@/lib/geography'
+import { formatDay } from '@/lib/format'
 import { renderMarkdown, COMPANY_CARDS, optionsForField } from '@/lib/field-options'
 import { MARKETPLACE_OPTION_FIELDS } from '@/lib/marketplace'
 import type {
@@ -317,7 +318,24 @@ export default async function MarketplacePage({ params }: { params: Promise<{ id
           </Section>
 
           {/* -------------------------------------------------------------- */}
-          <Section title="Accounts and payouts">
+          <Section
+            title="Accounts and payouts"
+            /*
+              When this company became a channel, which is the profile's own
+              age rather than the company's. It sits here because this is the
+              administrative card — beside Opened, which is a different date
+              and says so: one is when the seller account was opened, this is
+              when somebody recorded it as a marketplace.
+            */
+            actions={
+              <p className="text-sm text-slate-500" title="Added to Marketplaces">
+                Added{' '}
+                <span className="font-semibold text-slate-900">
+                  {formatDay(profile.created_at)}
+                </span>
+              </p>
+            }
+          >
             {/*
               Everything about the account itself, which used to be folded away
               behind a disclosure inside another card. It is the half of a

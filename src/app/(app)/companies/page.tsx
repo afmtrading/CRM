@@ -36,7 +36,7 @@ import {
 } from '@/components/ui'
 import { CollapsibleGroup, CollapsibleSubGroup } from '@/components/collapsible'
 import { InlineEdit, InlineText, type InlineOption } from '@/components/inline-edit'
-import { CustomCell, Empty, OptionBadges } from '@/components/contact-cards'
+import { CustomCell, Empty, OptionBadges, ReachActions } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
 import { formatDay } from '@/lib/format'
@@ -306,8 +306,8 @@ export default async function CompaniesPage({
   const catalogue = columnCatalogue('company', definitions)
   const columns = resolveColumns('company', savedColumns, catalogue)
 
-  // The checkbox, plus whatever was chosen. Companies have no actions cell.
-  const COLUMNS = columns.length + 1
+  // Checkbox, the chosen columns, and the call/email icons at the end.
+  const COLUMNS = columns.length + 2
 
   const cell = (company: (typeof rows)[number], key: string): React.ReactNode => {
     switch (key) {
@@ -529,6 +529,16 @@ export default async function CompaniesPage({
           <div className="min-w-0 max-w-xs">{cell(company, column.key)}</div>
         </td>
       ))}
+
+      {/*
+        The way to write to the address in the Email cell, now that the cell
+        itself is the box for correcting it. The contacts list has ended this
+        way since it was written; this is the companies list catching up,
+        rather than a mailto link inside a control that is also a text input.
+      */}
+      <td>
+        <ReachActions phone={company.phone} email={company.email} label={company.name} />
+      </td>
     </tr>
   )
 
@@ -643,6 +653,7 @@ export default async function CompaniesPage({
                         {column.label}
                       </th>
                     ))}
+                    <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
