@@ -621,8 +621,9 @@ export default async function ContactDetailPage({
           <Section title="Tags" className="order-3">
             {/*
               The same control the contact form carries, so tagging looks the
-              same wherever it is done. Here it posts on its own; there it rides
-              along with the record's other fields.
+              same wherever it is done. Here it saves itself once the clicking
+              stops; there it rides along with the record's other fields, which
+              is why autoSubmit is set on one and not the other.
             */}
             <form action={setContactTags} className="space-y-3">
               <input type="hidden" name="contact_id" value={id} />
@@ -631,12 +632,8 @@ export default async function ContactDetailPage({
                 selected={selectedTagIds}
                 canManage={context.isAdmin}
                 canCreate={context.canWrite}
+                autoSubmit
               />
-              {context.canWrite && (
-                <button type="submit" className="btn-secondary">
-                  Save tags
-                </button>
-              )}
             </form>
           </Section>
 

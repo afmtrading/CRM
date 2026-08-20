@@ -769,12 +769,8 @@ export default async function CompanyDetailPage({
                 selected={selectedTagIds}
                 canManage={context.isAdmin}
                 canCreate={context.canWrite}
+                autoSubmit
               />
-              {context.canWrite && (
-                <button type="submit" className="btn-secondary">
-                  Save tags
-                </button>
-              )}
             </form>
           </Section>
 
