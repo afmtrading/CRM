@@ -217,6 +217,8 @@ export type ContactRow = {
   duplicate_of_id: string | null
   job_title: string | null
   office_phone: string | null
+  /** A second address, kept but never sent to — see 20260260000000. */
+  secondary_email: string | null
   role_type: string[]
   priority: string | null
   credibility: string | null
@@ -1174,6 +1176,7 @@ export interface Database {
         | 'duplicate_of_id'
         | 'job_title'
         | 'office_phone'
+        | 'secondary_email'
         | 'role_type'
         | 'priority'
         | 'credibility'

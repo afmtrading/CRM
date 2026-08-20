@@ -448,6 +448,23 @@ export default async function ContactDetailPage({
                   <ContactMethod value={contact.email} kind="email" label={name} />
                 </Field>
               </FieldRow>
+              {/*
+                Only when there is one. A dash here would say a contact has no
+                second address, which is the ordinary case and not worth a row
+                — the same reason the Company Rating card is hidden outright
+                when a contact has no company.
+              */}
+              {contact.secondary_email && (
+                <FieldRow columns={1}>
+                  <Field label="Secondary email">
+                    <ContactMethod
+                      value={contact.secondary_email}
+                      kind="email"
+                      label={name}
+                    />
+                  </Field>
+                </FieldRow>
+              )}
               <FieldRow>
                 <Field label="Mobile phone">
                   <ContactMethod value={contact.phone} kind="phone" label={name} />
