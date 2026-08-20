@@ -9,7 +9,9 @@ import {
   filterToSearchParams,
   groupRows,
   groupRowsNested,
+  COMPANY_FIELDS,
   labelFromFields,
+  MARKETPLACE_FIELDS,
   matchesFilter,
   overlappingGroupField,
   parseFilterConfig,
@@ -502,6 +504,53 @@ describe('overlappingGroupField', () => {
 
   it('says nothing when there is no grouping at all', () => {
     expect(overlappingGroupField(fields, null, TAGS_FIELD_KEY)).toBeNull()
+  })
+})
+
+describe('the multi-valued columns a list can be grouped by', () => {
+  const byKey = (fields: typeof COMPANY_FIELDS, key: string) =>
+    fields.find((field) => field.key === key)
+
+  it.each(['sells_in', 'specialty_market', 'stock_type'])(
+    'offers %s as a grouping on companies, and declares that it repeats a row',
+    (key) => {
+      const field = byKey(COMPANY_FIELDS, key)
+      expect(field?.groupable).toBe(true)
+      expect(field?.multi).toBe(true)
+    },
+  )
+
+  /* The same company columns, so they have to behave the same on both lists. */
+  it.each(['sells_in', 'specialty_market'])('offers %s on marketplaces too', (key) => {
+    const field = byKey(MARKETPLACE_FIELDS, key)
+    expect(field?.groupable).toBe(true)
+    expect(field?.multi).toBe(true)
+  })
+
+  it('puts a company selling in three countries under all three', () => {
+    const groups = groupRows(
+      [
+        { id: '1', sells_in: ['CA', 'US', 'MX'] },
+        { id: '2', sells_in: ['CA'] },
+        { id: '3', sells_in: [] },
+      ],
+      'sells_in',
+    )
+
+    expect(groups.map((group) => group.key)).toEqual(['CA', 'MX', 'US', null])
+    expect(groups.find((group) => group.key === 'CA')?.rows).toHaveLength(2)
+  })
+
+  it('warns on a territory grouping the same way it warns on tags', () => {
+    expect(overlappingGroupField(COMPANY_FIELDS, 'sells_in', null)?.label).toBe('Sells To')
+  })
+
+  /*
+   * based_in is one country per company, and customer_type was left alone. A
+   * heading count that can be trusted should not carry the warning.
+   */
+  it('says nothing for a grouping that files each company once', () => {
+    expect(overlappingGroupField(COMPANY_FIELDS, 'based_in', null)).toBeNull()
   })
 })
 

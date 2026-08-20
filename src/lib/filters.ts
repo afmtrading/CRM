@@ -157,17 +157,20 @@ export const COMPANY_FIELDS: FieldDef[] = [
   { key: 'priority', label: 'Priority', type: 'enum', groupable: true, sortable: true },
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
   /*
-   * Where they are and where they trade, as three separate questions.
+   * Where they are and where they trade, as separate questions.
    *
-   * based_in groups usefully — "how many of our buyers are in Canada" is a
-   * sensible column heading. The territories do not: a company selling in six
-   * countries belongs to six groups at once, and a grouped list would either
-   * repeat it or pick one arbitrarily.
+   * All of them group. based_in is one country and one heading; the rest are
+   * lists, so a company selling in six countries appears under all six. That
+   * used to be the reason they were not offered — repeat the row or pick one
+   * arbitrarily — and it stopped being a reason when grouping learned to
+   * repeat honestly and the page learned to say it had. "Which of our
+   * suppliers sell to Canada" is the same question as "which are tagged VIP",
+   * asked of a column instead of a label.
    */
   { key: 'based_in', label: 'Base Country', type: 'enum', groupable: true, sortable: true },
-  { key: 'sells_in', label: 'Sells To', type: 'array' },
-  { key: 'specialty_market', label: 'Merchandise', type: 'array' },
-  { key: 'stock_type', label: 'Stock type', type: 'array' },
+  { key: 'sells_in', label: 'Sells To', type: 'array', groupable: true, multi: true },
+  { key: 'specialty_market', label: 'Merchandise', type: 'array', groupable: true, multi: true },
+  { key: 'stock_type', label: 'Stock type', type: 'array', groupable: true, multi: true },
   { key: 'customer_type', label: 'Company type', type: 'array' },
   { key: 'created_at', label: 'Created', type: 'date', sortable: true },
   TAGS_FIELD,
@@ -234,8 +237,9 @@ export const MARKETPLACE_FIELDS: FieldDef[] = [
   { key: 'owner_id', label: 'Owner', type: 'uuid', groupable: true },
   { key: 'based_in', label: 'Base Country', type: 'enum', groupable: true, sortable: true },
   { key: 'domain', label: 'Website', type: 'text' },
-  { key: 'sells_in', label: 'Sells To', type: 'array' },
-  { key: 'specialty_market', label: 'Merchandise', type: 'array' },
+  // The company's own columns, so they group exactly as they do on Companies.
+  { key: 'sells_in', label: 'Sells To', type: 'array', groupable: true, multi: true },
+  { key: 'specialty_market', label: 'Merchandise', type: 'array', groupable: true, multi: true },
 
   { key: 'marketplace_profiles.marketplace_type', label: 'Marketplace type', type: 'array' },
   { key: 'marketplace_profiles.fulfilment', label: 'Fulfilment', type: 'array' },
