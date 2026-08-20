@@ -661,6 +661,19 @@ export default async function ContactsPage({
           <SelectRow id={contact.id} label={`Select ${name}`} />
         </td>
 
+        {/*
+          Ahead of the name rather than after the last column.
+
+          The table scrolls sideways as soon as somebody adds a few columns,
+          and everything past the fold goes with it — which put calling and
+          emailing, the two things this list exists to lead to, behind a
+          scrollbar. They sit beside the checkbox now, where the row starts
+          and where no amount of chosen columns can push them.
+        */}
+        <td className="w-16">
+          <ReachActions phone={contact.phone} email={contact.email} label={name} align="start" />
+        </td>
+
         {columns.map((column) => (
           <td
             key={column.key}
@@ -669,10 +682,6 @@ export default async function ContactsPage({
             <div className="min-w-0 max-w-xs">{cell(contact, column.key)}</div>
           </td>
         ))}
-
-        <td>
-          <ReachActions phone={contact.phone} email={contact.email} label={name} />
-        </td>
       </tr>
     );
   };
@@ -820,6 +829,9 @@ export default async function ContactsPage({
                       <th className="w-10">
                         <SelectAll label="Select every contact shown" />
                       </th>
+                      {/* See the note on the cell: ahead of the name, where the
+                          horizontal scroll cannot reach it. */}
+                      <th className="w-16">Actions</th>
                       {columns.map((column) => (
                         <th
                           key={column.key}
@@ -828,7 +840,6 @@ export default async function ContactsPage({
                           {column.label}
                         </th>
                       ))}
-                      <th className="text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
