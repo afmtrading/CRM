@@ -6,6 +6,7 @@ import {
   fieldsFor,
   filterFromSearchParams,
   groupRowsNested,
+  overlappingGroupField,
   labelFromFields,
   parseFilterConfig,
   TAGS_FIELD_KEY,
@@ -25,7 +26,14 @@ import { placeNames, type Place } from '@/lib/geography'
 import { BulkEdit, SelectAll, SelectRow } from '@/components/bulk-bar'
 import { bulkFieldsFor } from '@/lib/bulk-edit'
 import { FilterBar } from '@/components/filter-bar'
-import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
+import {
+  EmptyState,
+  GroupOverlapNote,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  SubGroupRow,
+} from '@/components/ui'
 import { CustomCell, Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
 import { columnCatalogue, resolveColumns } from '@/lib/table-columns'
 import { ColumnPicker } from '@/components/column-picker'
@@ -223,7 +231,13 @@ export default async function CompaniesPage({
     ),
   ).size
   const savedColumns = await readColumns('company')
-  const rows = (data ?? []) as (CompanyRow & { contacts: { count: number }[] })[]
+  /*
+   * Tags ride along on the row so the grouping can read them. They are not a
+   * column, and groupRows has only the row to work from.
+   */
+  const rows = ((data ?? []) as (CompanyRow & { contacts: { count: number }[] })[]).map(
+    (company) => ({ ...company, [TAGS_FIELD_KEY]: tagIdsByCompany.get(company.id) ?? [] }),
+  )
 
   const ownerNames = new Map(ownerList.map((user) => [user.id, user.name || user.email]))
 
@@ -245,6 +259,10 @@ export default async function CompaniesPage({
   })
   // The field is passed in because two of them can be grouped on at once, and
   // only one of them holds user ids.
+  // Tags put a record in every group it is tagged with, so the counts add up
+  // to more than the list. The page says so rather than looking wrong.
+  const overlap = overlappingGroupField(fields, config.groupBy, config.subGroupBy)
+
   const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, labelFromFields(fields))
 
   const catalogue = columnCatalogue('company', definitions)
@@ -455,6 +473,7 @@ export default async function CompaniesPage({
         />
       ) : (
         <BulkEdit entity="company" fields={bulkFields} canDelete={context.canDelete}>
+          {overlap && <GroupOverlapNote label={overlap.label} />}
           <div className="space-y-8">
             {groups.map((group) => (
             <div key={group.key ?? 'all'}>

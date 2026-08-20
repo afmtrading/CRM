@@ -14,12 +14,20 @@ import type {
 } from '@/lib/database.types'
 import { ColumnPicker } from '@/components/column-picker'
 import { CustomCell, Empty, OptionBadge, OptionBadges, optionColor } from '@/components/contact-cards'
-import { EmptyState, PageHeader, StatCard, StatGrid, SubGroupRow } from '@/components/ui'
+import {
+  EmptyState,
+  GroupOverlapNote,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  SubGroupRow,
+} from '@/components/ui'
 import { FilterBar } from '@/components/filter-bar'
 import {
   MARKETPLACE_FIELDS,
   filterFromSearchParams,
   groupRowsNested,
+  overlappingGroupField,
   labelFromFields,
   matchesFilter,
   TAGS_FIELD_KEY,
@@ -279,6 +287,10 @@ export default async function MarketplacesPage({
   })
 
   // Headings come off the same field list the filter uses. See labelFromFields.
+  // Tags put a record in every group it is tagged with, so the counts add up
+  // to more than the list. The page says so rather than looking wrong.
+  const overlap = overlappingGroupField(fields, config.groupBy, config.subGroupBy)
+
   const groups = groupRowsNested(rows, config.groupBy, config.subGroupBy, labelFromFields(fields))
 
   const cell = (row: Row, key: string): React.ReactNode => {
@@ -533,8 +545,10 @@ export default async function MarketplacesPage({
           }
         />
       ) : (
-        <div className="space-y-8">
-          {groups.map((group) => (
+        <>
+          {overlap && <GroupOverlapNote label={overlap.label} />}
+          <div className="space-y-8">
+            {groups.map((group) => (
             <div key={group.key ?? 'all'}>
               {config.groupBy && (
                 <div className="group-header flex items-baseline justify-between gap-3">
@@ -597,7 +611,8 @@ export default async function MarketplacesPage({
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
     </>
   )
