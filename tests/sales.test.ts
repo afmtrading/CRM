@@ -71,6 +71,7 @@ function line(overrides: Partial<SalesOrderLineRow> = {}): SalesOrderLineRow {
     product_id: 'p1',
     description: null,
     notes: null,
+    unit: null,
     quantity: 10,
     unit_price: 100,
     unit_cost: 60,

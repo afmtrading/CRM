@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useMemo, useState } from 'react'
+import { useActionState, useState } from 'react'
 import Link from 'next/link'
 
 import type {
@@ -13,7 +13,7 @@ import type {
   UserRow,
 } from '@/lib/database.types'
 import { CustomFieldInputs } from '@/components/form-fields'
-import { SearchSelect } from '@/components/search-select'
+import { CompanyContactPickers } from '@/components/party-pickers'
 import { CURRENCIES } from '@/lib/format'
 
 import type { DealActionState } from './actions'
@@ -56,29 +56,6 @@ export function DealForm({
   const [pipelineId, setPipelineId] = useState(initialStage?.pipeline_id ?? pipelines[0]?.id ?? '')
   const [stageId, setStageId] = useState(initialStage?.id ?? '')
   const [status, setStatus] = useState(deal?.status ?? 'open')
-
-  const [companyId, setCompanyId] = useState(deal?.company_id ?? '')
-  const [contactId, setContactId] = useState(deal?.contact_id ?? defaultContactId ?? '')
-
-  const byContact = useMemo(() => new Map(contacts.map((one) => [one.id, one])), [contacts])
-
-  /*
-   * Narrowed to the chosen company, plus whoever is already on the deal.
-   *
-   * That second half matters on an edit: a deal saved before the contact moved
-   * companies would otherwise open with its own contact missing from the list,
-   * and saving would quietly drop them.
-   */
-  const contactOptions = useMemo(() => {
-    const list = companyId
-      ? contacts.filter((one) => one.companyId === companyId || one.id === contactId)
-      : contacts
-    return list.map((one) => ({
-      id: one.id,
-      label: one.label,
-      hint: companyId ? undefined : (one.companyName ?? undefined),
-    }))
-  }, [contacts, companyId, contactId])
 
   const custom = (deal?.custom_fields ?? {}) as Record<string, unknown>
   const onCard = (card: ContactCard) => customFields.filter((field) => field.card === card)
@@ -280,55 +257,14 @@ export function DealForm({
           />
         </div>
 
-        {/*
-          Company first, then the people at it. The other order works but reads
-          backwards: picking a person and then being told which company they
-          belong to is the app repeating something you just chose.
-        */}
-        <div>
-          <label className="label" htmlFor="deal-company">
-            Company
-          </label>
-          <SearchSelect
-            id="deal-company"
-            name="company_id"
-            options={companies.map((company) => ({ id: company.id, label: company.name }))}
-            value={companyId}
-            onChange={(next) => {
-              setCompanyId(next)
-              // A contact who does not work there cannot stay selected. Silent
-              // would be worse: the deal would save against a person the
-              // company list says has nothing to do with it.
-              if (next && contactId && byContact.get(contactId)?.companyId !== next) {
-                setContactId('')
-              }
-            }}
-            placeholder="Search companies…"
-          />
-        </div>
-
-        <div>
-          <label className="label" htmlFor="deal-contact">
-            Contact
-          </label>
-          <SearchSelect
-            id="deal-contact"
-            name="contact_id"
-            options={contactOptions}
-            value={contactId}
-            onChange={setContactId}
-            placeholder={companyId ? 'Search people there…' : 'Search contacts…'}
-          />
-          {companyId && (
-            <p className="mt-1 text-xs text-slate-400">
-              {contactOptions.length === 0
-                ? 'Nobody is on file at this company yet.'
-                : `The ${contactOptions.length} ${
-                    contactOptions.length === 1 ? 'person' : 'people'
-                  } on file at this company.`}
-            </p>
-          )}
-        </div>
+        {/* Company first, then the people at it — see CompanyContactPickers. */}
+        <CompanyContactPickers
+          idPrefix="deal"
+          companies={companies}
+          contacts={contacts}
+          defaultCompanyId={deal?.company_id ?? ''}
+          defaultContactId={deal?.contact_id ?? defaultContactId ?? ''}
+        />
 
         <div>
           <label className="label" htmlFor="owner_id">

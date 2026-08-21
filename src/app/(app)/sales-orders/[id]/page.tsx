@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { CURRENCIES, formatDate, formatNumber, formatPrice } from '@/lib/format'
+import { CURRENCIES, formatDate, formatPrice } from '@/lib/format'
 import {
   SALES_ORDER_STATUS_HINTS,
   SALES_ORDER_STATUS_LABELS,
@@ -12,9 +12,7 @@ import {
   invoiceBlockedReason,
   isEditable,
   ledgerBalance,
-  lineName,
   nextStatuses,
-  revisionLabel,
 } from '@/lib/sales'
 import type {
   InvoiceRow,
@@ -25,20 +23,26 @@ import type {
 
 /* What each picker actually reads, so the query can ask for exactly that. */
 type PickerCompany = { id: string; name: string }
-type PickerContact = { id: string; first_name: string; last_name: string; email: string | null }
+type PickerContact = {
+  id: string
+  first_name: string
+  last_name: string
+  email: string | null
+  company_id: string | null
+}
 type PickerUser = { id: string; name: string; email: string }
 type PickerLocation = { id: string; name: string }
 type PickerProduct = { id: string; name: string; sku: string | null; unit: string }
 import { Money } from '@/components/money'
+import { CompanyContactPickers } from '@/components/party-pickers'
+import { SalesOrderLines } from '@/components/sales-order-lines'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
 
 import {
-  addSalesOrderLine,
   convertToInvoice,
   deleteSalesOrder,
   recordDeposit,
-  removeSalesOrderLine,
   setSalesOrderStatus,
   updateSalesOrder,
 } from '../actions'
@@ -76,7 +80,6 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     { data: locations },
     { data: products },
     { data: invoiceRow },
-    { data: channelRows },
   ] = await Promise.all([
     scoped(context, 'sales_order_lines')
       .select('*')
@@ -99,7 +102,8 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'contacts')
-      .select('id, first_name, last_name, email')
+      // company_id is what lets the contact picker narrow to one company.
+      .select('id, first_name, last_name, email, company_id')
       .is('deleted_at', null)
       .order('last_name')
       .limit(PICKER_LIMIT),
@@ -112,24 +116,28 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'invoices').select('*').eq('sales_order_id', id).maybeSingle(),
-    /*
-     * The channels a sale can be attributed to. Sell-side only: money running
-     * the other way is a purchase, and the database refuses a source-only
-     * marketplace here anyway — this keeps the picker from offering one.
-     */
-    scoped(context, 'marketplace_profiles')
-      .select('company_id, companies(name)')
-      .eq('sells_through', true),
   ])
 
   const lines = (lineRows ?? []) as SalesOrderLineRow[]
   const payments = (paymentRows ?? []) as SalesOrderPaymentRow[]
   const invoice = invoiceRow as InvoiceRow | null
-  const channels = ((channelRows ?? []) as { company_id: string; companies: { name: string } | null }[])
-    .map((row) => ({ id: row.company_id, name: row.companies?.name ?? 'Unnamed' }))
-    .sort((a, b) => a.name.localeCompare(b.name))
   const catalogue = (products ?? []) as PickerProduct[]
-  const productById = new Map(catalogue.map((product) => [product.id, product]))
+
+  /*
+   * What a line may be counted in: whatever this organization's catalogue
+   * already uses, plus the three every warehouse has. Drawn from the data
+   * rather than from a settings screen nobody asked for — an organization that
+   * counts in cases already has "Case" on its products.
+   */
+  const units = [
+    ...new Set(
+      ['Unit', 'Case', 'Pallet']
+        .concat(catalogue.map((product) => product.unit ?? ''))
+        .concat(lines.map((line) => line.unit ?? ''))
+        .map((unit) => unit.trim())
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b))
 
   const deposits = ledgerBalance(payments)
   const totals = documentTotals(lines, Number(salesOrder.shipping_charge), deposits)
@@ -137,7 +145,19 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
   const editable = isEditable(salesOrder.status) && context.canWrite
   const blocked = invoiceBlockedReason(salesOrder.status)
 
-  const company = ((companies ?? []) as PickerCompany[]).find((c) => c.id === salesOrder.company_id)
+  const companyList = (companies ?? []) as PickerCompany[]
+  const company = companyList.find((c) => c.id === salesOrder.company_id)
+
+  /* The two pickers' shapes: a company is a name, a contact is a name and the
+     company it lets the list narrow to. */
+  const companyOptions = companyList.map((one) => ({ id: one.id, name: one.name }))
+  const companyNames = new Map(companyList.map((one) => [one.id, one.name]))
+  const contactOptions = ((contacts ?? []) as PickerContact[]).map((one) => ({
+    id: one.id,
+    label: [one.first_name, one.last_name].filter(Boolean).join(' ') || (one.email ?? 'Unnamed'),
+    companyId: one.company_id,
+    companyName: one.company_id ? (companyNames.get(one.company_id) ?? null) : null,
+  }))
   const owner = ((users ?? []) as PickerUser[]).find((u) => u.id === salesOrder.owner_id)
 
   return (
@@ -206,205 +226,193 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           {/* ---------------------------------------------------------------- */}
-          <Section title="Lines">
-            {lines.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Nothing on this order yet. Add a product, or a line of your own.
-              </p>
-            ) : (
-              <div className="-mx-5 overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th className="text-right">Qty</th>
-                      <th className="text-right">Price</th>
-                      <th className="text-right">Discount</th>
-                      <th className="text-right">Total</th>
-                      {editable && <th />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line) => {
-                      const product = line.product_id ? productById.get(line.product_id) : null
-                      const revision = revisionLabel(
-                        line.revised_rate_type,
-                        line.revised_rate,
-                        salesOrder.currency,
-                      )
+          <Section title="Sales Order Details">
+            <ActionForm action={updateSalesOrder} className="space-y-3">
+              <input type="hidden" name="id" value={id} />
 
-                      return (
-                        <tr key={line.id}>
-                          <td>
-                            <span className="font-medium text-slate-800">
-                              {lineName(line, product?.name)}
-                            </span>
-                            {product?.sku && (
-                              <span className="ml-1.5 text-xs text-slate-400">{product.sku}</span>
-                            )}
-                            {line.notes && (
-                              <span className="block text-xs text-slate-500">{line.notes}</span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {formatNumber(Number(line.quantity))}
-                            {product?.unit && (
-                              <span className="ml-1 text-xs text-slate-400">{product.unit}</span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {formatPrice(Number(line.unit_price), salesOrder.currency)}
-                            {revision && (
-                              <span className="block text-xs text-amber-600">{revision}</span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {Number(line.discount) > 0 ? (
-                              formatPrice(Number(line.discount), salesOrder.currency)
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
-                          </td>
-                          <td className="text-right font-medium">
-                            {formatPrice(Number(line.line_total), salesOrder.currency)}
-                          </td>
-                          {editable && (
-                            <td className="text-right">
-                              <ActionForm action={removeSalesOrderLine}>
-                                <input type="hidden" name="id" value={line.id} />
-                                <input type="hidden" name="sales_order_id" value={id} />
-                                <SubmitButton
-                                  className="text-xs text-slate-400 hover:text-red-600"
-                                  pendingLabel="Removing…"
-                                >
-                                  Remove
-                                </SubmitButton>
-                              </ActionForm>
-                            </td>
-                          )}
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+              {/*
+                Searchable, and the second narrows to the first: a company you
+                can type at rather than scroll, and then only the people who
+                work there. The deal form asks the same question of the same two
+                tables — see CompanyContactPickers, which both now render.
+              */}
+              <CompanyContactPickers
+                idPrefix="sales-order"
+                companies={companyOptions}
+                contacts={contactOptions}
+                defaultCompanyId={salesOrder.company_id ?? ''}
+                defaultContactId={salesOrder.contact_id ?? ''}
+              />
+
+              <div>
+                <label className="label" htmlFor="owner_id">
+                  Owner
+                </label>
+                <select
+                  id="owner_id"
+                  name="owner_id"
+                  className="input"
+                  defaultValue={salesOrder.owner_id ?? ''}
+                >
+                  <option value="">Unassigned</option>
+                  {((users ?? []) as PickerUser[]).map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name || user.email}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
 
-            {editable && (
-              <ActionForm
-                action={addSalesOrderLine}
-                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-6"
-              >
-                <input type="hidden" name="sales_order_id" value={id} />
+              <div>
+                <label className="label" htmlFor="location_id">
+                  Fulfilling from
+                </label>
+                <select
+                  id="location_id"
+                  name="location_id"
+                  className="input"
+                  defaultValue={salesOrder.location_id ?? ''}
+                >
+                  <option value="">Not set</option>
+                  {((locations ?? []) as PickerLocation[]).map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="product_id">
-                    Product
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label" htmlFor="order_date">
+                    Order date
                   </label>
-                  <select id="product_id" name="product_id" className="input">
-                    <option value="">A line of my own</option>
-                    {catalogue.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                        {product.sku ? ` · ${product.sku}` : ''}
+                  <input
+                    id="order_date"
+                    name="order_date"
+                    type="date"
+                    className="input"
+                    defaultValue={salesOrder.order_date}
+                  />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="currency">
+                    Currency
+                  </label>
+                  {/*
+                    A list, not a free-text box. Three characters accepted
+                    anything, and a typo does not fail — it renders as a blank
+                    symbol on a document that has already gone to a customer.
+                    Frozen once the order leaves draft, because changing it
+                    converts nothing: every stored figure keeps its number and
+                    quietly acquires a new label.
+                  */}
+                  <select
+                    id="currency"
+                    name="currency"
+                    className="input"
+                    defaultValue={salesOrder.currency}
+                    disabled={salesOrder.status !== 'draft'}
+                  >
+                    {CURRENCIES.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
                       </option>
                     ))}
                   </select>
+                  {salesOrder.status !== 'draft' && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      Fixed once the order is confirmed.
+                    </p>
+                  )}
                 </div>
+              </div>
 
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="description">
-                    Or a description
-                  </label>
-                  <input id="description" name="description" className="input" placeholder="Freight" />
-                </div>
-
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label" htmlFor="quantity">
-                    Quantity
+                  <label className="label" htmlFor="shipping_charge">
+                    Shipping
                   </label>
                   <input
-                    id="quantity"
-                    name="quantity"
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    defaultValue="1"
-                    className="input"
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="unit_price">
-                    Unit price
-                  </label>
-                  <input
-                    id="unit_price"
-                    name="unit_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue="0"
-                    className="input"
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="unit_cost">
-                    Unit cost
-                  </label>
-                  <input
-                    id="unit_cost"
-                    name="unit_cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue="0"
-                    className="input"
-                  />
-                </div>
-
-                {/* A revision is a pair: a kind and a value. The database
-                    refuses half of one, and the discount follows from both. */}
-                <div>
-                  <label className="label" htmlFor="revised_rate_type">
-                    Revise by
-                  </label>
-                  <select id="revised_rate_type" name="revised_rate_type" className="input">
-                    <option value="">List price</option>
-                    <option value="percent">% off</option>
-                    <option value="fixed">Fixed price</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="revised_rate">
-                    Rate
-                  </label>
-                  <input
-                    id="revised_rate"
-                    name="revised_rate"
+                    id="shipping_charge"
+                    name="shipping_charge"
                     type="number"
                     step="0.01"
                     min="0"
                     className="input"
+                    defaultValue={String(salesOrder.shipping_charge)}
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="notes">
-                    Line note
+                <div>
+                  <label className="label" htmlFor="payment_terms">
+                    Payment terms
                   </label>
-                  <input id="notes" name="notes" className="input" />
+                  <input
+                    id="payment_terms"
+                    name="payment_terms"
+                    className="input"
+                    defaultValue={salesOrder.payment_terms ?? ''}
+                    placeholder="Net 30"
+                  />
                 </div>
+              </div>
 
-                <div className="flex items-end sm:col-span-6">
-                  <SubmitButton className="btn-primary" pendingLabel="Adding…">
-                    Add line
-                  </SubmitButton>
-                </div>
-              </ActionForm>
-            )}
+              <div>
+                <label className="label" htmlFor="notes">
+                  Notes
+                </label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  rows={3}
+                  className="input"
+                  defaultValue={salesOrder.notes ?? ''}
+                />
+              </div>
+
+              {context.canWrite && (
+                <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">
+                  Save details
+                </SubmitButton>
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Items">
+            {/*
+              The lines, edited where they are read. One block per line rather
+              than a table of eight input columns — see components/sales-order-
+              lines, which also holds the item field that tells a catalogue
+              product from a line somebody typed.
+            */}
+            <SalesOrderLines
+              orderId={id}
+              currency={salesOrder.currency}
+              editable={editable && context.canWrite}
+              products={catalogue.map((product) => ({
+                id: product.id,
+                name: product.name,
+                sku: product.sku,
+                unit: product.unit,
+              }))}
+              units={units}
+              lines={lines.map((line) => ({
+                id: line.id,
+                productId: line.product_id,
+                description: line.description,
+                unit: line.unit,
+                quantity: Number(line.quantity),
+                unitPrice: Number(line.unit_price),
+                unitCost: Number(line.unit_cost),
+                revisedRateType: line.revised_rate_type,
+                revisedRate: line.revised_rate === null ? null : Number(line.revised_rate),
+                notes: line.notes,
+                lineTotal: Number(line.line_total),
+              }))}
+            />
           </Section>
 
           {/* ---------------------------------------------------------------- */}
@@ -522,232 +530,6 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 ? 'Margin unknown — no line carries a cost.'
                 : `Margin ${formatPrice(margin, salesOrder.currency)} from the line costs.`}
             </p>
-          </Section>
-
-          <Section title="Details">
-            <ActionForm action={updateSalesOrder} className="space-y-3">
-              <input type="hidden" name="id" value={id} />
-
-              <div>
-                <label className="label" htmlFor="company_id">
-                  Company
-                </label>
-                <select
-                  id="company_id"
-                  name="company_id"
-                  className="input"
-                  defaultValue={salesOrder.company_id ?? ''}
-                >
-                  <option value="">No company</option>
-                  {((companies ?? []) as PickerCompany[]).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="contact_id">
-                  Contact
-                </label>
-                <select
-                  id="contact_id"
-                  name="contact_id"
-                  className="input"
-                  defaultValue={salesOrder.contact_id ?? ''}
-                >
-                  <option value="">No contact</option>
-                  {((contacts ?? []) as PickerContact[]).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {[c.first_name, c.last_name].filter(Boolean).join(' ') || c.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="owner_id">
-                  Owner
-                </label>
-                <select
-                  id="owner_id"
-                  name="owner_id"
-                  className="input"
-                  defaultValue={salesOrder.owner_id ?? ''}
-                >
-                  <option value="">Unassigned</option>
-                  {((users ?? []) as PickerUser[]).map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name || user.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="location_id">
-                  Fulfilling from
-                </label>
-                <select
-                  id="location_id"
-                  name="location_id"
-                  className="input"
-                  defaultValue={salesOrder.location_id ?? ''}
-                >
-                  <option value="">Not set</option>
-                  {((locations ?? []) as PickerLocation[]).map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="order_date">
-                    Order date
-                  </label>
-                  <input
-                    id="order_date"
-                    name="order_date"
-                    type="date"
-                    className="input"
-                    defaultValue={salesOrder.order_date}
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="currency">
-                    Currency
-                  </label>
-                  {/*
-                    A list, not a free-text box. Three characters accepted
-                    anything, and a typo does not fail — it renders as a blank
-                    symbol on a document that has already gone to a customer.
-                    Frozen once the order leaves draft, because changing it
-                    converts nothing: every stored figure keeps its number and
-                    quietly acquires a new label.
-                  */}
-                  <select
-                    id="currency"
-                    name="currency"
-                    className="input"
-                    defaultValue={salesOrder.currency}
-                    disabled={salesOrder.status !== 'draft'}
-                  >
-                    {CURRENCIES.map((code) => (
-                      <option key={code} value={code}>
-                        {code}
-                      </option>
-                    ))}
-                  </select>
-                  {salesOrder.status !== 'draft' && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      Fixed once the order is confirmed.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="shipping_charge">
-                    Shipping
-                  </label>
-                  <input
-                    id="shipping_charge"
-                    name="shipping_charge"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="input"
-                    defaultValue={String(salesOrder.shipping_charge)}
-                  />
-                </div>
-
-                {/*
-                  Which channel this sold through. Blank is the ordinary case —
-                  a direct sale to a buyer is not a channel sale — and leaving
-                  it blank is different from nobody having recorded it, which is
-                  why there is no default.
-                */}
-                <div className="col-span-2">
-                  <label className="label" htmlFor="marketplace_id">
-                    Sold through
-                  </label>
-                  <select
-                    id="marketplace_id"
-                    name="marketplace_id"
-                    className="input"
-                    defaultValue={salesOrder.marketplace_id ?? ''}
-                  >
-                    <option value="">Direct — no marketplace</option>
-                    {channels.map((channel) => (
-                      <option key={channel.id} value={channel.id}>
-                        {channel.name}
-                      </option>
-                    ))}
-                  </select>
-                  {channels.length === 0 && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      No marketplaces set up yet —{' '}
-                      <Link href="/marketplaces" className="text-brand-700 hover:underline">
-                        add one
-                      </Link>
-                      .
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="payment_terms">
-                    Payment terms
-                  </label>
-                  <input
-                    id="payment_terms"
-                    name="payment_terms"
-                    className="input"
-                    defaultValue={salesOrder.payment_terms ?? ''}
-                    placeholder="Net 30"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="notes">
-                  Notes
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  className="input"
-                  defaultValue={salesOrder.notes ?? ''}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="terms">
-                  Terms
-                </label>
-                <textarea
-                  id="terms"
-                  name="terms"
-                  rows={2}
-                  className="input"
-                  defaultValue={salesOrder.terms ?? ''}
-                  placeholder="All sales are final."
-                />
-              </div>
-
-              {context.canWrite && (
-                <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">
-                  Save details
-                </SubmitButton>
-              )}
-            </ActionForm>
           </Section>
 
           <Section title="Record">

@@ -792,6 +792,8 @@ export type SalesOrderLineRow = {
   product_id: string | null
   description: string | null
   notes: string | null
+  /** The line's own unit of measure; null falls back to the product's. */
+  unit: string | null
   quantity: number
   unit_price: number
   unit_cost: number
@@ -1353,6 +1355,7 @@ export interface Database {
         | 'product_id'
         | 'description'
         | 'notes'
+        | 'unit'
         | 'quantity'
         | 'unit_price'
         | 'unit_cost'

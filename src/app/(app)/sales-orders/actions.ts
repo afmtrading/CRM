@@ -92,15 +92,26 @@ export async function updateSalesOrder(
   }
 
   // Pulled out so an absent currency is left alone rather than sent as null.
-  const { currency, ...header } = parsed.data
+  const { currency, marketplace_id, terms, ...header } = parsed.data
 
+  /*
+   * A form that does not ask about a value must not answer for it.
+   *
+   * The order card no longer carries the channel or the terms, and both parse
+   * to null when absent — so without this, saving a company or a date would
+   * quietly wipe the marketplace a sale was attributed to and the terms
+   * somebody typed. `has` is the only honest test: HTML gives the server no
+   * way to tell a cleared field from a field that was never on the page, so
+   * the presence of the key is the question being asked.
+   */
   const { error } = await scoped(context, 'sales_orders')
     .update({
       ...header,
       ...(currency ? { currency } : {}),
+      ...(formData.has('marketplace_id') ? { marketplace_id } : {}),
+      ...(formData.has('terms') ? { terms: terms || null } : {}),
       payment_terms: parsed.data.payment_terms || null,
       notes: parsed.data.notes || null,
-      terms: parsed.data.terms || null,
       updated_by: context.user.id,
     })
     .eq('id', id)
@@ -181,6 +192,9 @@ const lineSchema = z
     product_id: optionalId,
     description: text(200),
     notes: text(500),
+    /* How many what. Blank falls back to the product's own unit — see
+       20260263000000 — so it is stored as null rather than as ''. */
+    unit: text(40),
     quantity: z.coerce.number().min(0).default(1),
     unit_price: z.coerce.number().min(0).default(0),
     unit_cost: z.coerce.number().min(0).default(0),
@@ -269,6 +283,7 @@ export async function addSalesOrderLine(
     ...parsed.data,
     description: parsed.data.description || null,
     notes: parsed.data.notes || null,
+    unit: parsed.data.unit || null,
     revised_rate_type: parsed.data.revised_rate_type as RevisedRateType | null,
     position: (last?.position ?? -1) + 1,
   })
@@ -277,6 +292,60 @@ export async function addSalesOrderLine(
 
   revalidatePath(`/sales-orders/${orderId}`)
   return { ok: 'Line added.' }
+}
+
+/**
+ * Changes a line that is already on the order.
+ *
+ * The lines are edited where they are read now, which needs a write that is not
+ * "delete it and add it back": that loses the line's position and its id, and
+ * an order whose lines reshuffle every time somebody fixes a quantity is an
+ * order nobody trusts.
+ *
+ * The whole line is posted rather than one field, because the fields are not
+ * independent — quantity, price and the revised rate together decide the
+ * discount and the total, and the database derives both from whatever it is
+ * given. Sending one of the three would mean the other two arriving from a
+ * stale copy of the row.
+ *
+ * `lineEditRefusal` is the same guard the other two use: an order that has
+ * shipped is not one whose lines may change, and the check happens before the
+ * write rather than in the interface that hid the control.
+ */
+export async function updateSalesOrderLine(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireSession()
+  assertCanWrite(context)
+
+  const id = formData.get('id') as string
+  const orderId = formData.get('sales_order_id') as string
+  if (!id) return { error: 'No line to change.' }
+
+  const refusal = await lineEditRefusal(context, orderId)
+  if (refusal) return refusal
+
+  const parsed = lineSchema.safeParse(Object.fromEntries(formData))
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
+  }
+
+  const { error } = await scoped(context, 'sales_order_lines')
+    .update({
+      ...parsed.data,
+      description: parsed.data.description || null,
+      notes: parsed.data.notes || null,
+      unit: parsed.data.unit || null,
+      revised_rate_type: parsed.data.revised_rate_type as RevisedRateType | null,
+    })
+    .eq('id', id)
+    .eq('sales_order_id', orderId)
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/sales-orders/${orderId}`)
+  return { ok: 'Line saved.' }
 }
 
 export async function removeSalesOrderLine(
