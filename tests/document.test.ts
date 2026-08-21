@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { documentDetails, documentFilename, shipToWorthPrinting } from '@/lib/document'
+import {
+  documentDetails,
+  documentFilename,
+  partyIsEmpty,
+  shipToWorthPrinting,
+} from '@/lib/document'
 import type { DocumentParty } from '@/lib/document'
 
 describe('documentDetails', () => {
@@ -103,5 +108,36 @@ describe('documentFilename', () => {
 
   it('still produces a filename when the number is all punctuation', () => {
     expect(documentFilename('///')).toBe('document.pdf')
+  })
+})
+
+describe('partyIsEmpty', () => {
+  /*
+   * The bug this pins: a purchase order with no company saved against it built
+   * a party object of five nulls, which is truthy, so the document printed an
+   * empty bordered CUSTOMER box.
+   */
+  it('calls a party of nothing empty', () => {
+    expect(
+      partyIsEmpty({ company: null, contact: null, phone: null, email: null }),
+    ).toBe(true)
+  })
+
+  it('calls a missing party empty', () => {
+    expect(partyIsEmpty(null)).toBe(true)
+  })
+
+  it('is not fooled by whitespace', () => {
+    expect(partyIsEmpty({ company: '  ', contact: '', phone: null, email: null })).toBe(true)
+  })
+
+  it('any one field is enough to be worth printing', () => {
+    expect(partyIsEmpty({ company: 'ACME', contact: null, phone: null, email: null })).toBe(false)
+    expect(partyIsEmpty({ company: null, contact: 'Paulina', phone: null, email: null })).toBe(false)
+    expect(partyIsEmpty({ company: null, contact: null, phone: '615', email: null })).toBe(false)
+    expect(partyIsEmpty({ company: null, contact: null, phone: null, email: 'a@b.c' })).toBe(false)
+    expect(
+      partyIsEmpty({ company: null, contact: null, phone: null, email: null, address: '12 Dock Rd' }),
+    ).toBe(false)
   })
 })

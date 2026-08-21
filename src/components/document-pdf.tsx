@@ -9,6 +9,7 @@ import {
 } from '@react-pdf/renderer'
 
 import { formatDay, formatNumber, formatPrice } from '@/lib/format'
+import { partyIsEmpty } from '@/lib/document'
 import type { DocumentModel, DocumentParty } from '@/lib/document'
 
 /**
@@ -134,10 +135,17 @@ function columns(showDiscount: boolean) {
 }
 
 function PartyBox({ label, party }: { label: string; party: DocumentParty | null }) {
+  /*
+   * An all-null party reads as absent rather than as a box somebody forgot to
+   * fill in — which is what it looked like when the order had no company saved
+   * against it and the document printed an empty rectangle.
+   */
+  const empty = partyIsEmpty(party)
+
   return (
     <View style={styles.box}>
       <Text style={styles.boxLabel}>{label}</Text>
-      {party ? (
+      {party && !empty ? (
         <>
           {party.company ? (
             <Text style={[styles.boxLine, { fontFamily: 'Helvetica-Bold' }]}>{party.company}</Text>
