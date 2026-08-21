@@ -323,7 +323,7 @@ export default async function DeletedRecordsPage() {
                       <tr key={order.id}>
                         <td>
                           <Link
-                            href={`/sales-orders/${order.id}`}
+                            href={`/purchase-orders/${order.id}`}
                             className="font-medium text-slate-900 hover:text-brand-700"
                           >
                             {order.number}

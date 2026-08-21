@@ -10,7 +10,7 @@ import {
   addSalesOrderLine,
   removeSalesOrderLine,
   updateSalesOrderLine,
-} from '@/app/(app)/sales-orders/actions'
+} from '@/app/(app)/purchase-orders/actions'
 
 /**
  * The lines of a sales order, edited where they are read.

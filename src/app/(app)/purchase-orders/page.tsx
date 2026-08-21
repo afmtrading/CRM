@@ -144,7 +144,7 @@ export default async function SalesOrdersPage({
 
       <form className="card mb-5 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
         <Field label="Number" htmlFor="q">
-          <input id="q" name="q" className="input" defaultValue={filter.search} placeholder="SO-" />
+          <input id="q" name="q" className="input" defaultValue={filter.search} placeholder="PO-" />
         </Field>
 
         <Field label="Status" htmlFor="status">
@@ -182,7 +182,7 @@ export default async function SalesOrdersPage({
             Apply
           </button>
           {isSalesOrderFiltered(filter) && (
-            <Link href="/sales-orders" className="btn-secondary">
+            <Link href="/purchase-orders" className="btn-secondary">
               Clear
             </Link>
           )}
@@ -214,7 +214,7 @@ export default async function SalesOrdersPage({
                   <tr key={order.id}>
                     <td>
                       <Link
-                        href={`/sales-orders/${order.id}`}
+                        href={`/purchase-orders/${order.id}`}
                         className="font-medium text-slate-900 hover:text-brand-700"
                       >
                         {order.number}

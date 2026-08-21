@@ -54,8 +54,8 @@ export async function createSalesOrder(formData: FormData) {
 
   if (error) throw new Error(error.message)
 
-  revalidatePath('/sales-orders')
-  redirect(`/sales-orders/${data}`)
+  revalidatePath('/purchase-orders')
+  redirect(`/purchase-orders/${data}`)
 }
 
 const headerSchema = z.object({
@@ -150,8 +150,8 @@ export async function updateSalesOrder(
 
   if (error) throw new Error(error.message)
 
-  revalidatePath('/sales-orders')
-  revalidatePath(`/sales-orders/${id}`)
+  revalidatePath('/purchase-orders')
+  revalidatePath(`/purchase-orders/${id}`)
   return { ok: 'Saved.' }
 }
 
@@ -197,8 +197,8 @@ export async function setSalesOrderStatus(
 
   if (error) throw new Error(error.message)
 
-  revalidatePath('/sales-orders')
-  revalidatePath(`/sales-orders/${id}`)
+  revalidatePath('/purchase-orders')
+  revalidatePath(`/purchase-orders/${id}`)
   return { ok: `Marked ${next}.` }
 }
 
@@ -211,8 +211,8 @@ export async function deleteSalesOrder(formData: FormData) {
   })
   if (error) throw new Error(error.message)
 
-  revalidatePath('/sales-orders')
-  redirect('/sales-orders')
+  revalidatePath('/purchase-orders')
+  redirect('/purchase-orders')
 }
 
 // -----------------------------------------------------------------------------
@@ -322,7 +322,7 @@ export async function addSalesOrderLine(
 
   if (error) throw new Error(error.message)
 
-  revalidatePath(`/sales-orders/${orderId}`)
+  revalidatePath(`/purchase-orders/${orderId}`)
   return { ok: 'Line added.' }
 }
 
@@ -376,7 +376,7 @@ export async function updateSalesOrderLine(
 
   if (error) throw new Error(error.message)
 
-  revalidatePath(`/sales-orders/${orderId}`)
+  revalidatePath(`/purchase-orders/${orderId}`)
   return { ok: 'Line saved.' }
 }
 
@@ -395,7 +395,7 @@ export async function removeSalesOrderLine(
   const { error } = await scoped(context, 'sales_order_lines').delete().eq('id', id)
   if (error) throw new Error(error.message)
 
-  revalidatePath(`/sales-orders/${orderId}`)
+  revalidatePath(`/purchase-orders/${orderId}`)
   return { ok: 'Line removed.' }
 }
 
@@ -446,7 +446,7 @@ export async function recordDeposit(
 
   if (error) return { error: error.message }
 
-  revalidatePath(`/sales-orders/${orderId}`)
+  revalidatePath(`/purchase-orders/${orderId}`)
   return { ok: 'Deposit recorded.' }
 }
 
@@ -475,6 +475,6 @@ export async function convertToInvoice(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/invoices')
-  revalidatePath(`/sales-orders/${orderId}`)
+  revalidatePath(`/purchase-orders/${orderId}`)
   redirect(`/invoices/${data}`)
 }

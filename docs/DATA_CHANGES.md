@@ -17,6 +17,61 @@ file is permanent in a way a person's name in git history should not be.
 
 ---
 
+## 2026-08-21 — `SO-` renumbered to `PO-`
+
+Organization: AFM CRM (`whsoqglssercfruxomaf`).
+
+Context: the section is called Purchase orders, and the number on the document
+was the last place still saying Sales order. Applied as part of migration
+`20260265000000_purchase_order_numbers.sql` rather than by hand, and recorded
+here because it rewrites a column on rows that have already been sent to
+customers.
+
+Net effect:
+
+- 5 sales orders renumbered, `SO-0001` … `SO-0005` becoming `PO-0001` …
+  `PO-0005`. Only the prefix moved, so each organization's sequence is unbroken
+  and a number stays recognisable to anybody holding a copy.
+- No other column touched, and no rows created or deleted.
+
+**Why the generator had to change in the same migration.** `next_document_number`
+takes the prefix as `p_kind` and also uses it to decide which table to count —
+`where ... and p_kind = 'SO'` is a constant predicate, not a row filter. Asking
+it for a `PO` number against the old definition returns an empty scan, a
+maximum of zero, and `PO-0001` every time. Verified before and after against a
+throwaway Postgres: before the rename the next bare number was `PO-0001`, which
+would have collided with the rewritten `SO-0001`; after it, `PO-0004` and
+`PO-Acme-0002`.
+
+### Reverting
+
+The prefix is the only thing that moved, so the inverse is exact. These are the
+five rows, read out of production before the change was made:
+
+| id | was | is |
+| --- | --- | --- |
+| `1b92ff8c-65fc-4063-ad6b-8dd378db3798` | SO-0001 | PO-0001 |
+| `ba1726c3-b957-4848-a6eb-a6b9cc00bed5` | SO-0002 | PO-0002 |
+| `68addbf4-315e-4e5d-b2db-9ea582a3fdb0` | SO-0003 | PO-0003 |
+| `eba7f846-d182-4fb6-9f7b-484f68f15035` | SO-0004 | PO-0004 |
+| `f3755466-96c4-4257-afbe-0fcf0f0da2c5` | SO-0005 | PO-0005 |
+
+```sql
+update sales_orders set number = 'SO-' || substring(number from 4)
+where id in (
+  '1b92ff8c-65fc-4063-ad6b-8dd378db3798',
+  'ba1726c3-b957-4848-a6eb-a6b9cc00bed5',
+  '68addbf4-315e-4e5d-b2db-9ea582a3fdb0',
+  'eba7f846-d182-4fb6-9f7b-484f68f15035',
+  'f3755466-96c4-4257-afbe-0fcf0f0da2c5'
+);
+```
+
+`create_sales_order` would also need to pass `'SO'` again — the definition
+before this change is in `20260242000000_default_currency.sql`.
+
+---
+
 ## 2026-08-20 — `Standard` consolidated into `Medium`
 
 Organization: AFM CRM (`e4739794-7ce0-41c5-a2a8-b6819cd3dc92`).

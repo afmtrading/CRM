@@ -751,7 +751,7 @@ export type DealProductRow = {
 export type SalesOrderRow = {
   id: string
   organization_id: string
-  /** SO-Acme-0001. Allocated once at creation and never reissued. */
+  /** PO-Acme-0001. Allocated once at creation and never reissued. */
   number: string
   company_id: string | null
   contact_id: string | null
