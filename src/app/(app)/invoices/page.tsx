@@ -68,7 +68,7 @@ export default async function InvoicesPage({
         title="Invoices"
         actions={
           <>
-            <Link href="/sales-orders" className="btn-secondary">
+            <Link href="/purchase-orders" className="btn-secondary">
               Purchase orders
             </Link>
             {/* An invoice does not need an order behind it. Raising one lands on

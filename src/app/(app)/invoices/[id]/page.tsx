@@ -131,7 +131,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               Print
             </a>
             {salesOrder && (
-              <Link href={`/sales-orders/${salesOrder.id}`} className="btn-secondary">
+              <Link href={`/purchase-orders/${salesOrder.id}`} className="btn-secondary">
                 {salesOrder.number}
               </Link>
             )}
@@ -483,7 +483,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               <Row label="From order">
                 {salesOrder ? (
                   <Link
-                    href={`/sales-orders/${salesOrder.id}`}
+                    href={`/purchase-orders/${salesOrder.id}`}
                     className="text-brand-700 hover:underline"
                   >
                     {salesOrder.number}

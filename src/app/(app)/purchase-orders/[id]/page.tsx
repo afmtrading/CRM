@@ -186,7 +186,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
         }
         actions={
           <>
-            <a href={`/sales-orders/${id}/print`} className="btn-secondary" target="_blank">
+            <a href={`/purchase-orders/${id}/print`} className="btn-secondary" target="_blank">
               Print
             </a>
 
