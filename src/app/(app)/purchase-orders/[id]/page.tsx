@@ -471,18 +471,6 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   Show the discount column on the document
                 </label>
 
-                <input type="hidden" name="deposit_required" value="false" />
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    name="deposit_required"
-                    value="true"
-                    defaultChecked={salesOrder.deposit_required}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  Deposit required
-                </label>
-
                 <div className="mt-3">
                   <label className="label" htmlFor="deposit_information">
                     Deposit information

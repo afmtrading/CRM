@@ -174,27 +174,24 @@ const lineSchema = z
       .nullable()
       .default(null),
   })
+  /*
+   * A line has to say what it is, on the way in and on the way out.
+   *
+   * This mirrors a check constraint on sales_order_lines, and its job is to
+   * say so in words rather than as a constraint violation — which is exactly
+   * what happened when it was briefly lifted off the add path to allow a blank
+   * new row: the insert reached the database, threw, and the screen showed an
+   * error page. The blank row lives in the browser now and is written once it
+   * is named, so nothing needs this relaxed.
+   */
+  .refine((line) => Boolean(line.product_id) || Boolean(line.description), {
+    message: 'Each line needs a product or a description',
+  })
   // Half a pair is a line nobody can price. The database refuses it too; this
   // says so in words rather than as a constraint violation.
   .refine((line) => (line.revised_rate_type === null) === (line.revised_rate === null), {
     message: 'A revised rate needs both a kind and a value',
   })
-
-/**
- * A line has to say what it is — but only once somebody has started saying.
- *
- * Adding one is how an empty row appears to be filled in, so it may arrive
- * with neither a product nor a description; that is the whole point of a card
- * where the row is the form. Editing one is different: a line that had a name
- * and no longer has one is somebody emptying it, and it would print as "Item".
- *
- * This used to live on the shared schema, which is why adding a line had to
- * invent the words "New line" and every person then had to delete them.
- */
-const namedLineSchema = lineSchema.refine(
-  (line) => Boolean(line.product_id) || Boolean(line.description),
-  { message: 'Each line needs a product or a description' },
-)
 
 /**
  * Refuses to touch an order that is finished with, before writing anything.
@@ -296,7 +293,7 @@ export async function updateSalesOrderLine(
   const refusal = await lineEditRefusal(context, orderId)
   if (refusal) return refusal
 
-  const parsed = namedLineSchema.safeParse(Object.fromEntries(formData))
+  const parsed = lineSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
   }

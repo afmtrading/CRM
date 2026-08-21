@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 
 import type { RevisedRateType } from '@/lib/database.types'
-import { lineTotal } from '@/lib/sales'
+import { isNamed, lineTotal } from '@/lib/sales'
 import { formatPrice } from '@/lib/format'
 import { TrashIcon } from '@/components/icons'
 import {
@@ -252,6 +252,8 @@ function LineBlock({
   products,
   units,
   editable,
+  unsaved = false,
+  onSaved,
 }: {
   line: EditableLine
   orderId: string
@@ -259,6 +261,18 @@ function LineBlock({
   products: LineProduct[]
   units: string[]
   editable: boolean
+  /**
+   * A row that exists on this screen and nowhere else yet.
+   *
+   * Add line used to insert a row immediately, which meant it had to invent a
+   * description — the database refuses a line with neither a product nor one,
+   * and that check is the thing keeping nameless lines off printed documents.
+   * So the row appears empty here and is written the moment it is named. The
+   * card's rule is unchanged: the row is the form.
+   */
+  unsaved?: boolean
+  /** Told once this row exists on the server, so the parent can stop drawing it. */
+  onSaved?: () => void
 }) {
   const [draft, setDraft] = useState(() => draftOf(line))
   const [error, setError] = useState<string | null>(null)
@@ -274,8 +288,27 @@ function LineBlock({
     setDraft(JSON.parse(settled) as Draft)
   }, [settled])
 
+  const named = isNamed(draft)
+
   const save = (next: Draft) => {
     setError(null)
+
+    if (unsaved) {
+      // Still nothing to call it. Keep what has been typed and wait.
+      if (!isNamed(next)) return
+      startTransition(async () => {
+        const result = await addSalesOrderLine({}, formOf(next, orderId))
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        // The transition covers the revalidation, so by now the saved row is
+        // in the list and this one can go without a gap between the two.
+        onSaved?.()
+      })
+      return
+    }
+
     startTransition(async () => {
       const result = await updateSalesOrderLine({}, formOf(next, orderId, line.id))
       if (result.error) setError(result.error)
@@ -461,6 +494,16 @@ function LineBlock({
       </div>
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+
+      {/*
+        Says why nothing has been written yet. Without it an empty row that
+        survives a refresh and one that does not look identical.
+      */}
+      {unsaved && !named && !error && (
+        <p className="mt-1 text-xs text-slate-400">
+          Pick a product or name this line, and it is saved.
+        </p>
+      )}
     </div>
   )
 }
@@ -498,6 +541,23 @@ function NumberBox({
   )
 }
 
+/** A row with nothing in it, for somebody to fill in. */
+function blankLine(id: string): EditableLine {
+  return {
+    id,
+    productId: null,
+    description: null,
+    unit: null,
+    quantity: 1,
+    unitPrice: 0,
+    unitCost: 0,
+    revisedRateType: null,
+    revisedRate: null,
+    notes: null,
+    lineTotal: 0,
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 
 export function SalesOrderLines({
@@ -516,12 +576,18 @@ export function SalesOrderLines({
   units: string[]
   editable: boolean
 }) {
-  const [adding, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  /*
+   * Rows that exist here and not yet on the server.
+   *
+   * Keyed by a counter rather than by their position, so typing into one does
+   * not follow the wrong row when another is added or saved above it.
+   */
+  const [blanks, setBlanks] = useState<number[]>([])
+  const nextKey = useRef(0)
 
   return (
     <div className="space-y-3">
-      {lines.length === 0 && (
+      {lines.length === 0 && blanks.length === 0 && (
         <p className="text-sm text-slate-500">
           Nothing on this order yet. Add a product, or a line of your own.
         </p>
@@ -539,38 +605,39 @@ export function SalesOrderLines({
         />
       ))}
 
+      {blanks.map((key) => (
+        <LineBlock
+          key={`blank-${key}`}
+          line={blankLine(`blank-${key}`)}
+          orderId={orderId}
+          currency={currency}
+          products={products}
+          units={units}
+          editable={editable}
+          unsaved
+          onSaved={() => setBlanks((was) => was.filter((one) => one !== key))}
+        />
+      ))}
+
       {editable && (
-        <>
-          <button
-            type="button"
-            disabled={adding}
-            onClick={() => {
-              setError(null)
-              /*
-               * An empty line, immediately. The alternative — a form to fill in
-               * before anything appears — is the thing this card was rebuilt to
-               * get rid of: the row is the form.
-               */
-              const form = new FormData()
-              form.set('sales_order_id', orderId)
-              /* Blank, because the next thing anybody does is name it — and a
-                 placeholder is a word every person has to delete first. */
-              form.set('description', '')
-              form.set('quantity', '1')
-              form.set('unit_price', '0')
-              form.set('unit_cost', '0')
-              startTransition(async () => {
-                const result = await addSalesOrderLine({}, form)
-                if (result.error) setError(result.error)
-              })
-            }}
-            className="btn-secondary"
-          >
-            <span className="text-base leading-none">+</span>
-            {adding ? 'Adding…' : 'Add line'}
-          </button>
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </>
+        <button
+          type="button"
+          onClick={() => {
+            /*
+             * An empty row, immediately — but only on this screen. It used to
+             * be inserted straight away, which meant inventing a description,
+             * because the database refuses a line with neither a product nor
+             * one. It is written as soon as it is named instead.
+             */
+            const key = nextKey.current
+            nextKey.current += 1
+            setBlanks((was) => [...was, key])
+          }}
+          className="btn-secondary"
+        >
+          <span className="text-base leading-none">+</span>
+          Add line
+        </button>
       )}
     </div>
   )
