@@ -108,6 +108,20 @@ export function documentDetails(
 }
 
 /**
+ * Whether a party has anything on it at all.
+ *
+ * An object whose every field is null is not a party — it is the shape of one.
+ * The renderer drew it as an empty bordered box, which reads as a document
+ * that forgot to say who it is for rather than one nobody has told yet.
+ */
+export function partyIsEmpty(party: DocumentParty | null): boolean {
+  if (!party) return true
+  return ![party.company, party.contact, party.phone, party.email, party.address].some(
+    (value) => (value ?? '').trim() !== '',
+  )
+}
+
+/**
  * Whether the ship-to is worth printing.
  *
  * Same company and no address of its own means the goods go where the bill

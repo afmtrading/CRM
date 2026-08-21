@@ -33,11 +33,20 @@ type PickerContact = {
 }
 type PickerUser = { id: string; name: string; email: string }
 type PickerLocation = { id: string; name: string }
-type PickerProduct = { id: string; name: string; sku: string | null; unit: string }
+type PickerProduct = {
+  id: string
+  name: string
+  sku: string | null
+  unit: string
+  unit_price: number
+  /** Null means "derive it from retail", which is derivePricing's job. */
+  price_wholesale: number | null
+}
 import { Money } from '@/components/money'
 import { Empty } from '@/components/contact-cards'
 import { CompanyContactPickers } from '@/components/party-pickers'
 import { SalesOrderLines } from '@/components/sales-order-lines'
+import { derivePricing } from '@/lib/products'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
 
@@ -113,7 +122,9 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     scoped(context, 'users').select('id, name, email').eq('status', 'active').order('name'),
     scoped(context, 'stock_locations').select('id, name').eq('active', true).order('name'),
     scoped(context, 'products')
-      .select('id, name, sku, unit')
+      // The two price columns are what a picked line is priced from. Two
+      // numbers per row on a list that is already bounded by PICKER_LIMIT.
+      .select('id, name, sku, unit, unit_price, price_wholesale')
       .is('deleted_at', null)
       .eq('active', true)
       .order('name')
@@ -516,6 +527,9 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 name: product.name,
                 sku: product.sku,
                 unit: product.unit,
+                // Derived here so the rule that a blank wholesale price means a
+                // share of retail has one implementation, in lib/products.
+                wholesale: derivePricing(product).unit.wholesale.value,
               }))}
               units={units}
               lines={lines.map((line) => ({

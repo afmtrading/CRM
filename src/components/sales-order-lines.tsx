@@ -34,6 +34,15 @@ export interface LineProduct {
   name: string
   sku: string | null
   unit: string | null
+  /**
+   * What this product sells for wholesale, already derived.
+   *
+   * Derived on the server rather than here: the rule that a blank wholesale
+   * price means a share of retail lives in lib/products, and a second copy of
+   * it in a component is a second copy that can disagree. Null when the
+   * catalogue has no answer, and a line then keeps whatever price it had.
+   */
+  wholesale: number | null
 }
 
 export interface EditableLine {
@@ -307,12 +316,15 @@ function LineBlock({
             description={draft.description}
             disabled={!editable}
             onPick={(picked) =>
-              /* The catalogue answers three questions at once: which product,
-                 what it is called, and what it is counted in. */
+              /* The catalogue answers four questions at once: which product,
+                 what it is called, what it is counted in, and what it costs.
+                 The price is the wholesale one — this is a purchase order, and
+                 retail is what the customer would have paid instead. */
               commit({
                 productId: picked.id,
                 description: '',
                 unit: draft.unit || picked.unit || '',
+                ...(picked.wholesale === null ? {} : { unitPrice: String(picked.wholesale) }),
               })
             }
             onDescribe={(words) => commit({ productId: '', description: words })}
@@ -541,7 +553,9 @@ export function SalesOrderLines({
                */
               const form = new FormData()
               form.set('sales_order_id', orderId)
-              form.set('description', 'New line')
+              /* Blank, because the next thing anybody does is name it — and a
+                 placeholder is a word every person has to delete first. */
+              form.set('description', '')
               form.set('quantity', '1')
               form.set('unit_price', '0')
               form.set('unit_cost', '0')

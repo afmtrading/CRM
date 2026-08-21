@@ -6,8 +6,8 @@ import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import type { ActionState } from '@/components/action-form'
-import { CURRENCIES } from '@/lib/format'
 import { canTransition, isEditable } from '@/lib/sales'
+import { headerPatch, headerSchema, optionalId, text } from '@/lib/purchase-order-header'
 import type { RevisedRateType, SalesOrderStatus } from '@/lib/database.types'
 
 /**
@@ -20,13 +20,6 @@ import type { RevisedRateType, SalesOrderStatus } from '@/lib/database.types'
  * database will apply whatever sends the row.
  */
 
-const text = (max: number) => z.string().trim().max(max).default('')
-const optionalId = z
-  .string()
-  .trim()
-  .transform((value) => (value === '' ? null : value))
-  .nullable()
-  .default(null)
 
 // -----------------------------------------------------------------------------
 // The order itself
@@ -58,59 +51,6 @@ export async function createSalesOrder(formData: FormData) {
   redirect(`/purchase-orders/${data}`)
 }
 
-const headerSchema = z.object({
-  company_id: optionalId,
-  contact_id: optionalId,
-  owner_id: optionalId,
-  location_id: optionalId,
-  /*
-   * Optional, with no default. The picker is disabled once the order leaves
-   * draft, so the browser sends nothing — and a default here would write that
-   * default over the order's real currency on every unrelated save.
-   */
-  currency: z.enum(CURRENCIES).optional().catch(undefined),
-  /* Blank is "direct", which is a real answer and has to reach null. */
-  marketplace_id: optionalId,
-  /* Where it goes, when that is not who is billed. */
-  ship_to_company_id: optionalId,
-  ship_to_contact_id: optionalId,
-  shipping_address: z.string().max(2_000).default(''),
-  shipping_method: text(120),
-  shipping_responsibility: text(120),
-  /* Also a checkbox pair. Whether the document shows what a line came down from. */
-  show_discount: z
-    .string()
-    .trim()
-    .transform((value) => value === 'true' || value === 'on')
-    .default('true'),
-  /* A checkbox, sent as a pair — see the note on the card that renders it. */
-  deposit_required: z
-    .string()
-    .trim()
-    .transform((value) => value === 'true' || value === 'on')
-    .default('false'),
-  deposit_information: z.string().max(2_000).default(''),
-  order_date: z.string().trim().min(1),
-  payment_terms: text(200),
-  shipping_charge: z.coerce.number().min(0).default(0),
-  notes: z.string().max(20_000).default(''),
-})
-
-/**
- * The columns that mean "nothing" rather than "leave it alone" when blank.
- *
- * Everything else on the header is text, and text that arrives empty from a
- * form that asked for it is somebody clearing the field.
- */
-const HEADER_NULLABLE = new Set([
-  'payment_terms',
-  'notes',
-  'shipping_address',
-  'shipping_method',
-  'shipping_responsibility',
-  'deposit_information',
-])
-
 export async function updateSalesOrder(
   _state: ActionState,
   formData: FormData,
@@ -124,28 +64,9 @@ export async function updateSalesOrder(
     return { error: parsed.error.issues[0]?.message ?? 'Those details are not valid' }
   }
 
-  /*
-   * A form that does not ask about a value must not answer for it.
-   *
-   * The header is spread across several cards now — who it is for, what it
-   * is, how it ships, what it says — and each posts on its own. Every field
-   * parses to null or '' when absent, so without this rule saving the notes
-   * would wipe the shipping method, and saving the shipping would wipe the
-   * notes. `has` is the only honest test: HTML gives the server no way to tell
-   * a cleared field from one that was never on the page, so the presence of
-   * the key is the question being asked.
-   *
-   * Built by walking what parsed rather than by naming the fields twice. A
-   * field added to the schema and to a card is then carried without anybody
-   * remembering to add it here as well.
-   */
-  const patch: Record<string, unknown> = { updated_by: context.user.id }
-
-  for (const [key, value] of Object.entries(parsed.data)) {
-    if (!formData.has(key)) continue
-    // A currency the picker disabled arrives as nothing rather than as blank.
-    if (key === 'currency' && !value) continue
-    patch[key] = HEADER_NULLABLE.has(key) ? (value as string) || null : value
+  const patch = {
+    ...headerPatch(parsed.data, formData),
+    updated_by: context.user.id,
   }
 
   const { error } = await scoped(context, 'sales_orders')
@@ -253,14 +174,27 @@ const lineSchema = z
       .nullable()
       .default(null),
   })
-  .refine((line) => Boolean(line.product_id) || Boolean(line.description), {
-    message: 'Each line needs a product or a description',
-  })
   // Half a pair is a line nobody can price. The database refuses it too; this
   // says so in words rather than as a constraint violation.
   .refine((line) => (line.revised_rate_type === null) === (line.revised_rate === null), {
     message: 'A revised rate needs both a kind and a value',
   })
+
+/**
+ * A line has to say what it is — but only once somebody has started saying.
+ *
+ * Adding one is how an empty row appears to be filled in, so it may arrive
+ * with neither a product nor a description; that is the whole point of a card
+ * where the row is the form. Editing one is different: a line that had a name
+ * and no longer has one is somebody emptying it, and it would print as "Item".
+ *
+ * This used to live on the shared schema, which is why adding a line had to
+ * invent the words "New line" and every person then had to delete them.
+ */
+const namedLineSchema = lineSchema.refine(
+  (line) => Boolean(line.product_id) || Boolean(line.description),
+  { message: 'Each line needs a product or a description' },
+)
 
 /**
  * Refuses to touch an order that is finished with, before writing anything.
@@ -362,7 +296,7 @@ export async function updateSalesOrderLine(
   const refusal = await lineEditRefusal(context, orderId)
   if (refusal) return refusal
 
-  const parsed = lineSchema.safeParse(Object.fromEntries(formData))
+  const parsed = namedLineSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
   }
