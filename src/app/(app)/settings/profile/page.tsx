@@ -30,7 +30,7 @@ export default async function ProfileSettingsPage() {
     <>
       <PageHeader
         title="My profile"
-        description="What appears on the purchase orders and invoices you represent."
+        description="What appears on the sales orders and invoices you represent."
       />
 
       <Section title={me.name || me.email}>

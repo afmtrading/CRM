@@ -15,7 +15,7 @@ import type { DocumentModel } from '@/lib/document'
 
 function model(overrides: Partial<DocumentModel> = {}): DocumentModel {
   return {
-    kind: 'Purchase Order',
+    kind: 'Sales Order',
     number: 'PO-Acme-0001',
     date: '2026-05-15',
     due: null,
@@ -74,7 +74,7 @@ function isPdf(bytes: Buffer): boolean {
 }
 
 describe('renderDocumentPdf', () => {
-  it('renders a purchase order', async () => {
+  it('renders a sales order', async () => {
     const pdf = await renderDocumentPdf(model())
     expect(isPdf(pdf)).toBe(true)
     expect(pdf.byteLength).toBeGreaterThan(1000)

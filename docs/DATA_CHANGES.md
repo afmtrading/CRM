@@ -218,3 +218,37 @@ never changed.
 Reverting means restoring `fixed` to a replacement price in
 `sales_line_discount()` and in `revisedUnitPrice` in `src/lib/sales.ts`, then
 touching those two rows to recompute. The values above are what they held.
+
+
+## 2026-08-21 — `PO-` goes back to `SO-`
+
+The section was renamed Purchase orders, and then back to Sales orders. The
+number prefix followed it out and follows it back: half a book reading `PO-`
+and half `SO-` is worse than either, which is the same reason the first rename
+moved them at all.
+
+These seven were `SO-` originally, became `PO-` under 20260265000000 this
+afternoon, and return to what they were. Read out of production before the
+change, while they still said `PO-`:
+
+```sql
+-- sales_orders.number, before → after
+1b92ff8c-65fc-4063-ad6b-8dd378db3798  PO-0001 → SO-0001
+ba1726c3-b957-4848-a6eb-a6b9cc00bed5  PO-0002 → SO-0002
+68addbf4-315e-4e5d-b2db-9ea582a3fdb0  PO-0003 → SO-0003
+eba7f846-d182-4fb6-9f7b-484f68f15035  PO-0004 → SO-0004
+f3755466-96c4-4257-afbe-0fcf0f0da2c5  PO-0005 → SO-0005
+20550646-89cb-48e2-9894-619b90f5beb8  PO-0006 → SO-0006
+5afd65b3-4d65-4a64-898b-f78ba6d9d300  PO-0007 → SO-0007
+```
+
+Only the prefix moves, so each organization's sequence is unbroken and the
+numbers stay recognisable — and for anybody who saw them before this afternoon,
+they are the numbers they always were.
+
+`next_document_number` already accepts either name for the orders sequence, so
+only `create_sales_order` changes back. Invoices are untouched: they were never
+renamed, and `INV-` has meant one thing throughout.
+
+Reverting means swapping the two strings, which is what 20260265000000 did in
+the other direction.

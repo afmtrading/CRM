@@ -202,10 +202,10 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
               wants; ?download=1 sets the attachment disposition and saves it
               as PO-…pdf.
             */}
-            <a href={`/purchase-orders/${id}/pdf`} className="btn-secondary" target="_blank">
+            <a href={`/sales-orders/${id}/pdf`} className="btn-secondary" target="_blank">
               Preview
             </a>
-            <a href={`/purchase-orders/${id}/pdf?download=1`} className="btn-secondary">
+            <a href={`/sales-orders/${id}/pdf?download=1`} className="btn-secondary">
               Download PDF
             </a>
 
@@ -342,13 +342,13 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
           </Section>
 
           {/* ---------------------------------------------------------------- */}
-          <Section title="Purchase Order Detail">
+          <Section title="Sales Order Detail">
             <ActionForm action={updateSalesOrder} className="space-y-3">
               <input type="hidden" name="id" value={id} />
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="label">P.O. #</label>
+                  <label className="label">S.O. #</label>
                   {/* Allocated once at creation and never reissued, which is
                       why it is shown rather than offered. */}
                   <p className="input bg-slate-50 font-medium text-slate-900">
@@ -358,7 +358,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
 
                 <div>
                   <label className="label" htmlFor="order_date">
-                    P.O. date
+                    S.O. date
                   </label>
                   <input
                     id="order_date"
@@ -585,7 +585,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   name="shipping_method"
                   className="input"
                   defaultValue={salesOrder.shipping_method ?? ''}
-                  placeholder="LTL, container, customer collection…"
+                  placeholder="FOB origin, FOB destination, customer collection…"
                 />
               </div>
 
@@ -728,7 +728,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
 
             {/*
               The margin line is gone. It spent most of its life saying it did
-              not know, because a purchase order's lines rarely carry a cost —
+              not know, because a sales order's lines rarely carry a cost —
               a sentence that is usually an apology is not worth the room.
             */}
             {margin !== null && (

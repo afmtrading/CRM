@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { headerPatch, headerSchema } from '@/lib/purchase-order-header'
+import { headerPatch, headerSchema } from '@/lib/sales-order-header'
 
 /**
  * The header is posted by five separate cards, and each one must save its own
  * fields and touch nothing else.
  *
  * These are regression tests for a real failure: `order_date` was required by
- * the schema while only the Purchase Order Detail card carried it, so the
+ * the schema while only the Sales Order Detail card carried it, so the
  * Customer & Shipping, Notes and Shipping cards all parsed as a missing
  * required string, returned "Required" in red, and wrote nothing at all. Four
  * cards, silently unsaveable.

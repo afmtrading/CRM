@@ -10,7 +10,7 @@ import {
   addSalesOrderLine,
   removeSalesOrderLine,
   updateSalesOrderLine,
-} from '@/app/(app)/purchase-orders/actions'
+} from '@/app/(app)/sales-orders/actions'
 
 /**
  * The lines of a sales order, edited where they are read.
@@ -352,7 +352,7 @@ function LineBlock({
             onPick={(picked) =>
               /* The catalogue answers four questions at once: which product,
                  what it is called, what it is counted in, and what it costs.
-                 The price is the wholesale one — this is a purchase order, and
+                 The price is the wholesale one — this is a sales order, and
                  retail is what the customer would have paid instead. */
               commit({
                 productId: picked.id,

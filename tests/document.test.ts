@@ -113,7 +113,7 @@ describe('documentFilename', () => {
 
 describe('partyIsEmpty', () => {
   /*
-   * The bug this pins: a purchase order with no company saved against it built
+   * The bug this pins: a sales order with no company saved against it built
    * a party object of five nulls, which is truthy, so the document printed an
    * empty bordered CUSTOMER box.
    */
