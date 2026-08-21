@@ -134,7 +134,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               Download PDF
             </a>
             {salesOrder && (
-              <Link href={`/purchase-orders/${salesOrder.id}`} className="btn-secondary">
+              <Link href={`/sales-orders/${salesOrder.id}`} className="btn-secondary">
                 {salesOrder.number}
               </Link>
             )}
@@ -486,7 +486,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               <Row label="From order">
                 {salesOrder ? (
                   <Link
-                    href={`/purchase-orders/${salesOrder.id}`}
+                    href={`/sales-orders/${salesOrder.id}`}
                     className="text-brand-700 hover:underline"
                   >
                     {salesOrder.number}
@@ -602,14 +602,14 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 Notes, and only notes.
 
                 Terms and conditions were here and are gone, as they are on a
-                purchase order — the desk does not want a per-document terms
+                sales order — the desk does not want a per-document terms
                 box on either. The column is untouched: the header action no
                 longer reads or writes it, so anything already stored is still
                 there for anybody who wants it back.
               */}
               {/*
                 Hidden false in front of the checkbox, for the reason the
-                purchase order's deposit switch gives: a clear checkbox posts
+                sales order's deposit switch gives: a clear checkbox posts
                 nothing, and nothing is indistinguishable from a form that
                 never asked.
               */}

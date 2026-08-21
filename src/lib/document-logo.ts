@@ -4,8 +4,8 @@
  * Fetched here rather than handed to the PDF renderer as a URL, because the
  * renderer fetches it while drawing and throws if that fails — which turns a
  * logo somebody mistyped, or a host that is down this afternoon, into no
- * document at all. A purchase order without a logo is a purchase order. A
- * purchase order that will not download is an outage.
+ * document at all. A sales order without a logo is a sales order. A
+ * sales order that will not download is an outage.
  *
  * So: every failure is null, and null simply draws no logo.
  */

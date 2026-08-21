@@ -194,7 +194,7 @@ export function DocumentPdf({ model }: { model: DocumentModel }) {
           <View style={styles.headRight}>
             <Text style={styles.title}>{model.kind}</Text>
             <Text style={styles.metaLine}>
-              {model.kind === 'Invoice' ? 'Invoice #' : 'P.O. #'}: {model.number}
+              {model.kind === 'Invoice' ? 'Invoice #' : 'S.O. #'}: {model.number}
             </Text>
             <Text style={styles.metaLine}>Date: {formatDay(model.date)}</Text>
             {model.due ? <Text style={styles.metaLine}>Due: {formatDay(model.due)}</Text> : null}

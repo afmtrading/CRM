@@ -305,7 +305,7 @@ export default async function DeletedRecordsPage() {
           )}
 
           {salesOrderRows.length > 0 && (
-            <Section title="Purchase orders">
+            <Section title="Sales orders">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -323,7 +323,7 @@ export default async function DeletedRecordsPage() {
                       <tr key={order.id}>
                         <td>
                           <Link
-                            href={`/purchase-orders/${order.id}`}
+                            href={`/sales-orders/${order.id}`}
                             className="font-medium text-slate-900 hover:text-brand-700"
                           >
                             {order.number}

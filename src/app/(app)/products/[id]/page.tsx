@@ -812,7 +812,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                           <Link
                             href={
                               order.kind === 'order'
-                                ? `/purchase-orders/${order.document_id}`
+                                ? `/sales-orders/${order.document_id}`
                                 : `/invoices/${order.document_id}`
                             }
                             className="font-medium text-slate-900 hover:text-brand-700"

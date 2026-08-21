@@ -7,20 +7,26 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: '10mb' },
   },
   /**
-   * Where the sales orders used to live.
+   * Where the orders briefly lived.
    *
-   * The section is called Purchase orders now and the routes moved with it,
-   * which would otherwise turn every link anybody has kept — a bookmark, a
-   * pasted URL in an email, a row in somebody's spreadsheet — into a 404 for a
-   * record that is still there under a different address.
+   * They were at /sales-orders, moved to /purchase-orders for an afternoon,
+   * and are back. Anybody who followed a link in between still has
+   * /purchase-orders in their history, so it points home rather than 404ing on
+   * a record that is right there under its old address.
    *
-   * Permanent, because it is: the old path is not coming back, and a permanent
-   * redirect is the one browsers and search engines stop asking about.
+   * Temporary rather than permanent, and deliberately: a 308 is the one
+   * browsers cache and stop asking about, and this pair has now moved twice.
+   * A 307 costs one request and can be withdrawn without anybody holding a
+   * cached instruction to the contrary.
    */
   async redirects() {
     return [
-      { source: '/sales-orders', destination: '/purchase-orders', permanent: true },
-      { source: '/sales-orders/:path*', destination: '/purchase-orders/:path*', permanent: true },
+      { source: '/purchase-orders', destination: '/sales-orders', permanent: false },
+      {
+        source: '/purchase-orders/:path*',
+        destination: '/sales-orders/:path*',
+        permanent: false,
+      },
     ]
   },
 }

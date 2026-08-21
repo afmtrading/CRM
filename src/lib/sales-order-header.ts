@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { CURRENCIES } from '@/lib/format'
 
 /**
- * The purchase order header, and the rule about what a save actually writes.
+ * The sales order header, and the rule about what a save actually writes.
  *
  * In lib rather than beside the action because a 'use server' file may only
  * export async functions, and this is the piece that broke: `order_date` was
@@ -62,7 +62,7 @@ export const headerSchema = z.object({
   /*
    * Optional, like everything else on a header now spread across five cards.
    *
-   * It was the one field that still had to be present, and only the Purchase
+   * It was the one field that still had to be present, and only the Sales
    * Order Detail card carries it — so saving the notes, the shipping, or the
    * customer parsed as a missing required string and came back "Required" with
    * nothing written. The value looked like it had been typed and thrown away,

@@ -1,5 +1,5 @@
 /**
- * What a purchase order or an invoice says on paper.
+ * What a sales order or an invoice says on paper.
  *
  * One shape, built by both documents, rendered by one component. The two have
  * drifted apart before — an invoice printed its terms for a week after the
@@ -53,7 +53,7 @@ export interface DocumentDetail {
 }
 
 export interface DocumentModel {
-  /** "Purchase Order" or "Invoice", as printed. */
+  /** "Sales Order" or "Invoice", as printed. */
   kind: string
   number: string
   date: string

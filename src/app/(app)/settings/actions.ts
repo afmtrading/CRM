@@ -1343,5 +1343,5 @@ export async function restoreSalesOrder(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/settings/deleted')
-  revalidatePath('/purchase-orders')
+  revalidatePath('/sales-orders')
 }

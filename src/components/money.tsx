@@ -39,7 +39,7 @@ export function Money({
    * Show the cents.
    *
    * The default rounds to whole units, which is right for a board of deals
-   * worth tens of thousands and wrong for a document: a purchase order whose
+   * worth tens of thousands and wrong for a document: a sales order whose
    * lines come to $4.70 printed a Subtotal of $5, and the difference between a
    * summary and the lines above it is the kind of thing a customer finds.
    */

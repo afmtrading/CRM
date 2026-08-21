@@ -118,7 +118,7 @@ export type OrganizationRow = {
   logo_url: string | null
   primary_color: string
   default_currency: string
-  /** Printed at the foot of every purchase order and invoice. One wording per organization. */
+  /** Printed at the foot of every sales order and invoice. One wording per organization. */
   document_terms: string | null
   /**
    * IANA zone. The one clock this organization's reports are read against —

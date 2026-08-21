@@ -19,7 +19,7 @@ import type {
 } from '@/lib/database.types'
 
 /**
- * The purchase order as a file.
+ * The sales order as a file.
  *
  * Node rather than edge: the renderer is a Node library, and this is the one
  * place in the app that needs to be.
@@ -111,7 +111,7 @@ export async function GET(
   })
 
   const model: DocumentModel = {
-    kind: 'Purchase Order',
+    kind: 'Sales Order',
     number: order.number,
     date: order.order_date,
     due: null,

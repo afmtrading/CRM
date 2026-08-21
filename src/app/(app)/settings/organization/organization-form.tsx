@@ -91,7 +91,7 @@ export function OrganizationForm({ organization }: { organization: OrganizationR
           defaultValue={organization.document_terms ?? ''}
         />
         <p className="mt-1 text-xs text-slate-400">
-          Printed at the foot of every purchase order and invoice. Leave it empty and the
+          Printed at the foot of every sales order and invoice. Leave it empty and the
           section does not appear.
         </p>
       </div>

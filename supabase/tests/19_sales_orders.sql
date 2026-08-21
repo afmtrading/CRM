@@ -252,21 +252,21 @@ begin
   v_other  := public.create_sales_order(v_zenith, null, null, 'USD');
   v_none   := public.create_sales_order(null, null, null, 'USD');
 
-  -- The money test above already took PO-Acme-0001.
+  -- The money test above already took SO-Acme-0001.
   perform test_assert(
-    (select number from sales_orders where id = v_first) = 'PO-Acme-0002',
+    (select number from sales_orders where id = v_first) = 'SO-Acme-0002',
     'a number is the company''s first word and a running count'
   );
   perform test_assert(
-    (select number from sales_orders where id = v_second) = 'PO-Acme-0003',
+    (select number from sales_orders where id = v_second) = 'SO-Acme-0003',
     'and the count runs on'
   );
   perform test_assert(
-    (select number from sales_orders where id = v_other) = 'PO-Zenith-0001',
+    (select number from sales_orders where id = v_other) = 'SO-Zenith-0001',
     'another company starts again from one'
   );
   perform test_assert(
-    (select number from sales_orders where id = v_none) = 'PO-0001',
+    (select number from sales_orders where id = v_none) = 'SO-0001',
     'and an order with no company gets the bare sequence'
   );
 
@@ -274,7 +274,7 @@ begin
   -- characters. If the scan were sloppy they would count each other's rows.
   perform test_assert(
     (select number from sales_orders where id = public.create_sales_order(null, null, null, 'USD'))
-      = 'PO-0002',
+      = 'SO-0002',
     'the bare sequence does not count the named ones'
   );
 
