@@ -576,6 +576,29 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             <ActionForm action={updateSalesOrder} className="grid gap-3 sm:grid-cols-2">
               <input type="hidden" name="id" value={id} />
 
+              {/*
+                Shipping leads, and the method follows it — who moves the goods
+                is the term of the deal, and what they move them in is a detail
+                of carrying it out. The column behind this is still called
+                shipping_responsibility: renaming it would be a migration for a
+                label, and every order already stored under it would have to
+                move for nothing.
+              */}
+              <div>
+                <label className="label" htmlFor="shipping_responsibility">
+                  Shipping
+                </label>
+                {/* Free text rather than a fixed list: who moves the goods is
+                    a term of the deal, and every desk words it differently. */}
+                <input
+                  id="shipping_responsibility"
+                  name="shipping_responsibility"
+                  className="input"
+                  defaultValue={salesOrder.shipping_responsibility ?? ''}
+                  placeholder="Buyer Pick Up or Seller Delivery"
+                />
+              </div>
+
               <div>
                 <label className="label" htmlFor="shipping_method">
                   Shipping method
@@ -585,22 +608,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   name="shipping_method"
                   className="input"
                   defaultValue={salesOrder.shipping_method ?? ''}
-                  placeholder="FOB origin, FOB destination, customer collection…"
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="shipping_responsibility">
-                  Shipping responsibility
-                </label>
-                {/* Free text rather than a fixed list: who arranges carriage is
-                    a term of the deal, and every desk words it differently. */}
-                <input
-                  id="shipping_responsibility"
-                  name="shipping_responsibility"
-                  className="input"
-                  defaultValue={salesOrder.shipping_responsibility ?? ''}
-                  placeholder="Buyer, seller, or who arranges it"
+                  placeholder="Truck, Plane, Car, etc."
                 />
               </div>
 

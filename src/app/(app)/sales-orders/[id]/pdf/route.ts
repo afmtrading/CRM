@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { documentTotals, ledgerBalance, lineName, revisedUnitPrice } from '@/lib/sales'
-import { documentDetails, documentFilename, shipToWorthPrinting } from '@/lib/document'
+import { documentFilename, salesOrderDetails, shipToWorthPrinting } from '@/lib/document'
 import type { DocumentModel } from '@/lib/document'
 import { loadOrganizationLogo } from '@/lib/document-logo'
 import { renderDocumentPdf } from '@/components/document-pdf'
@@ -124,13 +124,14 @@ export async function GET(
     customerId: buyer?.code ?? null,
     billTo,
     shipTo,
-    details: documentDetails([
-      { label: 'Location', value: (location as StockLocationRow | null)?.name },
-      { label: 'Representative', value: rep ? rep.name || rep.email : null },
-      { label: 'Payment Terms', value: order.payment_terms },
-      { label: 'Currency', value: order.currency },
-      { label: 'Shipping', value: order.shipping_method },
-    ]),
+    details: salesOrderDetails({
+      location: (location as StockLocationRow | null)?.name,
+      representative: rep ? rep.name || rep.email : null,
+      paymentTerms: order.payment_terms,
+      currency: order.currency,
+      shipping: order.shipping_responsibility,
+      shippingMethod: order.shipping_method,
+    }),
     lines: lines.map((line) => {
       const product = line.product_id ? productById.get(line.product_id) : null
       return {

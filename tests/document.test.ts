@@ -4,6 +4,7 @@ import {
   documentDetails,
   documentFilename,
   partyIsEmpty,
+  salesOrderDetails,
   shipToWorthPrinting,
 } from '@/lib/document'
 import type { DocumentParty } from '@/lib/document'
@@ -139,5 +140,57 @@ describe('partyIsEmpty', () => {
     expect(
       partyIsEmpty({ company: null, contact: null, phone: null, email: null, address: '12 Dock Rd' }),
     ).toBe(false)
+  })
+})
+
+describe('salesOrderDetails', () => {
+  const full = {
+    location: 'Centerville',
+    representative: 'AFM',
+    paymentTerms: 'COD',
+    currency: 'USD',
+    shipping: 'Seller Delivery',
+    shippingMethod: 'Truck',
+  }
+
+  it('labels each field with the name the card uses', () => {
+    expect(salesOrderDetails(full)).toEqual([
+      { label: 'Location', value: 'Centerville' },
+      { label: 'Representative', value: 'AFM' },
+      { label: 'Payment Terms', value: 'COD' },
+      { label: 'Currency', value: 'USD' },
+      { label: 'Shipping', value: 'Seller Delivery' },
+      { label: 'Shipping method', value: 'Truck' },
+    ])
+  })
+
+  /*
+   * The bug this pins. "Shipping" read shipping_method, so an order carrying
+   * FOB against who ships and nothing against how printed no Shipping row —
+   * the value was there, the document just asked the wrong field for it.
+   */
+  it('prints Shipping from who ships, not from the method', () => {
+    const details = salesOrderDetails({ ...full, shipping: 'FOB', shippingMethod: null })
+    expect(details).toContainEqual({ label: 'Shipping', value: 'FOB' })
+    expect(details.map((d) => d.label)).not.toContain('Shipping method')
+  })
+
+  it('prints the method on its own when only that is set', () => {
+    const details = salesOrderDetails({ ...full, shipping: null, shippingMethod: 'Plane' })
+    expect(details).toContainEqual({ label: 'Shipping method', value: 'Plane' })
+    expect(details.map((d) => d.label)).not.toContain('Shipping')
+  })
+
+  it('says nothing about an order nobody has answered', () => {
+    expect(
+      salesOrderDetails({
+        location: null,
+        representative: null,
+        paymentTerms: null,
+        currency: null,
+        shipping: null,
+        shippingMethod: null,
+      }),
+    ).toEqual([])
   })
 })
