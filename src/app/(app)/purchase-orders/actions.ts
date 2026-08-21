@@ -88,7 +88,6 @@ const headerSchema = z.object({
   payment_terms: text(200),
   shipping_charge: z.coerce.number().min(0).default(0),
   notes: z.string().max(20_000).default(''),
-  terms: z.string().max(20_000).default(''),
 })
 
 /**
@@ -100,7 +99,6 @@ const headerSchema = z.object({
 const HEADER_NULLABLE = new Set([
   'payment_terms',
   'notes',
-  'terms',
   'shipping_address',
   'shipping_method',
   'shipping_responsibility',

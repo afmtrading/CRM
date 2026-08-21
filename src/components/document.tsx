@@ -74,7 +74,11 @@ export function PrintableDocument({
   payments: DocumentPayment[]
   paymentsTitle: string
   notes: string | null
-  terms: string | null
+  /**
+   * Optional, because only one of the two documents has them now: an invoice
+   * still carries its terms, and a purchase order stopped asking for them.
+   */
+  terms?: string | null
 }) {
   const balance = total - paid
 
