@@ -16,6 +16,7 @@
     "db:reset": "supabase db reset"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.6.1",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.2",
     "next": "^15.5.22",

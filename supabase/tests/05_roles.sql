@@ -555,6 +555,89 @@ end;
 $$;
 
 -- =============================================================================
+-- A person may correct their own profile and may not promote themselves.
+--
+-- users_update lets somebody write their own row, and its check only pins the
+-- organization — so without the guard in 20260266000000 the row a rep may
+-- write includes `role`. These run as `authenticated` with real claims,
+-- because that is the path a browser's own session takes straight to
+-- PostgREST, with no UI in the way to hide a button.
+-- =============================================================================
+do $$
+declare
+  v_rep    uuid := (select id from fixture where key = 'rep');
+  v_raised boolean;
+begin
+  raise notice 'Editing your own profile:';
+  perform sign_in_as('rep_auth');
+
+  update users set name = 'Raj Patel', phone = '615-335-5582' where id = v_rep;
+
+  perform test_assert(
+    (select name from users where id = v_rep) = 'Raj Patel'
+      and (select phone from users where id = v_rep) = '615-335-5582',
+    'a rep can correct their own name and phone'
+  );
+
+  begin
+    update users set role = 'admin' where id = v_rep;
+    v_raised := false;
+  exception when others then
+    v_raised := true;
+  end;
+  perform test_assert(v_raised, 'a rep cannot promote themselves to admin');
+
+  begin
+    update users set status = 'disabled' where id = v_rep;
+    v_raised := false;
+  exception when others then
+    v_raised := true;
+  end;
+  perform test_assert(v_raised, 'a rep cannot change their own status');
+
+  begin
+    update users set email = 'rep@elsewhere.test' where id = v_rep;
+    v_raised := false;
+  exception when others then
+    v_raised := true;
+  end;
+  perform test_assert(v_raised, 'a rep cannot change the address they sign in with');
+
+  begin
+    update users set organization_id = gen_random_uuid() where id = v_rep;
+    v_raised := false;
+  exception when others then
+    v_raised := true;
+  end;
+  perform test_assert(v_raised, 'a rep cannot move themselves to another organization');
+
+  perform test_assert(
+    (select role from users where id = v_rep) = 'regular'
+      and (select status from users where id = v_rep) = 'active',
+    'and none of that left a mark on the row'
+  );
+end;
+$$;
+
+-- An administrator is not held to any of it: changing somebody's role is the
+-- job. Asserted so the guard cannot be tightened into uselessness later.
+do $$
+declare
+  v_rep2 uuid := (select id from fixture where key = 'rep2');
+begin
+  perform sign_in_as('admin_auth');
+
+  update users set role = 'manager' where id = v_rep2;
+  perform test_assert(
+    (select role from users where id = v_rep2) = 'manager',
+    'an admin can still change somebody''s role'
+  );
+
+  update users set role = 'regular' where id = v_rep2;
+end;
+$$;
+
+-- =============================================================================
 -- A disabled user keeps no privileges from their former role.
 -- =============================================================================
 do $$

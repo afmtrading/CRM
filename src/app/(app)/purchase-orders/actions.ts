@@ -77,6 +77,12 @@ const headerSchema = z.object({
   shipping_address: z.string().max(2_000).default(''),
   shipping_method: text(120),
   shipping_responsibility: text(120),
+  /* Also a checkbox pair. Whether the document shows what a line came down from. */
+  show_discount: z
+    .string()
+    .trim()
+    .transform((value) => value === 'true' || value === 'on')
+    .default('true'),
   /* A checkbox, sent as a pair — see the note on the card that renders it. */
   deposit_required: z
     .string()

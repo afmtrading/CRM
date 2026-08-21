@@ -30,6 +30,12 @@ const headerSchema = z.object({
     .default(null),
   payment_terms: text(200),
   notes: z.string().max(20_000).default(''),
+  /* A checkbox, sent as a hidden-false-then-checkbox pair. */
+  show_discount: z
+    .string()
+    .trim()
+    .transform((value) => value === 'true' || value === 'on')
+    .default('true'),
   /*
    * Absent when the field was not rendered — a sent or part-paid invoice shows
    * the currency rather than offering it — and absent means "leave it alone"
@@ -70,6 +76,7 @@ export async function updateInvoice(
       due_date: parsed.data.due_date,
       payment_terms: parsed.data.payment_terms || null,
       notes: parsed.data.notes || null,
+      show_discount: parsed.data.show_discount,
       ...(parsed.data.currency ? { currency: parsed.data.currency } : {}),
       ...(parsed.data.marketplace_id === undefined
         ? {}
