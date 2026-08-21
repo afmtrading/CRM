@@ -84,7 +84,7 @@ const DATABASE_NAV: NavItem[] = [
  */
 const SALES_NAV: NavItem[] = [
   { href: '/deals', label: 'Deals', icon: <DealsIcon className={ICON} /> },
-  { href: '/sales-orders', label: 'Sales orders', icon: <SalesOrderIcon className={ICON} /> },
+  { href: '/sales-orders', label: 'Purchase orders', icon: <SalesOrderIcon className={ICON} /> },
   { href: '/invoices', label: 'Invoices', icon: <InvoiceIcon className={ICON} /> },
 ]
 

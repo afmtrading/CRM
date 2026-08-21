@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { CURRENCIES, formatDate, formatPrice } from '@/lib/format'
+import { CURRENCIES, formatDate, formatNumber, formatPrice } from '@/lib/format'
 import {
   SALES_ORDER_STATUS_HINTS,
   SALES_ORDER_STATUS_LABELS,
@@ -22,18 +22,20 @@ import type {
 } from '@/lib/database.types'
 
 /* What each picker actually reads, so the query can ask for exactly that. */
-type PickerCompany = { id: string; name: string }
+type PickerCompany = { id: string; name: string; code: string | null }
 type PickerContact = {
   id: string
   first_name: string
   last_name: string
   email: string | null
+  phone: string | null
   company_id: string | null
 }
 type PickerUser = { id: string; name: string; email: string }
 type PickerLocation = { id: string; name: string }
 type PickerProduct = { id: string; name: string; sku: string | null; unit: string }
 import { Money } from '@/components/money'
+import { Empty } from '@/components/contact-cards'
 import { CompanyContactPickers } from '@/components/party-pickers'
 import { SalesOrderLines } from '@/components/sales-order-lines'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
@@ -97,13 +99,14 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
      * fields.
      */
     scoped(context, 'companies')
-      .select('id, name')
+      // `code` is the Customer ID the order prints — see 20260264000000.
+      .select('id, name, code')
       .is('deleted_at', null)
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'contacts')
       // company_id is what lets the contact picker narrow to one company.
-      .select('id, first_name, last_name, email, company_id')
+      .select('id, first_name, last_name, email, phone, company_id')
       .is('deleted_at', null)
       .order('last_name')
       .limit(PICKER_LIMIT),
@@ -151,6 +154,18 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
   /* The two pickers' shapes: a company is a name, a contact is a name and the
      company it lets the list narrow to. */
   const companyOptions = companyList.map((one) => ({ id: one.id, name: one.name }))
+
+  /*
+   * The two people the document has to be able to reach, read from their own
+   * records rather than copied onto the order. An email kept in two places is
+   * an email that can disagree with itself.
+   */
+  const contactList = (contacts ?? []) as PickerContact[]
+  const billTo = contactList.find((one) => one.id === salesOrder.contact_id)
+  const shipTo = contactList.find((one) => one.id === salesOrder.ship_to_contact_id)
+
+  /* What the lines add up to in units, which the printed document leads with. */
+  const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity), 0)
   const companyNames = new Map(companyList.map((one) => [one.id, one.name]))
   const contactOptions = ((contacts ?? []) as PickerContact[]).map((one) => ({
     id: one.id,
@@ -226,66 +241,105 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           {/* ---------------------------------------------------------------- */}
-          <Section title="Sales Order Details">
+          {/*
+            Who it is for, and where it goes.
+            
+            Two parties rather than one: the business being billed is not always
+            the address the goods arrive at — a broker buys and a warehouse
+            receives — and a document that can only name one of them makes the
+            other somebody's note. Ship to empty means "the same as bill to",
+            which is the ordinary case and is why nothing is defaulted into it.
+          */}
+          <Section title="Customer & Shipping">
+            <ActionForm action={updateSalesOrder} className="grid gap-5 sm:grid-cols-2">
+              <input type="hidden" name="id" value={id} />
+
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  Bill to
+                </h3>
+                <CompanyContactPickers
+                  idPrefix="bill-to"
+                  companies={companyOptions}
+                  contacts={contactOptions}
+                  defaultCompanyId={salesOrder.company_id ?? ''}
+                  defaultContactId={salesOrder.contact_id ?? ''}
+                />
+                {/*
+                  Read from the records rather than typed again here. An email
+                  kept in two places is an email that can disagree with itself,
+                  and the one on the contact is the one the rest of the app
+                  writes to.
+                */}
+                <dl className="space-y-1 border-t border-slate-100 pt-3 text-sm">
+                  <Row label="Customer ID">{company?.code ?? <Empty />}</Row>
+                  <Row label="Contact email">{billTo?.email ?? <Empty />}</Row>
+                  <Row label="Contact phone">{billTo?.phone ?? <Empty />}</Row>
+                </dl>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  Ship to
+                </h3>
+                <CompanyContactPickers
+                  idPrefix="ship-to"
+                  companyName="ship_to_company_id"
+                  contactName="ship_to_contact_id"
+                  companies={companyOptions}
+                  contacts={contactOptions}
+                  defaultCompanyId={salesOrder.ship_to_company_id ?? ''}
+                  defaultContactId={salesOrder.ship_to_contact_id ?? ''}
+                />
+                <div>
+                  <label className="label" htmlFor="shipping_address">
+                    Shipping address
+                  </label>
+                  {/* Free text, because an address given for one order is not
+                      necessarily the address on the company record. */}
+                  <textarea
+                    id="shipping_address"
+                    name="shipping_address"
+                    rows={3}
+                    className="input"
+                    defaultValue={salesOrder.shipping_address ?? ''}
+                    placeholder="Where the goods go"
+                  />
+                </div>
+                <dl className="space-y-1 border-t border-slate-100 pt-3 text-sm">
+                  <Row label="Contact email">{shipTo?.email ?? <Empty />}</Row>
+                  <Row label="Contact phone">{shipTo?.phone ?? <Empty />}</Row>
+                </dl>
+              </div>
+
+              {context.canWrite && (
+                <div className="sm:col-span-2">
+                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                    Save customer &amp; shipping
+                  </SubmitButton>
+                </div>
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Purchase Order Detail">
             <ActionForm action={updateSalesOrder} className="space-y-3">
               <input type="hidden" name="id" value={id} />
 
-              {/*
-                Searchable, and the second narrows to the first: a company you
-                can type at rather than scroll, and then only the people who
-                work there. The deal form asks the same question of the same two
-                tables — see CompanyContactPickers, which both now render.
-              */}
-              <CompanyContactPickers
-                idPrefix="sales-order"
-                companies={companyOptions}
-                contacts={contactOptions}
-                defaultCompanyId={salesOrder.company_id ?? ''}
-                defaultContactId={salesOrder.contact_id ?? ''}
-              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label">P.O. #</label>
+                  {/* Allocated once at creation and never reissued, which is
+                      why it is shown rather than offered. */}
+                  <p className="input bg-slate-50 font-medium text-slate-900">
+                    {salesOrder.number}
+                  </p>
+                </div>
 
-              <div>
-                <label className="label" htmlFor="owner_id">
-                  Owner
-                </label>
-                <select
-                  id="owner_id"
-                  name="owner_id"
-                  className="input"
-                  defaultValue={salesOrder.owner_id ?? ''}
-                >
-                  <option value="">Unassigned</option>
-                  {((users ?? []) as PickerUser[]).map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name || user.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="location_id">
-                  Fulfilling from
-                </label>
-                <select
-                  id="location_id"
-                  name="location_id"
-                  className="input"
-                  defaultValue={salesOrder.location_id ?? ''}
-                >
-                  <option value="">Not set</option>
-                  {((locations ?? []) as PickerLocation[]).map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label" htmlFor="order_date">
-                    Order date
+                    P.O. date
                   </label>
                   <input
                     id="order_date"
@@ -297,16 +351,45 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 </div>
 
                 <div>
+                  <label className="label" htmlFor="owner_id">
+                    Representative
+                  </label>
+                  <select
+                    id="owner_id"
+                    name="owner_id"
+                    className="input"
+                    defaultValue={salesOrder.owner_id ?? ''}
+                  >
+                    <option value="">Unassigned</option>
+                    {((users ?? []) as PickerUser[]).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name || user.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="payment_terms">
+                    Payment terms
+                  </label>
+                  <input
+                    id="payment_terms"
+                    name="payment_terms"
+                    className="input"
+                    defaultValue={salesOrder.payment_terms ?? ''}
+                    placeholder="Net 30, COD, Prepaid"
+                  />
+                </div>
+
+                <div>
                   <label className="label" htmlFor="currency">
                     Currency
                   </label>
                   {/*
-                    A list, not a free-text box. Three characters accepted
-                    anything, and a typo does not fail — it renders as a blank
-                    symbol on a document that has already gone to a customer.
-                    Frozen once the order leaves draft, because changing it
-                    converts nothing: every stored figure keeps its number and
-                    quietly acquires a new label.
+                    A list, not a free-text box. Frozen once the order leaves
+                    draft, because changing it converts nothing: every stored
+                    figure keeps its number and quietly acquires a new label.
                   */}
                   <select
                     id="currency"
@@ -327,54 +410,69 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                     </p>
                   )}
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="shipping_charge">
-                    Shipping
-                  </label>
-                  <input
-                    id="shipping_charge"
-                    name="shipping_charge"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="input"
-                    defaultValue={String(salesOrder.shipping_charge)}
-                  />
-                </div>
 
                 <div>
-                  <label className="label" htmlFor="payment_terms">
-                    Payment terms
+                  <label className="label" htmlFor="location_id">
+                    Fulfilling from
                   </label>
-                  <input
-                    id="payment_terms"
-                    name="payment_terms"
+                  <select
+                    id="location_id"
+                    name="location_id"
                     className="input"
-                    defaultValue={salesOrder.payment_terms ?? ''}
-                    placeholder="Net 30"
-                  />
+                    defaultValue={salesOrder.location_id ?? ''}
+                  >
+                    <option value="">Not set</option>
+                    {((locations ?? []) as PickerLocation[]).map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div>
-                <label className="label" htmlFor="notes">
-                  Notes
+              <div className="border-t border-slate-100 pt-3">
+                {/*
+                  A checkbox posts nothing when it is clear, which is
+                  indistinguishable from a card that never asked. The hidden
+                  false in front of it means the key is always sent; the
+                  checkbox overrides it when ticked, because the last value of
+                  a repeated name is the one that wins.
+                */}
+                <input type="hidden" name="deposit_required" value="false" />
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="deposit_required"
+                    value="true"
+                    defaultChecked={salesOrder.deposit_required}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Deposit required
                 </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  className="input"
-                  defaultValue={salesOrder.notes ?? ''}
-                />
+
+                <div className="mt-3">
+                  <label className="label" htmlFor="deposit_information">
+                    Deposit information
+                  </label>
+                  <input
+                    id="deposit_information"
+                    name="deposit_information"
+                    className="input"
+                    defaultValue={salesOrder.deposit_information ?? ''}
+                    placeholder="50% on order, balance before collection"
+                  />
+                  {/* The terms, not the money. What has actually been taken is
+                      the ledger below. */}
+                  <p className="mt-1 text-xs text-slate-400">
+                    What is owed and when. Deposits actually taken are recorded below.
+                  </p>
+                </div>
               </div>
 
               {context.canWrite && (
-                <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">
-                  Save details
+                <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                  Save detail
                 </SubmitButton>
               )}
             </ActionForm>
@@ -413,6 +511,92 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 lineTotal: Number(line.line_total),
               }))}
             />
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Notes & Terms">
+            <ActionForm action={updateSalesOrder} className="grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="id" value={id} />
+
+              <div>
+                <label className="label" htmlFor="notes">
+                  Customer notes
+                </label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  rows={5}
+                  className="input"
+                  defaultValue={salesOrder.notes ?? ''}
+                  placeholder="Anything the customer should see on the order…"
+                />
+              </div>
+
+              <div>
+                <label className="label" htmlFor="terms">
+                  Terms &amp; conditions
+                </label>
+                <textarea
+                  id="terms"
+                  name="terms"
+                  rows={5}
+                  className="input"
+                  defaultValue={salesOrder.terms ?? ''}
+                  placeholder="All sales are final. No exchanges or refunds."
+                />
+              </div>
+
+              {context.canWrite && (
+                <div className="sm:col-span-2">
+                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                    Save notes &amp; terms
+                  </SubmitButton>
+                </div>
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Shipping">
+            <ActionForm action={updateSalesOrder} className="grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="id" value={id} />
+
+              <div>
+                <label className="label" htmlFor="shipping_method">
+                  Shipping method
+                </label>
+                <input
+                  id="shipping_method"
+                  name="shipping_method"
+                  className="input"
+                  defaultValue={salesOrder.shipping_method ?? ''}
+                  placeholder="LTL, container, customer collection…"
+                />
+              </div>
+
+              <div>
+                <label className="label" htmlFor="shipping_responsibility">
+                  Shipping responsibility
+                </label>
+                {/* Free text rather than a fixed list: who arranges carriage is
+                    a term of the deal, and every desk words it differently. */}
+                <input
+                  id="shipping_responsibility"
+                  name="shipping_responsibility"
+                  className="input"
+                  defaultValue={salesOrder.shipping_responsibility ?? ''}
+                  placeholder="Buyer, seller, or who arranges it"
+                />
+              </div>
+
+              {context.canWrite && (
+                <div className="sm:col-span-2">
+                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                    Save shipping
+                  </SubmitButton>
+                </div>
+              )}
+            </ActionForm>
           </Section>
 
           {/* ---------------------------------------------------------------- */}
@@ -505,8 +689,11 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
 
         {/* ------------------------------------------------------------------ */}
         <div className="space-y-5">
-          <Section title="Totals">
+          <Section title="Summary">
             <dl className="space-y-2 text-sm">
+              {/* The count the document prints, which is the lines' quantities
+                  rather than the number of lines. */}
+              <Row label="Total quantity">{formatNumber(totalQuantity)}</Row>
               <Row label="Subtotal">
                 <Money value={totals.subtotal} currency={salesOrder.currency} />
               </Row>

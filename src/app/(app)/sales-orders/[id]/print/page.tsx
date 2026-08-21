@@ -75,7 +75,7 @@ export default async function SalesOrderPrintPage({
 
   return (
     <PrintableDocument
-      kind="Sales order"
+      kind="Purchase order"
       number={order.number}
       status={SALES_ORDER_STATUS_LABELS[order.status]}
       currency={order.currency}

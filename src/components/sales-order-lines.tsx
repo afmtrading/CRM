@@ -363,7 +363,7 @@ function LineBlock({
         {/* A revision is a pair: a kind and a value. The database refuses half
             of one, and the discount follows from both. */}
         <div className="sm:col-span-2">
-          <label className="label">Revised Rate</label>
+          <label className="label">Discount</label>
           <div className="flex gap-1">
             <NumberBox
               value={draft.revisedRate}

@@ -305,7 +305,7 @@ export default async function DeletedRecordsPage() {
           )}
 
           {salesOrderRows.length > 0 && (
-            <Section title="Sales orders">
+            <Section title="Purchase orders">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
