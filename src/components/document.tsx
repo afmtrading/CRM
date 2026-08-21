@@ -54,7 +54,6 @@ export function PrintableDocument({
   payments,
   paymentsTitle,
   notes,
-  terms,
 }: {
   kind: string
   number: string
@@ -73,12 +72,13 @@ export function PrintableDocument({
   paid: number
   payments: DocumentPayment[]
   paymentsTitle: string
-  notes: string | null
   /**
-   * Optional, because only one of the two documents has them now: an invoice
-   * still carries its terms, and a purchase order stopped asking for them.
+   * Notes and nothing after them. Neither document carries terms and
+   * conditions any more, so the column each of them still has is no longer
+   * printed — a document that stopped asking for a thing should not go on
+   * publishing whatever was answered before it stopped.
    */
-  terms?: string | null
+  notes: string | null
 }) {
   const balance = total - paid
 
@@ -193,20 +193,10 @@ export function PrintableDocument({
         </section>
       )}
 
-      {(notes || terms) && (
-        <footer className="mt-8 space-y-3 border-t border-slate-200 pt-6 text-sm">
-          {notes && (
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notes</h2>
-              <p className="whitespace-pre-wrap text-slate-700">{notes}</p>
-            </div>
-          )}
-          {terms && (
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Terms</h2>
-              <p className="whitespace-pre-wrap text-slate-600">{terms}</p>
-            </div>
-          )}
+      {notes && (
+        <footer className="mt-8 border-t border-slate-200 pt-6 text-sm">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notes</h2>
+          <p className="mt-1 whitespace-pre-wrap text-slate-700">{notes}</p>
         </footer>
       )}
     </article>

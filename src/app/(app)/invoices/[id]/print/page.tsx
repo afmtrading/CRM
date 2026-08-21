@@ -89,7 +89,6 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
       }))}
       paymentsTitle="Payments"
       notes={invoice.notes}
-      terms={invoice.terms}
     />
   )
 }

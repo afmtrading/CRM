@@ -595,6 +595,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
+              {/*
+                Notes, and only notes.
+
+                Terms and conditions were here and are gone, as they are on a
+                purchase order — the desk does not want a per-document terms
+                box on either. The column is untouched: the header action no
+                longer reads or writes it, so anything already stored is still
+                there for anybody who wants it back.
+              */}
               <div>
                 <label className="label" htmlFor="notes">
                   Notes
@@ -605,19 +614,6 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                   rows={3}
                   className="input"
                   defaultValue={invoice.notes ?? ''}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="terms">
-                  Terms
-                </label>
-                <textarea
-                  id="terms"
-                  name="terms"
-                  rows={2}
-                  className="input"
-                  defaultValue={invoice.terms ?? ''}
                 />
               </div>
 

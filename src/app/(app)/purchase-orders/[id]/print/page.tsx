@@ -109,8 +109,6 @@ export default async function SalesOrderPrintPage({
       }))}
       paymentsTitle="Deposits"
       notes={order.notes}
-      /* No terms on a purchase order any more. The Document still takes them —
-         an invoice has its own, and still prints them. */
     />
   )
 }
