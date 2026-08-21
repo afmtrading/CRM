@@ -182,3 +182,39 @@ site it is a one-line change.
 One company holds `acme@acme.com` in `domain` — an email address in a column
 that is read as a URL, so `safeUrl` renders it as a `mailto:` link where a
 website should be.
+
+
+## 2026-08-21 — a fixed "Discount" becomes money off, not a new price
+
+`revised_rate_type = 'fixed'` meant the rate *replaced* the unit price, while
+`'percent'` meant a reduction — two meanings under one column labelled
+Discount. Entering `$1` against a $6 unit therefore made the unit $1, not $5.
+The desk asked for the reading the label implies: money off each unit.
+
+`sales_line_discount()` changes with it, so every stored total computed under
+the old reading is now wrong by the definition the database itself holds. The
+two lines that used a fixed rate are restated. Read out of production before
+the change:
+
+```sql
+-- sales_order_lines, before
+-- id                                    order     qty  unit    rate   discount  line_total
+   298b0094-422a-464c-8941-650157c5036e  PO-0006   1    100.00  10.00  90.00     10.00
+   a216b823-5100-4a68-9e08-80fcb922ace3  PO-0007   2      6.00   1.00  10.00      2.00
+
+-- after, under "money off each unit"
+   298b0094-422a-464c-8941-650157c5036e  PO-0006   1    100.00  10.00  10.00     90.00
+   a216b823-5100-4a68-9e08-80fcb922ace3  PO-0007   2      6.00   1.00   2.00     10.00
+```
+
+Both orders are worth more than they were, because a line that read "$10"
+against a $100 unit was charging $10 for it rather than taking $10 off.
+
+Neither has been invoiced — checked before the change, `invoice_lines` joined
+through `invoices.sales_order_id` returns nothing for either — so no issued
+document is restated by this. Percentage lines are untouched: their meaning
+never changed.
+
+Reverting means restoring `fixed` to a replacement price in
+`sales_line_discount()` and in `revisedUnitPrice` in `src/lib/sales.ts`, then
+touching those two rows to recompute. The values above are what they held.

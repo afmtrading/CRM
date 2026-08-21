@@ -22,7 +22,17 @@ import { useFormStatus } from 'react-dom'
  * error boundary in (app)/error.tsx rather than a blank page.
  */
 
-export type ActionState = { error?: string; ok?: string }
+export type ActionState = {
+  error?: string
+  ok?: string
+  /**
+   * The row an action created, when the caller needs to recognise it coming
+   * back from the server. Used by the Items card: a blank line drawn in the
+   * browser stays on screen until the saved one appears in the list, so the
+   * two never swap through a gap where neither is there.
+   */
+  id?: string
+}
 
 export function ActionForm({
   action,

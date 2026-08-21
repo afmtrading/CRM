@@ -171,29 +171,36 @@ begin
     'and the line total follows it down'
   );
 
-  -- A fixed unit price of 80 against a list of 100: 20 off each of ten.
+  -- $80 off a list of 100, ten of them: 800 off. A fixed rate is an amount
+  -- taken off a unit, the same kind of thing a percentage is — it used to
+  -- replace the unit price, which read wrong under a column called Discount.
+  -- See 20260268000000.
   update sales_order_lines
   set revised_rate_type = 'fixed', revised_rate = 80
   where id = v_line;
 
   perform test_assert(
-    (select discount from sales_order_lines where id = v_line) = 200,
-    'a fixed price becomes the difference from list'
+    (select discount from sales_order_lines where id = v_line) = 800,
+    'a fixed rate is money off each unit'
+  );
+  perform test_assert(
+    (select line_total from sales_order_lines where id = v_line) = 200,
+    'and the line total follows it down'
   );
 
-  -- Above list. Somebody typing 120 into a discount field means no discount,
-  -- not a surcharge that quietly inflates the order.
+  -- More off than the unit is worth. Free, and no further: reading the excess
+  -- as money owed back would turn a mistyped discount into a refund.
   update sales_order_lines
   set revised_rate_type = 'fixed', revised_rate = 120
   where id = v_line;
 
   perform test_assert(
-    (select discount from sales_order_lines where id = v_line) = 0,
-    'a fixed price above list is no discount rather than a negative one'
+    (select discount from sales_order_lines where id = v_line) = 1000,
+    'more off than the unit is worth stops at the whole line'
   );
   perform test_assert(
-    (select line_total from sales_order_lines where id = v_line) = 1000,
-    'so the line stays at list'
+    (select line_total from sales_order_lines where id = v_line) = 0,
+    'leaving nothing to pay rather than money owed back'
   );
 
   -- More than 100% off cannot produce a negative unit price.

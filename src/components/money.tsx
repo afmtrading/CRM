@@ -4,6 +4,7 @@ import {
   currencyStyle,
   currencySymbol,
   formatAmount,
+  formatPrice,
   totalsByCurrency,
   usableCurrency,
 } from '@/lib/format'
@@ -26,6 +27,7 @@ export function Money({
   currency,
   className = '',
   amountClassName = '',
+  cents = false,
 }: {
   value: number
   currency: string | null | undefined
@@ -33,6 +35,15 @@ export function Money({
   className?: string
   /** Applied to the number alone, for weight and size. */
   amountClassName?: string
+  /**
+   * Show the cents.
+   *
+   * The default rounds to whole units, which is right for a board of deals
+   * worth tens of thousands and wrong for a document: a purchase order whose
+   * lines come to $4.70 printed a Subtotal of $5, and the difference between a
+   * summary and the lines above it is the kind of thing a customer finds.
+   */
+  cents?: boolean
 }) {
   /*
    * A missing currency used to show as a dash here, which reads as "nothing to
@@ -45,8 +56,18 @@ export function Money({
   return (
     <span className={`inline-flex items-baseline gap-1.5 ${className}`.trim()}>
       <span className={amountClassName || undefined}>
-        {currencySymbol(currency)}
-        {formatAmount(value)}
+        {cents && code ? (
+          /* Only with a known currency: formatPrice says "(no currency)" itself
+             when there isn't one, which the chip beside this already says. */
+          formatPrice(value, code)
+        ) : cents ? (
+          value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        ) : (
+          <>
+            {currencySymbol(currency)}
+            {formatAmount(value)}
+          </>
+        )}
       </span>
       {code ? (
         <span className={`text-xs font-semibold ${currencyStyle(code)}`}>{code}</span>
