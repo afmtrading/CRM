@@ -186,8 +186,17 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
         }
         actions={
           <>
-            <a href={`/purchase-orders/${id}/print`} className="btn-secondary" target="_blank">
-              Print
+            {/*
+              Two doors onto the same route. Opening it previews the document
+              inline, which is what somebody checking one before sending it
+              wants; ?download=1 sets the attachment disposition and saves it
+              as PO-…pdf.
+            */}
+            <a href={`/purchase-orders/${id}/pdf`} className="btn-secondary" target="_blank">
+              Preview
+            </a>
+            <a href={`/purchase-orders/${id}/pdf?download=1`} className="btn-secondary">
+              Download PDF
             </a>
 
             {invoice ? (
@@ -439,6 +448,18 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   checkbox overrides it when ticked, because the last value of
                   a repeated name is the one that wins.
                 */}
+                <input type="hidden" name="show_discount" value="false" />
+                <label className="mb-2 flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="show_discount"
+                    value="true"
+                    defaultChecked={salesOrder.show_discount}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Show the discount column on the document
+                </label>
+
                 <input type="hidden" name="deposit_required" value="false" />
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input

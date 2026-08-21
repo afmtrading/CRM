@@ -93,6 +93,15 @@ const MARKETING_NAV: NavItem[] = [
   { href: '/campaigns', label: 'Campaigns', icon: <SendIcon className={ICON} /> },
 ]
 
+/*
+ * Everybody's, unlike the rest of Settings. It is the one page in there that
+ * is about the person reading it rather than about the business, which is why
+ * it is listed for a rep who sees none of the others.
+ */
+const PROFILE_NAV: NavItem[] = [
+  { href: '/settings/profile', label: 'My profile', icon: <UsersIcon className={ICON} /> },
+]
+
 const ADMIN_NAV: NavItem[] = [
   { href: '/settings/organization', label: 'Organization', icon: <SettingsIcon className={ICON} /> },
   { href: '/settings/pipelines', label: 'Pipelines', icon: <PipelinesIcon className={ICON} /> },
@@ -148,6 +157,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Empty for a regular user, one row for a manager who can import, the lot for
   // an administrator — and an empty group is not drawn at all.
   const settingsItems = [
+    ...PROFILE_NAV,
     ...(isAdmin ? ADMIN_NAV : []),
     ...(context.canManagePermissions ? PERMISSIONS_NAV : []),
     ...(isAdmin || canBulk ? MANAGER_NAV : []),
@@ -183,12 +193,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         footer={
           <div className="border-t border-slate-200/80 p-2 lg:p-3">
             <div className="flex items-center gap-2.5 rounded-xl px-1 py-2 lg:px-2">
-              <div className="sidebar-label hidden min-w-0 flex-1 lg:block">
+              <Link
+                href="/settings/profile"
+                className="sidebar-label hidden min-w-0 flex-1 rounded-lg px-1 py-0.5 hover:bg-slate-100 lg:block"
+              >
                 <p className="truncate text-sm font-medium text-slate-800">{displayName}</p>
                 <p className="truncate text-xs text-slate-500">
                   {USER_ROLE_LABELS[user.role] ?? user.role}
                 </p>
-              </div>
+              </Link>
             </div>
           </div>
         }

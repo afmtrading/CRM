@@ -118,6 +118,8 @@ export type OrganizationRow = {
   logo_url: string | null
   primary_color: string
   default_currency: string
+  /** Printed at the foot of every purchase order and invoice. One wording per organization. */
+  document_terms: string | null
   /**
    * IANA zone. The one clock this organization's reports are read against —
    * an instant becomes a calendar day here and nowhere else, so two people in
@@ -132,6 +134,8 @@ export type UserRow = {
   organization_id: string
   email: string
   name: string
+  /** Printed on the documents this person represents. Theirs, not the switchboard. */
+  phone: string | null
   role: UserRole
   auth_provider_id: string | null
   status: UserStatus
@@ -786,6 +790,8 @@ export type SalesOrderRow = {
   shipping_charge: number
   notes: string | null
   terms: string | null
+  /** Whether the printed document shows what each line was discounted from. */
+  show_discount: boolean
   /** Stamped when the order is first reserved — signed, or a deposit taken. */
   signed_at: string | null
   created_by: string | null
@@ -882,6 +888,8 @@ export type InvoiceRow = {
   payment_terms: string | null
   notes: string | null
   terms: string | null
+  /** Whether the printed document shows what each line was discounted from. */
+  show_discount: boolean
   created_by: string | null
   created_at: string
   updated_at: string

@@ -878,6 +878,43 @@ function currencyOr(value: string, fallback: string): string {
   return (CURRENCIES as readonly string[]).includes(code) ? code : fallback
 }
 
+/**
+ * Somebody's own name and phone.
+ *
+ * requireSession rather than requireAdmin: this is the one thing under
+ * Settings that is not an administrator's. It writes two columns and names
+ * them, so nothing a crafted post adds to the form reaches the row — and the
+ * database refuses the dangerous ones from a non-administrator anyway, which
+ * is the guard that actually holds because it does not depend on this file
+ * staying careful.
+ */
+export async function updateProfile(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireSession()
+
+  const name = String(formData.get('name') ?? '').trim()
+  const phone = String(formData.get('phone') ?? '').trim()
+
+  const { error } = await context.supabase
+    .from('users')
+    .update({
+      // A blank name would leave documents signed by an email address, so the
+      // old one stands rather than being cleared.
+      name: name || context.user.name,
+      phone: phone || null,
+    })
+    .eq('id', context.user.id)
+
+  if (error) return { error: error.message }
+
+  // The sidebar renders the name, so the whole shell has to re-read.
+  revalidatePath('/', 'layout')
+  revalidatePath('/settings/profile')
+  return { ok: 'Saved.' }
+}
+
 export async function updateOrganization(formData: FormData) {
   const context = await requireAdmin()
 
@@ -903,6 +940,8 @@ export async function updateOrganization(formData: FormData) {
        */
       timezone: safeTimeZone(String(formData.get('timezone') ?? '')) ,
       logo_url: String(formData.get('logo_url') ?? '').trim() || null,
+      /* Empty means the documents carry no terms section, which is a real answer. */
+      document_terms: String(formData.get('document_terms') ?? '').trim() || null,
     })
     .eq('id', context.organizationId)
 

@@ -92,6 +92,24 @@ export function OrganizationForm({ organization }: { organization: OrganizationR
       </div>
 
       <div className="sm:col-span-2">
+        <label className="label" htmlFor="org-terms">
+          Terms &amp; conditions
+        </label>
+        <textarea
+          id="org-terms"
+          name="document_terms"
+          rows={3}
+          className="input"
+          placeholder="All sales are final. No exchanges or refunds."
+          defaultValue={organization.document_terms ?? ''}
+        />
+        <p className="mt-1 text-xs text-slate-400">
+          Printed at the foot of every purchase order and invoice. Leave it empty and the
+          section does not appear.
+        </p>
+      </div>
+
+      <div className="sm:col-span-2">
         <button type="submit" className="btn-primary">
           Save organization
         </button>

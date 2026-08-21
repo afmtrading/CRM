@@ -56,6 +56,7 @@ function invoice(overrides: Partial<InvoiceRow> = {}): InvoiceRow {
     payment_terms: null,
     notes: null,
     terms: null,
+    show_discount: true,
     created_by: null,
     created_at: '2026-01-10T00:00:00Z',
     updated_at: '2026-01-10T00:00:00Z',

@@ -127,8 +127,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         }
         actions={
           <>
-            <a href={`/invoices/${id}/print`} className="btn-secondary" target="_blank">
-              Print
+            <a href={`/invoices/${id}/pdf`} className="btn-secondary" target="_blank">
+              Preview
+            </a>
+            <a href={`/invoices/${id}/pdf?download=1`} className="btn-secondary">
+              Download PDF
             </a>
             {salesOrder && (
               <Link href={`/purchase-orders/${salesOrder.id}`} className="btn-secondary">
@@ -604,6 +607,24 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 longer reads or writes it, so anything already stored is still
                 there for anybody who wants it back.
               */}
+              {/*
+                Hidden false in front of the checkbox, for the reason the
+                purchase order's deposit switch gives: a clear checkbox posts
+                nothing, and nothing is indistinguishable from a form that
+                never asked.
+              */}
+              <input type="hidden" name="show_discount" value="false" />
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="show_discount"
+                  value="true"
+                  defaultChecked={invoice.show_discount}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Show the discount column on the document
+              </label>
+
               <div>
                 <label className="label" htmlFor="notes">
                   Notes
