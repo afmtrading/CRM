@@ -78,19 +78,6 @@ export function OrganizationForm({ organization }: { organization: OrganizationR
         />
       </div>
 
-      <div>
-        <label className="label" htmlFor="org-logo">
-          Logo URL
-        </label>
-        <input
-          id="org-logo"
-          name="logo_url"
-          className="input"
-          placeholder="https://…"
-          defaultValue={organization.logo_url ?? ''}
-        />
-      </div>
-
       <div className="sm:col-span-2">
         <label className="label" htmlFor="org-terms">
           Terms &amp; conditions

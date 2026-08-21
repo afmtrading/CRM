@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/tenancy'
 import { timeZoneLabel } from '@/lib/timezone'
 import { PageHeader, Section } from '@/components/ui'
 
+import { LogoField } from './logo-field'
 import { OrganizationForm } from './organization-form'
 
 export const metadata = { title: 'Organization · FLO CRM' }
@@ -19,6 +20,12 @@ export default async function OrganizationSettingsPage() {
   return (
     <>
       <PageHeader title="Organization" />
+
+      {context.isAdmin && (
+        <Section title="Logo">
+          <LogoField organization={context.organization} />
+        </Section>
+      )}
 
       <Section title={context.organization.name}>
         {context.isAdmin ? (

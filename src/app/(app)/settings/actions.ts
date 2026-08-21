@@ -12,6 +12,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
 import { visibilityColumns } from '@/lib/permissions'
+import { LOGO_BUCKET, LOGO_MAX_BYTES, LOGO_TYPES, logoObjectKey, logoObjectPath } from '@/lib/logo'
 import { resolveStatus, wouldRemoveLastAdmin, type UserSnapshot } from '@/lib/users'
 import type { OptionColor, StageOutcome } from '@/lib/database.types'
 
@@ -915,6 +916,108 @@ export async function updateProfile(
   return { ok: 'Saved.' }
 }
 
+// -----------------------------------------------------------------------------
+// The logo
+//
+// Its own action rather than a field on the organization form, because a file
+// input and a text input answer the same question and only one of them can be
+// the answer. Both write `organizations.logo_url`; an upload just fills it in
+// with somewhere this application controls.
+// -----------------------------------------------------------------------------
+
+export async function uploadOrganizationLogo(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireAdmin()
+
+  const file = formData.get('logo') as File | null
+  // An empty file input still posts a File, with nothing in it.
+  if (!file || file.size === 0) return { error: 'Choose an image first.' }
+
+  const extension = LOGO_TYPES[file.type]
+  if (!extension) return { error: 'A logo has to be a PNG or a JPEG.' }
+  if (file.size > LOGO_MAX_BYTES) return { error: 'That image is larger than 2 MB.' }
+
+  const previous = logoObjectPath(context.organization.logo_url)
+  const path = logoObjectKey(context.organizationId, extension, Date.now())
+
+  const { error: uploadError } = await context.supabase.storage
+    .from(LOGO_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false })
+
+  if (uploadError) return { error: uploadError.message }
+
+  const {
+    data: { publicUrl },
+  } = context.supabase.storage.from(LOGO_BUCKET).getPublicUrl(path)
+
+  const { error } = await context.supabase
+    .from('organizations')
+    .update({ logo_url: publicUrl })
+    .eq('id', context.organizationId)
+
+  if (error) {
+    // The row still points at the old logo, so the new object is litter.
+    await context.supabase.storage.from(LOGO_BUCKET).remove([path])
+    return { error: error.message }
+  }
+
+  /*
+   * Only once the row points somewhere else. Best effort: a logo that fails to
+   * delete is a wasted kilobyte, and failing the whole action over it would
+   * report a successful change as broken.
+   */
+  if (previous && previous !== path) {
+    await context.supabase.storage.from(LOGO_BUCKET).remove([previous])
+  }
+
+  revalidatePath('/', 'layout')
+  revalidatePath('/settings/organization')
+  return { ok: 'Logo updated.' }
+}
+
+/** Points the organization at a logo hosted somewhere else, or at none. */
+export async function setOrganizationLogoUrl(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireAdmin()
+
+  const url = String(formData.get('logo_url') ?? '').trim()
+
+  if (url !== '') {
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return { error: 'That is not a URL.' }
+    }
+    // The same two schemes the renderer will accept when it fetches this.
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { error: 'A logo URL has to start with http:// or https://.' }
+    }
+  }
+
+  const previous = logoObjectPath(context.organization.logo_url)
+
+  const { error } = await context.supabase
+    .from('organizations')
+    .update({ logo_url: url || null })
+    .eq('id', context.organizationId)
+
+  if (error) return { error: error.message }
+
+  // Whatever we were hosting is now unreferenced.
+  if (previous && previous !== logoObjectPath(url)) {
+    await context.supabase.storage.from(LOGO_BUCKET).remove([previous])
+  }
+
+  revalidatePath('/', 'layout')
+  revalidatePath('/settings/organization')
+  return { ok: url ? 'Logo updated.' : 'Logo removed.' }
+}
+
 export async function updateOrganization(formData: FormData) {
   const context = await requireAdmin()
 
@@ -939,7 +1042,6 @@ export async function updateOrganization(formData: FormData) {
        * throws mid-render rather than after being saved.
        */
       timezone: safeTimeZone(String(formData.get('timezone') ?? '')) ,
-      logo_url: String(formData.get('logo_url') ?? '').trim() || null,
       /* Empty means the documents carry no terms section, which is a real answer. */
       document_terms: String(formData.get('document_terms') ?? '').trim() || null,
     })
