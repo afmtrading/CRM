@@ -45,12 +45,26 @@ would have collided with the rewritten `SO-0001`; after it, `PO-0004` and
 
 ### Reverting
 
-The prefix is the only thing that moved, so the inverse is exact. The orders
-are the five with `PO-` numbers and no others existed at the time.
+The prefix is the only thing that moved, so the inverse is exact. These are the
+five rows, read out of production before the change was made:
+
+| id | was | is |
+| --- | --- | --- |
+| `1b92ff8c-65fc-4063-ad6b-8dd378db3798` | SO-0001 | PO-0001 |
+| `ba1726c3-b957-4848-a6eb-a6b9cc00bed5` | SO-0002 | PO-0002 |
+| `68addbf4-315e-4e5d-b2db-9ea582a3fdb0` | SO-0003 | PO-0003 |
+| `eba7f846-d182-4fb6-9f7b-484f68f15035` | SO-0004 | PO-0004 |
+| `f3755466-96c4-4257-afbe-0fcf0f0da2c5` | SO-0005 | PO-0005 |
 
 ```sql
 update sales_orders set number = 'SO-' || substring(number from 4)
-where number like 'PO-%';
+where id in (
+  '1b92ff8c-65fc-4063-ad6b-8dd378db3798',
+  'ba1726c3-b957-4848-a6eb-a6b9cc00bed5',
+  '68addbf4-315e-4e5d-b2db-9ea582a3fdb0',
+  'eba7f846-d182-4fb6-9f7b-484f68f15035',
+  'f3755466-96c4-4257-afbe-0fcf0f0da2c5'
+);
 ```
 
 `create_sales_order` would also need to pass `'SO'` again — the definition
