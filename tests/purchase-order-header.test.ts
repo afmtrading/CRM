@@ -107,6 +107,11 @@ describe('the checkbox pairs', () => {
 
   it('reads the hidden false alone as false', () => {
     expect(patchFor({ show_discount: 'false' })).toEqual({ show_discount: false })
-    expect(patchFor({ deposit_required: 'false' })).toEqual({ deposit_required: false })
+  })
+
+  it('no longer carries deposit_required at all', () => {
+    // The checkbox is gone. The column keeps whatever it held, which means no
+    // save may write it — not even to false.
+    expect(patchFor({ deposit_required: 'true' })).toEqual({})
   })
 })

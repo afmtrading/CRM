@@ -51,12 +51,13 @@ export const headerSchema = z.object({
     .trim()
     .transform((value) => value === 'true' || value === 'on')
     .default('true'),
-  /* A checkbox, sent as a pair — see the note on the card that renders it. */
-  deposit_required: z
-    .string()
-    .trim()
-    .transform((value) => value === 'true' || value === 'on')
-    .default('false'),
+  /*
+   * `deposit_required` was here and is gone: the desk does not want the
+   * checkbox. The column is untouched — nothing posts the key now, so the
+   * `has` walk never writes it — and whatever an order already said is still
+   * stored. Deposit information stays, and so do the deposits themselves,
+   * which were always rows rather than a flag.
+   */
   deposit_information: z.string().max(2_000).default(''),
   /*
    * Optional, like everything else on a header now spread across five cards.

@@ -261,6 +261,23 @@ export function daysOverdue(dueDate: string | null, today: string): number {
  * is here because a table cell with nothing in it is worse than a placeholder,
  * and because an invoice line's name is a snapshot that may outlive its product.
  */
+/**
+ * Whether a line says what it is.
+ *
+ * The same question as the check constraint on `sales_order_lines`:
+ *
+ *     check (product_id is not null
+ *            or nullif(btrim(coalesce(description, '')), '') is not null)
+ *
+ * Asked here so the Items card can hold a blank new row in the browser until
+ * it is worth writing. Inserting one that fails this reaches the database,
+ * throws, and puts an error page in front of somebody who clicked Add line —
+ * which is exactly what happened when the rule was briefly lifted.
+ */
+export function isNamed(line: { productId: string; description: string }): boolean {
+  return Boolean(line.productId) || line.description.trim() !== ''
+}
+
 export function lineName(
   line: Pick<SalesOrderLineRow, 'description'>,
   productName?: string | null,
