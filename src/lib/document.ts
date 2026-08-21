@@ -108,6 +108,35 @@ export function documentDetails(
 }
 
 /**
+ * The details box on a sales order, and which field answers each label.
+ *
+ * Named here rather than assembled inline, because the failure this had was
+ * not a rendering bug: the row labelled Shipping read `shipping_method`, so an
+ * order that said "FOB" against who ships and nothing against how printed no
+ * Shipping row at all. A label pointing at the wrong field is invisible in a
+ * route and obvious in a test.
+ */
+export function salesOrderDetails(order: {
+  location: string | null | undefined
+  representative: string | null | undefined
+  paymentTerms: string | null | undefined
+  currency: string | null | undefined
+  /** Who moves the goods — the field the card calls Shipping. */
+  shipping: string | null | undefined
+  /** What they move them in. */
+  shippingMethod: string | null | undefined
+}): DocumentDetail[] {
+  return documentDetails([
+    { label: 'Location', value: order.location },
+    { label: 'Representative', value: order.representative },
+    { label: 'Payment Terms', value: order.paymentTerms },
+    { label: 'Currency', value: order.currency },
+    { label: 'Shipping', value: order.shipping },
+    { label: 'Shipping method', value: order.shippingMethod },
+  ])
+}
+
+/**
  * Whether a party has anything on it at all.
  *
  * An object whose every field is null is not a party — it is the shape of one.
