@@ -244,21 +244,26 @@ export async function addSalesOrderLine(
     .limit(1)
     .maybeSingle()
 
-  const { error } = await scoped(context, 'sales_order_lines').insert({
-    organization_id: context.organizationId,
-    sales_order_id: orderId,
-    ...parsed.data,
-    description: parsed.data.description || null,
-    notes: parsed.data.notes || null,
-    unit: parsed.data.unit || null,
-    revised_rate_type: parsed.data.revised_rate_type as RevisedRateType | null,
-    position: (last?.position ?? -1) + 1,
-  })
+  const { data: created, error } = await scoped(context, 'sales_order_lines')
+    .insert({
+      organization_id: context.organizationId,
+      sales_order_id: orderId,
+      ...parsed.data,
+      description: parsed.data.description || null,
+      notes: parsed.data.notes || null,
+      unit: parsed.data.unit || null,
+      revised_rate_type: parsed.data.revised_rate_type as RevisedRateType | null,
+      position: (last?.position ?? -1) + 1,
+    })
+    // The id goes back so the card can tell its own blank row from the saved
+    // one, and hold the first until the second arrives.
+    .select('id')
+    .single()
 
   if (error) throw new Error(error.message)
 
   revalidatePath(`/purchase-orders/${orderId}`)
-  return { ok: 'Line added.' }
+  return { ok: 'Line added.', id: created?.id }
 }
 
 /**

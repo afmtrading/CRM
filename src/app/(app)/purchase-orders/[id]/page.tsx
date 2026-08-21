@@ -190,11 +190,10 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     <>
       <PageHeader
         title={salesOrder.number}
-        description={
-          company
-            ? `${company.name} · ${SALES_ORDER_STATUS_HINTS[salesOrder.status]}`
-            : SALES_ORDER_STATUS_HINTS[salesOrder.status]
-        }
+        /* The company, and nothing else. The status hint that used to follow it
+           explained the badge in words nobody recognised — "Signed, or a
+           deposit taken" for Reserved — and the badge is right there. */
+        description={company?.name}
         actions={
           <>
             {/*
@@ -711,36 +710,43 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   rather than the number of lines. */}
               <Row label="Total quantity">{formatNumber(totalQuantity)}</Row>
               <Row label="Subtotal">
-                <Money value={totals.subtotal} currency={salesOrder.currency} />
+                <Money value={totals.subtotal} currency={salesOrder.currency} cents />
               </Row>
               <Row label="Shipping">
-                <Money value={totals.shipping} currency={salesOrder.currency} />
+                <Money value={totals.shipping} currency={salesOrder.currency} cents />
               </Row>
               <Row label="Total" strong>
-                <Money value={totals.total} currency={salesOrder.currency} />
+                <Money value={totals.total} currency={salesOrder.currency} cents />
               </Row>
               <Row label="Deposits">
-                <Money value={totals.paid} currency={salesOrder.currency} />
+                <Money value={totals.paid} currency={salesOrder.currency} cents />
               </Row>
               <Row label="Balance" strong>
-                <Money value={totals.balance} currency={salesOrder.currency} />
+                <Money value={totals.balance} currency={salesOrder.currency} cents />
               </Row>
             </dl>
 
-            <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
-              {/* The deal ledger's rule: not knowing is not the same as zero. */}
-              {margin === null
-                ? 'Margin unknown — no line carries a cost.'
-                : `Margin ${formatPrice(margin, salesOrder.currency)} from the line costs.`}
-            </p>
+            {/*
+              The margin line is gone. It spent most of its life saying it did
+              not know, because a purchase order's lines rarely carry a cost —
+              a sentence that is usually an apology is not worth the room.
+            */}
+            {margin !== null && (
+              <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                Margin {formatPrice(margin, salesOrder.currency)} from the line costs.
+              </p>
+            )}
           </Section>
 
           <Section title="Record">
             <dl className="space-y-2 text-sm">
               <Row label="Raised">{formatDate(salesOrder.created_at)}</Row>
-              <Row label="Signed">
-                {salesOrder.signed_at ? formatDate(salesOrder.signed_at) : 'Not yet'}
-              </Row>
+              {/*
+                "Signed" is gone. signed_at is stamped when an order is
+                reserved, which is not the same as anybody signing anything —
+                so the row asserted something the data does not know. The
+                column is untouched; nothing here reads it now.
+              */}
               <Row label="Owner">{owner ? owner.name || owner.email : 'Unassigned'}</Row>
             </dl>
 

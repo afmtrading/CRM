@@ -271,8 +271,11 @@ function LineBlock({
    * card's rule is unchanged: the row is the form.
    */
   unsaved?: boolean
-  /** Told once this row exists on the server, so the parent can stop drawing it. */
-  onSaved?: () => void
+  /**
+   * Told the id of the row that was created, so the parent can keep drawing
+   * this one until the saved one arrives and the swap has no gap in it.
+   */
+  onSaved?: (id: string | undefined) => void
 }) {
   const [draft, setDraft] = useState(() => draftOf(line))
   const [error, setError] = useState<string | null>(null)
@@ -302,9 +305,7 @@ function LineBlock({
           setError(result.error)
           return
         }
-        // The transition covers the revalidation, so by now the saved row is
-        // in the list and this one can go without a gap between the two.
-        onSaved?.()
+        onSaved?.(result.id)
       })
       return
     }
@@ -582,12 +583,22 @@ export function SalesOrderLines({
    * Keyed by a counter rather than by their position, so typing into one does
    * not follow the wrong row when another is added or saved above it.
    */
-  const [blanks, setBlanks] = useState<number[]>([])
+  const [blanks, setBlanks] = useState<{ key: number; savedId?: string }[]>([])
   const nextKey = useRef(0)
+
+  /*
+   * A blank stops being drawn only once the row it became is in `lines`.
+   *
+   * Dropping it the moment the insert returned left two seconds where the
+   * browser had let go of its copy and the server's had not arrived yet, so
+   * the line somebody had just filled in vanished and came back.
+   */
+  const saved = new Set(lines.map((line) => line.id))
+  const pending = blanks.filter((blank) => !blank.savedId || !saved.has(blank.savedId))
 
   return (
     <div className="space-y-3">
-      {lines.length === 0 && blanks.length === 0 && (
+      {lines.length === 0 && pending.length === 0 && (
         <p className="text-sm text-slate-500">
           Nothing on this order yet. Add a product, or a line of your own.
         </p>
@@ -605,17 +616,21 @@ export function SalesOrderLines({
         />
       ))}
 
-      {blanks.map((key) => (
+      {pending.map((blank) => (
         <LineBlock
-          key={`blank-${key}`}
-          line={blankLine(`blank-${key}`)}
+          key={`blank-${blank.key}`}
+          line={blankLine(`blank-${blank.key}`)}
           orderId={orderId}
           currency={currency}
           products={products}
           units={units}
           editable={editable}
           unsaved
-          onSaved={() => setBlanks((was) => was.filter((one) => one !== key))}
+          onSaved={(id) =>
+            setBlanks((was) =>
+              was.map((one) => (one.key === blank.key ? { ...one, savedId: id } : one)),
+            )
+          }
         />
       ))}
 
@@ -631,7 +646,7 @@ export function SalesOrderLines({
              */
             const key = nextKey.current
             nextKey.current += 1
-            setBlanks((was) => [...was, key])
+            setBlanks((was) => [...was, { key }])
           }}
           className="btn-secondary"
         >

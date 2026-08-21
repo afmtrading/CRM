@@ -117,20 +117,31 @@ describe('a revised rate', () => {
     expect(lineTotal(10, 100, 'percent', 10)).toBe(900)
   })
 
-  it('replaces the unit price outright', () => {
-    expect(revisedUnitPrice(100, 'fixed', 80)).toBe(80)
-    expect(lineDiscount(10, 100, 'fixed', 80)).toBe(200)
-    expect(lineTotal(10, 100, 'fixed', 80)).toBe(800)
+  /*
+   * A fixed rate is money off a unit, the same kind of thing a percentage is.
+   * It used to replace the unit price outright, which read as "$1 means the
+   * unit is now $1" under a column labelled Discount — see 20260268000000.
+   */
+  it('takes a fixed amount off each unit', () => {
+    expect(revisedUnitPrice(100, 'fixed', 80)).toBe(20)
+    expect(lineDiscount(10, 100, 'fixed', 80)).toBe(800)
+    expect(lineTotal(10, 100, 'fixed', 80)).toBe(200)
+  })
+
+  /** The line off the desk's own order: 2 at $6, a dollar off each. */
+  it('the case that prompted the change', () => {
+    expect(revisedUnitPrice(6, 'fixed', 1)).toBe(5)
+    expect(lineTotal(2, 6, 'fixed', 1)).toBe(10)
   })
 
   /*
-   * Somebody typing 120 into a field labelled as a revision meant to charge
-   * list. Reading it as a surcharge would quietly inflate the order, which is
-   * the worst available interpretation.
+   * More off than the unit is worth. Free, and no further: reading the excess
+   * as money owed back would turn a mistyped discount into a refund.
    */
-  it('treats a fixed price above list as no discount, never a surcharge', () => {
-    expect(lineDiscount(10, 100, 'fixed', 120)).toBe(0)
-    expect(lineTotal(10, 100, 'fixed', 120)).toBe(1000)
+  it('stops at free when the discount exceeds the price', () => {
+    expect(revisedUnitPrice(100, 'fixed', 120)).toBe(0)
+    expect(lineDiscount(10, 100, 'fixed', 120)).toBe(1000)
+    expect(lineTotal(10, 100, 'fixed', 120)).toBe(0)
   })
 
   it('stops at free rather than paying the customer', () => {
@@ -142,7 +153,8 @@ describe('a revised rate', () => {
   it('handles the boundary exactly', () => {
     expect(lineTotal(10, 100, 'percent', 100)).toBe(0)
     expect(lineTotal(10, 100, 'percent', 0)).toBe(1000)
-    expect(lineTotal(10, 100, 'fixed', 0)).toBe(0)
+    // Nothing off is the list price, where it used to mean "the unit is now 0".
+    expect(lineTotal(10, 100, 'fixed', 0)).toBe(1000)
   })
 
   /* A half of a pair is a line nobody can price; the database refuses it, and
@@ -154,7 +166,7 @@ describe('a revised rate', () => {
 
   it('says how a revision reads', () => {
     expect(revisionLabel('percent', 10, 'USD')).toBe('10% off')
-    expect(revisionLabel('fixed', 80, 'USD')).toBe('at $80.00')
+    expect(revisionLabel('fixed', 80, 'USD')).toBe('$80.00 off')
     expect(revisionLabel(null, null, 'USD')).toBeNull()
   })
 })

@@ -38,15 +38,23 @@ export function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
-/** What one unit costs after a revised rate — the list price when there is none. */
+/**
+ * What one unit costs after a revised rate — the list price when there is none.
+ *
+ * Both kinds mean an amount taken off. `fixed` used to mean a *replacement*
+ * price, which was defensible while the column was called Revised Rate and
+ * wrong once it was called Discount: $1 against a $6 unit made the unit $1
+ * rather than $5. Changed in 20260268000000, on both sides at once.
+ */
 export function revisedUnitPrice(
   unitPrice: number,
   rateType: RevisedRateType | null | undefined,
   rate: number | null | undefined,
 ): number {
   if (!rateType || rate === null || rate === undefined) return unitPrice
-  // Never below zero: 150% off is the whole line, not money owed back.
-  return Math.max(0, rateType === 'percent' ? unitPrice * (1 - rate / 100) : rate)
+  // Never below zero: 150% off, or $20 off a $6 unit, is a free unit rather
+  // than money owed back.
+  return Math.max(0, rateType === 'percent' ? unitPrice * (1 - rate / 100) : unitPrice - rate)
 }
 
 /**
@@ -299,7 +307,9 @@ export function revisionLabel(
 ): string | null {
   if (!rateType || rate === null || rate === undefined) return null
   if (rateType === 'percent') return `${rate}% off`
-  return `at ${formatPrice(rate, currency)}`
+  // "off", not "at": a fixed rate is money taken off a unit now, not the price
+  // the unit becomes. See 20260268000000.
+  return `${formatPrice(rate, currency)} off`
 }
 
 /**
