@@ -16,7 +16,7 @@ import { EmptyState, ErrorNote, PageHeader, SalesOrderStatusBadge } from '@/comp
 
 import { createSalesOrder } from './actions'
 
-export const metadata = { title: 'Sales orders · FLO CRM' }
+export const metadata = { title: 'Purchase orders · FLO CRM' }
 
 export const dynamic = 'force-dynamic'
 
@@ -99,7 +99,7 @@ export default async function SalesOrdersPage({
   return (
     <>
       <PageHeader
-        title="Sales orders"
+        title="Purchase orders"
         actions={
           <>
             <Link href="/invoices" className="btn-secondary">
@@ -191,7 +191,7 @@ export default async function SalesOrdersPage({
 
       {orders.length === 0 ? (
         <EmptyState
-          title="No sales orders yet"
+          title="No purchase orders yet"
           description="An order records what a customer bought. It does not need a deal behind it."
         />
       ) : (

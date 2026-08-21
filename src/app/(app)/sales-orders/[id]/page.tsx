@@ -12,9 +12,7 @@ import {
   invoiceBlockedReason,
   isEditable,
   ledgerBalance,
-  lineName,
   nextStatuses,
-  revisionLabel,
 } from '@/lib/sales'
 import type {
   InvoiceRow,
@@ -24,21 +22,29 @@ import type {
 } from '@/lib/database.types'
 
 /* What each picker actually reads, so the query can ask for exactly that. */
-type PickerCompany = { id: string; name: string }
-type PickerContact = { id: string; first_name: string; last_name: string; email: string | null }
+type PickerCompany = { id: string; name: string; code: string | null }
+type PickerContact = {
+  id: string
+  first_name: string
+  last_name: string
+  email: string | null
+  phone: string | null
+  company_id: string | null
+}
 type PickerUser = { id: string; name: string; email: string }
 type PickerLocation = { id: string; name: string }
 type PickerProduct = { id: string; name: string; sku: string | null; unit: string }
 import { Money } from '@/components/money'
+import { Empty } from '@/components/contact-cards'
+import { CompanyContactPickers } from '@/components/party-pickers'
+import { SalesOrderLines } from '@/components/sales-order-lines'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
 
 import {
-  addSalesOrderLine,
   convertToInvoice,
   deleteSalesOrder,
   recordDeposit,
-  removeSalesOrderLine,
   setSalesOrderStatus,
   updateSalesOrder,
 } from '../actions'
@@ -76,7 +82,6 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     { data: locations },
     { data: products },
     { data: invoiceRow },
-    { data: channelRows },
   ] = await Promise.all([
     scoped(context, 'sales_order_lines')
       .select('*')
@@ -94,12 +99,14 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
      * fields.
      */
     scoped(context, 'companies')
-      .select('id, name')
+      // `code` is the Customer ID the order prints — see 20260264000000.
+      .select('id, name, code')
       .is('deleted_at', null)
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'contacts')
-      .select('id, first_name, last_name, email')
+      // company_id is what lets the contact picker narrow to one company.
+      .select('id, first_name, last_name, email, phone, company_id')
       .is('deleted_at', null)
       .order('last_name')
       .limit(PICKER_LIMIT),
@@ -112,24 +119,28 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'invoices').select('*').eq('sales_order_id', id).maybeSingle(),
-    /*
-     * The channels a sale can be attributed to. Sell-side only: money running
-     * the other way is a purchase, and the database refuses a source-only
-     * marketplace here anyway — this keeps the picker from offering one.
-     */
-    scoped(context, 'marketplace_profiles')
-      .select('company_id, companies(name)')
-      .eq('sells_through', true),
   ])
 
   const lines = (lineRows ?? []) as SalesOrderLineRow[]
   const payments = (paymentRows ?? []) as SalesOrderPaymentRow[]
   const invoice = invoiceRow as InvoiceRow | null
-  const channels = ((channelRows ?? []) as { company_id: string; companies: { name: string } | null }[])
-    .map((row) => ({ id: row.company_id, name: row.companies?.name ?? 'Unnamed' }))
-    .sort((a, b) => a.name.localeCompare(b.name))
   const catalogue = (products ?? []) as PickerProduct[]
-  const productById = new Map(catalogue.map((product) => [product.id, product]))
+
+  /*
+   * What a line may be counted in: whatever this organization's catalogue
+   * already uses, plus the three every warehouse has. Drawn from the data
+   * rather than from a settings screen nobody asked for — an organization that
+   * counts in cases already has "Case" on its products.
+   */
+  const units = [
+    ...new Set(
+      ['Unit', 'Case', 'Pallet']
+        .concat(catalogue.map((product) => product.unit ?? ''))
+        .concat(lines.map((line) => line.unit ?? ''))
+        .map((unit) => unit.trim())
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b))
 
   const deposits = ledgerBalance(payments)
   const totals = documentTotals(lines, Number(salesOrder.shipping_charge), deposits)
@@ -137,7 +148,31 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
   const editable = isEditable(salesOrder.status) && context.canWrite
   const blocked = invoiceBlockedReason(salesOrder.status)
 
-  const company = ((companies ?? []) as PickerCompany[]).find((c) => c.id === salesOrder.company_id)
+  const companyList = (companies ?? []) as PickerCompany[]
+  const company = companyList.find((c) => c.id === salesOrder.company_id)
+
+  /* The two pickers' shapes: a company is a name, a contact is a name and the
+     company it lets the list narrow to. */
+  const companyOptions = companyList.map((one) => ({ id: one.id, name: one.name }))
+
+  /*
+   * The two people the document has to be able to reach, read from their own
+   * records rather than copied onto the order. An email kept in two places is
+   * an email that can disagree with itself.
+   */
+  const contactList = (contacts ?? []) as PickerContact[]
+  const billTo = contactList.find((one) => one.id === salesOrder.contact_id)
+  const shipTo = contactList.find((one) => one.id === salesOrder.ship_to_contact_id)
+
+  /* What the lines add up to in units, which the printed document leads with. */
+  const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity), 0)
+  const companyNames = new Map(companyList.map((one) => [one.id, one.name]))
+  const contactOptions = ((contacts ?? []) as PickerContact[]).map((one) => ({
+    id: one.id,
+    label: [one.first_name, one.last_name].filter(Boolean).join(' ') || (one.email ?? 'Unnamed'),
+    companyId: one.company_id,
+    companyName: one.company_id ? (companyNames.get(one.company_id) ?? null) : null,
+  }))
   const owner = ((users ?? []) as PickerUser[]).find((u) => u.id === salesOrder.owner_id)
 
   return (
@@ -206,205 +241,362 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           {/* ---------------------------------------------------------------- */}
-          <Section title="Lines">
-            {lines.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Nothing on this order yet. Add a product, or a line of your own.
-              </p>
-            ) : (
-              <div className="-mx-5 overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th className="text-right">Qty</th>
-                      <th className="text-right">Price</th>
-                      <th className="text-right">Discount</th>
-                      <th className="text-right">Total</th>
-                      {editable && <th />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line) => {
-                      const product = line.product_id ? productById.get(line.product_id) : null
-                      const revision = revisionLabel(
-                        line.revised_rate_type,
-                        line.revised_rate,
-                        salesOrder.currency,
-                      )
+          {/*
+            Who it is for, and where it goes.
+            
+            Two parties rather than one: the business being billed is not always
+            the address the goods arrive at — a broker buys and a warehouse
+            receives — and a document that can only name one of them makes the
+            other somebody's note. Ship to empty means "the same as bill to",
+            which is the ordinary case and is why nothing is defaulted into it.
+          */}
+          <Section title="Customer & Shipping">
+            <ActionForm action={updateSalesOrder} className="grid gap-5 sm:grid-cols-2">
+              <input type="hidden" name="id" value={id} />
 
-                      return (
-                        <tr key={line.id}>
-                          <td>
-                            <span className="font-medium text-slate-800">
-                              {lineName(line, product?.name)}
-                            </span>
-                            {product?.sku && (
-                              <span className="ml-1.5 text-xs text-slate-400">{product.sku}</span>
-                            )}
-                            {line.notes && (
-                              <span className="block text-xs text-slate-500">{line.notes}</span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {formatNumber(Number(line.quantity))}
-                            {product?.unit && (
-                              <span className="ml-1 text-xs text-slate-400">{product.unit}</span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {formatPrice(Number(line.unit_price), salesOrder.currency)}
-                            {revision && (
-                              <span className="block text-xs text-amber-600">{revision}</span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {Number(line.discount) > 0 ? (
-                              formatPrice(Number(line.discount), salesOrder.currency)
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
-                          </td>
-                          <td className="text-right font-medium">
-                            {formatPrice(Number(line.line_total), salesOrder.currency)}
-                          </td>
-                          {editable && (
-                            <td className="text-right">
-                              <ActionForm action={removeSalesOrderLine}>
-                                <input type="hidden" name="id" value={line.id} />
-                                <input type="hidden" name="sales_order_id" value={id} />
-                                <SubmitButton
-                                  className="text-xs text-slate-400 hover:text-red-600"
-                                  pendingLabel="Removing…"
-                                >
-                                  Remove
-                                </SubmitButton>
-                              </ActionForm>
-                            </td>
-                          )}
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  Bill to
+                </h3>
+                <CompanyContactPickers
+                  idPrefix="bill-to"
+                  companies={companyOptions}
+                  contacts={contactOptions}
+                  defaultCompanyId={salesOrder.company_id ?? ''}
+                  defaultContactId={salesOrder.contact_id ?? ''}
+                />
+                {/*
+                  Read from the records rather than typed again here. An email
+                  kept in two places is an email that can disagree with itself,
+                  and the one on the contact is the one the rest of the app
+                  writes to.
+                */}
+                <dl className="space-y-1 border-t border-slate-100 pt-3 text-sm">
+                  <Row label="Customer ID">{company?.code ?? <Empty />}</Row>
+                  <Row label="Contact email">{billTo?.email ?? <Empty />}</Row>
+                  <Row label="Contact phone">{billTo?.phone ?? <Empty />}</Row>
+                </dl>
               </div>
-            )}
 
-            {editable && (
-              <ActionForm
-                action={addSalesOrderLine}
-                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-6"
-              >
-                <input type="hidden" name="sales_order_id" value={id} />
-
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="product_id">
-                    Product
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  Ship to
+                </h3>
+                <CompanyContactPickers
+                  idPrefix="ship-to"
+                  companyName="ship_to_company_id"
+                  contactName="ship_to_contact_id"
+                  companies={companyOptions}
+                  contacts={contactOptions}
+                  defaultCompanyId={salesOrder.ship_to_company_id ?? ''}
+                  defaultContactId={salesOrder.ship_to_contact_id ?? ''}
+                />
+                <div>
+                  <label className="label" htmlFor="shipping_address">
+                    Shipping address
                   </label>
-                  <select id="product_id" name="product_id" className="input">
-                    <option value="">A line of my own</option>
-                    {catalogue.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                        {product.sku ? ` · ${product.sku}` : ''}
+                  {/* Free text, because an address given for one order is not
+                      necessarily the address on the company record. */}
+                  <textarea
+                    id="shipping_address"
+                    name="shipping_address"
+                    rows={3}
+                    className="input"
+                    defaultValue={salesOrder.shipping_address ?? ''}
+                    placeholder="Where the goods go"
+                  />
+                </div>
+                <dl className="space-y-1 border-t border-slate-100 pt-3 text-sm">
+                  <Row label="Contact email">{shipTo?.email ?? <Empty />}</Row>
+                  <Row label="Contact phone">{shipTo?.phone ?? <Empty />}</Row>
+                </dl>
+              </div>
+
+              {context.canWrite && (
+                <div className="sm:col-span-2">
+                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                    Save customer &amp; shipping
+                  </SubmitButton>
+                </div>
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Purchase Order Detail">
+            <ActionForm action={updateSalesOrder} className="space-y-3">
+              <input type="hidden" name="id" value={id} />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label">P.O. #</label>
+                  {/* Allocated once at creation and never reissued, which is
+                      why it is shown rather than offered. */}
+                  <p className="input bg-slate-50 font-medium text-slate-900">
+                    {salesOrder.number}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="order_date">
+                    P.O. date
+                  </label>
+                  <input
+                    id="order_date"
+                    name="order_date"
+                    type="date"
+                    className="input"
+                    defaultValue={salesOrder.order_date}
+                  />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="owner_id">
+                    Representative
+                  </label>
+                  <select
+                    id="owner_id"
+                    name="owner_id"
+                    className="input"
+                    defaultValue={salesOrder.owner_id ?? ''}
+                  >
+                    <option value="">Unassigned</option>
+                    {((users ?? []) as PickerUser[]).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name || user.email}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="description">
-                    Or a description
-                  </label>
-                  <input id="description" name="description" className="input" placeholder="Freight" />
-                </div>
-
                 <div>
-                  <label className="label" htmlFor="quantity">
-                    Quantity
+                  <label className="label" htmlFor="payment_terms">
+                    Payment terms
                   </label>
                   <input
-                    id="quantity"
-                    name="quantity"
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    defaultValue="1"
+                    id="payment_terms"
+                    name="payment_terms"
                     className="input"
+                    defaultValue={salesOrder.payment_terms ?? ''}
+                    placeholder="Net 30, COD, Prepaid"
                   />
                 </div>
 
                 <div>
-                  <label className="label" htmlFor="unit_price">
-                    Unit price
+                  <label className="label" htmlFor="currency">
+                    Currency
                   </label>
-                  <input
-                    id="unit_price"
-                    name="unit_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue="0"
+                  {/*
+                    A list, not a free-text box. Frozen once the order leaves
+                    draft, because changing it converts nothing: every stored
+                    figure keeps its number and quietly acquires a new label.
+                  */}
+                  <select
+                    id="currency"
+                    name="currency"
                     className="input"
-                  />
+                    defaultValue={salesOrder.currency}
+                    disabled={salesOrder.status !== 'draft'}
+                  >
+                    {CURRENCIES.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
+                      </option>
+                    ))}
+                  </select>
+                  {salesOrder.status !== 'draft' && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      Fixed once the order is confirmed.
+                    </p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="label" htmlFor="unit_cost">
-                    Unit cost
+                  <label className="label" htmlFor="location_id">
+                    Fulfilling from
                   </label>
-                  <input
-                    id="unit_cost"
-                    name="unit_cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue="0"
+                  <select
+                    id="location_id"
+                    name="location_id"
                     className="input"
-                  />
-                </div>
-
-                {/* A revision is a pair: a kind and a value. The database
-                    refuses half of one, and the discount follows from both. */}
-                <div>
-                  <label className="label" htmlFor="revised_rate_type">
-                    Revise by
-                  </label>
-                  <select id="revised_rate_type" name="revised_rate_type" className="input">
-                    <option value="">List price</option>
-                    <option value="percent">% off</option>
-                    <option value="fixed">Fixed price</option>
+                    defaultValue={salesOrder.location_id ?? ''}
+                  >
+                    <option value="">Not set</option>
+                    {((locations ?? []) as PickerLocation[]).map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
+              </div>
 
-                <div>
-                  <label className="label" htmlFor="revised_rate">
-                    Rate
+              <div className="border-t border-slate-100 pt-3">
+                {/*
+                  A checkbox posts nothing when it is clear, which is
+                  indistinguishable from a card that never asked. The hidden
+                  false in front of it means the key is always sent; the
+                  checkbox overrides it when ticked, because the last value of
+                  a repeated name is the one that wins.
+                */}
+                <input type="hidden" name="deposit_required" value="false" />
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="deposit_required"
+                    value="true"
+                    defaultChecked={salesOrder.deposit_required}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Deposit required
+                </label>
+
+                <div className="mt-3">
+                  <label className="label" htmlFor="deposit_information">
+                    Deposit information
                   </label>
                   <input
-                    id="revised_rate"
-                    name="revised_rate"
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    id="deposit_information"
+                    name="deposit_information"
                     className="input"
+                    defaultValue={salesOrder.deposit_information ?? ''}
+                    placeholder="50% on order, balance before collection"
                   />
+                  {/* The terms, not the money. What has actually been taken is
+                      the ledger below. */}
+                  <p className="mt-1 text-xs text-slate-400">
+                    What is owed and when. Deposits actually taken are recorded below.
+                  </p>
                 </div>
+              </div>
 
+              {context.canWrite && (
+                <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                  Save detail
+                </SubmitButton>
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Items">
+            {/*
+              The lines, edited where they are read. One block per line rather
+              than a table of eight input columns — see components/sales-order-
+              lines, which also holds the item field that tells a catalogue
+              product from a line somebody typed.
+            */}
+            <SalesOrderLines
+              orderId={id}
+              currency={salesOrder.currency}
+              editable={editable && context.canWrite}
+              products={catalogue.map((product) => ({
+                id: product.id,
+                name: product.name,
+                sku: product.sku,
+                unit: product.unit,
+              }))}
+              units={units}
+              lines={lines.map((line) => ({
+                id: line.id,
+                productId: line.product_id,
+                description: line.description,
+                unit: line.unit,
+                quantity: Number(line.quantity),
+                unitPrice: Number(line.unit_price),
+                unitCost: Number(line.unit_cost),
+                revisedRateType: line.revised_rate_type,
+                revisedRate: line.revised_rate === null ? null : Number(line.revised_rate),
+                notes: line.notes,
+                lineTotal: Number(line.line_total),
+              }))}
+            />
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Notes & Terms">
+            <ActionForm action={updateSalesOrder} className="grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="id" value={id} />
+
+              <div>
+                <label className="label" htmlFor="notes">
+                  Customer notes
+                </label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  rows={5}
+                  className="input"
+                  defaultValue={salesOrder.notes ?? ''}
+                  placeholder="Anything the customer should see on the order…"
+                />
+              </div>
+
+              <div>
+                <label className="label" htmlFor="terms">
+                  Terms &amp; conditions
+                </label>
+                <textarea
+                  id="terms"
+                  name="terms"
+                  rows={5}
+                  className="input"
+                  defaultValue={salesOrder.terms ?? ''}
+                  placeholder="All sales are final. No exchanges or refunds."
+                />
+              </div>
+
+              {context.canWrite && (
                 <div className="sm:col-span-2">
-                  <label className="label" htmlFor="notes">
-                    Line note
-                  </label>
-                  <input id="notes" name="notes" className="input" />
-                </div>
-
-                <div className="flex items-end sm:col-span-6">
-                  <SubmitButton className="btn-primary" pendingLabel="Adding…">
-                    Add line
+                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                    Save notes &amp; terms
                   </SubmitButton>
                 </div>
-              </ActionForm>
-            )}
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          <Section title="Shipping">
+            <ActionForm action={updateSalesOrder} className="grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="id" value={id} />
+
+              <div>
+                <label className="label" htmlFor="shipping_method">
+                  Shipping method
+                </label>
+                <input
+                  id="shipping_method"
+                  name="shipping_method"
+                  className="input"
+                  defaultValue={salesOrder.shipping_method ?? ''}
+                  placeholder="LTL, container, customer collection…"
+                />
+              </div>
+
+              <div>
+                <label className="label" htmlFor="shipping_responsibility">
+                  Shipping responsibility
+                </label>
+                {/* Free text rather than a fixed list: who arranges carriage is
+                    a term of the deal, and every desk words it differently. */}
+                <input
+                  id="shipping_responsibility"
+                  name="shipping_responsibility"
+                  className="input"
+                  defaultValue={salesOrder.shipping_responsibility ?? ''}
+                  placeholder="Buyer, seller, or who arranges it"
+                />
+              </div>
+
+              {context.canWrite && (
+                <div className="sm:col-span-2">
+                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                    Save shipping
+                  </SubmitButton>
+                </div>
+              )}
+            </ActionForm>
           </Section>
 
           {/* ---------------------------------------------------------------- */}
@@ -497,8 +689,11 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
 
         {/* ------------------------------------------------------------------ */}
         <div className="space-y-5">
-          <Section title="Totals">
+          <Section title="Summary">
             <dl className="space-y-2 text-sm">
+              {/* The count the document prints, which is the lines' quantities
+                  rather than the number of lines. */}
+              <Row label="Total quantity">{formatNumber(totalQuantity)}</Row>
               <Row label="Subtotal">
                 <Money value={totals.subtotal} currency={salesOrder.currency} />
               </Row>
@@ -522,232 +717,6 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 ? 'Margin unknown — no line carries a cost.'
                 : `Margin ${formatPrice(margin, salesOrder.currency)} from the line costs.`}
             </p>
-          </Section>
-
-          <Section title="Details">
-            <ActionForm action={updateSalesOrder} className="space-y-3">
-              <input type="hidden" name="id" value={id} />
-
-              <div>
-                <label className="label" htmlFor="company_id">
-                  Company
-                </label>
-                <select
-                  id="company_id"
-                  name="company_id"
-                  className="input"
-                  defaultValue={salesOrder.company_id ?? ''}
-                >
-                  <option value="">No company</option>
-                  {((companies ?? []) as PickerCompany[]).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="contact_id">
-                  Contact
-                </label>
-                <select
-                  id="contact_id"
-                  name="contact_id"
-                  className="input"
-                  defaultValue={salesOrder.contact_id ?? ''}
-                >
-                  <option value="">No contact</option>
-                  {((contacts ?? []) as PickerContact[]).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {[c.first_name, c.last_name].filter(Boolean).join(' ') || c.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="owner_id">
-                  Owner
-                </label>
-                <select
-                  id="owner_id"
-                  name="owner_id"
-                  className="input"
-                  defaultValue={salesOrder.owner_id ?? ''}
-                >
-                  <option value="">Unassigned</option>
-                  {((users ?? []) as PickerUser[]).map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name || user.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="location_id">
-                  Fulfilling from
-                </label>
-                <select
-                  id="location_id"
-                  name="location_id"
-                  className="input"
-                  defaultValue={salesOrder.location_id ?? ''}
-                >
-                  <option value="">Not set</option>
-                  {((locations ?? []) as PickerLocation[]).map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="order_date">
-                    Order date
-                  </label>
-                  <input
-                    id="order_date"
-                    name="order_date"
-                    type="date"
-                    className="input"
-                    defaultValue={salesOrder.order_date}
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="currency">
-                    Currency
-                  </label>
-                  {/*
-                    A list, not a free-text box. Three characters accepted
-                    anything, and a typo does not fail — it renders as a blank
-                    symbol on a document that has already gone to a customer.
-                    Frozen once the order leaves draft, because changing it
-                    converts nothing: every stored figure keeps its number and
-                    quietly acquires a new label.
-                  */}
-                  <select
-                    id="currency"
-                    name="currency"
-                    className="input"
-                    defaultValue={salesOrder.currency}
-                    disabled={salesOrder.status !== 'draft'}
-                  >
-                    {CURRENCIES.map((code) => (
-                      <option key={code} value={code}>
-                        {code}
-                      </option>
-                    ))}
-                  </select>
-                  {salesOrder.status !== 'draft' && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      Fixed once the order is confirmed.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="shipping_charge">
-                    Shipping
-                  </label>
-                  <input
-                    id="shipping_charge"
-                    name="shipping_charge"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="input"
-                    defaultValue={String(salesOrder.shipping_charge)}
-                  />
-                </div>
-
-                {/*
-                  Which channel this sold through. Blank is the ordinary case —
-                  a direct sale to a buyer is not a channel sale — and leaving
-                  it blank is different from nobody having recorded it, which is
-                  why there is no default.
-                */}
-                <div className="col-span-2">
-                  <label className="label" htmlFor="marketplace_id">
-                    Sold through
-                  </label>
-                  <select
-                    id="marketplace_id"
-                    name="marketplace_id"
-                    className="input"
-                    defaultValue={salesOrder.marketplace_id ?? ''}
-                  >
-                    <option value="">Direct — no marketplace</option>
-                    {channels.map((channel) => (
-                      <option key={channel.id} value={channel.id}>
-                        {channel.name}
-                      </option>
-                    ))}
-                  </select>
-                  {channels.length === 0 && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      No marketplaces set up yet —{' '}
-                      <Link href="/marketplaces" className="text-brand-700 hover:underline">
-                        add one
-                      </Link>
-                      .
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="payment_terms">
-                    Payment terms
-                  </label>
-                  <input
-                    id="payment_terms"
-                    name="payment_terms"
-                    className="input"
-                    defaultValue={salesOrder.payment_terms ?? ''}
-                    placeholder="Net 30"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="notes">
-                  Notes
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  className="input"
-                  defaultValue={salesOrder.notes ?? ''}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="terms">
-                  Terms
-                </label>
-                <textarea
-                  id="terms"
-                  name="terms"
-                  rows={2}
-                  className="input"
-                  defaultValue={salesOrder.terms ?? ''}
-                  placeholder="All sales are final."
-                />
-              </div>
-
-              {context.canWrite && (
-                <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">
-                  Save details
-                </SubmitButton>
-              )}
-            </ActionForm>
           </Section>
 
           <Section title="Record">

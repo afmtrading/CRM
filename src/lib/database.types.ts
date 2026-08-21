@@ -432,6 +432,11 @@ export type CompanyRow = {
   id: string
   organization_id: string
   name: string
+  /**
+   * Customer ID — a short, stable handle derived from the name when the row is
+   * created. See 20260264000000: it is set once and does not follow a rename.
+   */
+  code: string | null
   /** The company's website. Surfaced as "Website", kept as `domain` so existing rows and imports still line up. */
   domain: string | null
   /** Superseded by specialty_market; retained so older rows keep their value. */
@@ -750,6 +755,20 @@ export type SalesOrderRow = {
   number: string
   company_id: string | null
   contact_id: string | null
+  /**
+   * Where the goods go, when that is not the company being billed — a broker
+   * buys and a warehouse receives. Null means the same as bill to.
+   */
+  ship_to_company_id: string | null
+  ship_to_contact_id: string | null
+  /** The delivery address as it should print, which is not always the company's. */
+  shipping_address: string | null
+  shipping_method: string | null
+  /** Who arranges and pays for carriage. */
+  shipping_responsibility: string | null
+  /** Whether money is needed down. The deposits actually taken are their own rows. */
+  deposit_required: boolean
+  deposit_information: string | null
   owner_id: string | null
   location_id: string | null
   status: SalesOrderStatus
@@ -792,6 +811,8 @@ export type SalesOrderLineRow = {
   product_id: string | null
   description: string | null
   notes: string | null
+  /** The line's own unit of measure; null falls back to the product's. */
+  unit: string | null
   quantity: number
   unit_price: number
   unit_cost: number
@@ -1203,6 +1224,8 @@ export interface Database {
       companies: TableDef<
         CompanyRow,
         | 'id'
+        // Filled by a trigger from the name when absent — see 20260264000000.
+        | 'code'
         | 'domain'
         | 'industry'
         | 'owner_id'
@@ -1337,6 +1360,13 @@ export interface Database {
         | 'order_date'
         | 'payment_terms'
         | 'shipping_charge'
+        | 'ship_to_company_id'
+        | 'ship_to_contact_id'
+        | 'shipping_address'
+        | 'shipping_method'
+        | 'shipping_responsibility'
+        | 'deposit_required'
+        | 'deposit_information'
         | 'notes'
         | 'terms'
         | 'signed_at'
@@ -1353,6 +1383,7 @@ export interface Database {
         | 'product_id'
         | 'description'
         | 'notes'
+        | 'unit'
         | 'quantity'
         | 'unit_price'
         | 'unit_cost'
