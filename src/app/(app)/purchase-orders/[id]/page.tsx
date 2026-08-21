@@ -514,8 +514,17 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
           </Section>
 
           {/* ---------------------------------------------------------------- */}
-          <Section title="Notes & Terms">
-            <ActionForm action={updateSalesOrder} className="grid gap-3 sm:grid-cols-2">
+          {/*
+            Notes, and only notes.
+            
+            Terms and conditions were here and are gone: the desk does not want
+            a per-order terms box. The column is untouched — nothing on this
+            page writes it now, because the header action only writes the keys
+            the submitted form actually carries — so the words already stored
+            are still there for anybody who wants them back.
+          */}
+          <Section title="Notes">
+            <ActionForm action={updateSalesOrder} className="space-y-3">
               <input type="hidden" name="id" value={id} />
 
               <div>
@@ -532,26 +541,10 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                 />
               </div>
 
-              <div>
-                <label className="label" htmlFor="terms">
-                  Terms &amp; conditions
-                </label>
-                <textarea
-                  id="terms"
-                  name="terms"
-                  rows={5}
-                  className="input"
-                  defaultValue={salesOrder.terms ?? ''}
-                  placeholder="All sales are final. No exchanges or refunds."
-                />
-              </div>
-
               {context.canWrite && (
-                <div className="sm:col-span-2">
-                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
-                    Save notes &amp; terms
-                  </SubmitButton>
-                </div>
+                <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                  Save notes
+                </SubmitButton>
               )}
             </ActionForm>
           </Section>
