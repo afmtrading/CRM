@@ -5,6 +5,7 @@ import { todayIn } from '@/lib/timezone'
 import { formatDay, formatNumber } from '@/lib/format'
 import { INVOICE_STATUS_LABELS, daysOverdue, isOverdue, summariseInvoices } from '@/lib/sales'
 import type { CompanyRow, InvoiceRow, InvoiceStatus } from '@/lib/database.types'
+import { CompanyFilter } from '@/app/(app)/sales-orders/company-filter'
 import { MoneyTotals } from '@/components/money'
 import { EmptyState, ErrorNote, InvoiceStatusBadge, PageHeader } from '@/components/ui'
 
@@ -57,6 +58,33 @@ export default async function InvoicesPage({
   ])
   const all = (data ?? []) as InvoiceRow[]
   const invoices = overdueOnly ? all.filter((invoice) => isOverdue(invoice, today)) : all
+
+  /*
+   * Who moves the goods, for the Delivery column.
+   *
+   * An invoice has no shipping columns of its own — it is carried from the
+   * order, the same way the detail page carries it — so this is one query for
+   * the orders behind the whole page rather than one per row. Skipped entirely
+   * when nothing on the page came from an order.
+   */
+  const orderIds = [
+    ...new Set(invoices.map((invoice) => invoice.sales_order_id).filter(Boolean) as string[]),
+  ]
+  const { data: orderRows } =
+    orderIds.length > 0
+      ? await scoped(context, 'sales_orders')
+          .select('id, shipping_responsibility')
+          .in('id', orderIds)
+      : { data: [] as { id: string; shipping_responsibility: string | null }[] }
+
+  const deliveryByOrder = new Map(
+    ((orderRows ?? []) as { id: string; shipping_responsibility: string | null }[]).map((one) => [
+      one.id,
+      one.shipping_responsibility,
+    ]),
+  )
+  const deliveryFor = (invoice: InvoiceRow) =>
+    invoice.sales_order_id ? (deliveryByOrder.get(invoice.sales_order_id) ?? null) : null
 
   const summary = summariseInvoices(invoices, today)
   const companyList = (companies ?? []) as Pick<CompanyRow, 'id' | 'name'>[]
@@ -134,14 +162,10 @@ export default async function InvoicesPage({
           <label className="label" htmlFor="company">
             Company
           </label>
-          <select id="company" name="company" className="input" defaultValue={companyId}>
-            <option value="">Every company</option>
-            {companyList.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-          </select>
+          {/* The same combobox the sales order list uses. A plain select is
+              fine at a dozen companies and unusable at three hundred — the
+              browser's own type-ahead only matches from the first letter. */}
+          <CompanyFilter companies={companyList} selected={companyId} />
         </div>
 
         <div>
@@ -178,7 +202,7 @@ export default async function InvoicesPage({
                   <th>Number</th>
                   <th>Status</th>
                   <th>Company</th>
-                  <th>Channel</th>
+                  <th>Delivery</th>
                   <th>Issued</th>
                   <th>Due</th>
                   <th className="text-right">Total</th>
@@ -215,18 +239,18 @@ export default async function InvoicesPage({
                           <span className="text-slate-300">—</span>
                         )}
                       </td>
-                      {/* A marketplace is a company, so the same lookup names it —
-                          the link goes to the channel rather than the account. */}
+                      {/*
+                        Who moves the goods, carried from the order that raised
+                        this invoice. It showed the channel an invoice sold
+                        through, which is on the record for anybody who needs it
+                        and read Direct on almost every row — the same change the
+                        sales order list made to the same column.
+                      */}
                       <td>
-                        {invoice.marketplace_id ? (
-                          <Link
-                            href={`/marketplaces/${invoice.marketplace_id}`}
-                            className="text-brand-700 hover:underline"
-                          >
-                            {companyName.get(invoice.marketplace_id) ?? 'Marketplace'}
-                          </Link>
+                        {deliveryFor(invoice) ? (
+                          <span className="text-slate-600">{deliveryFor(invoice)}</span>
                         ) : (
-                          <span className="text-xs text-slate-400">Direct</span>
+                          <span className="text-slate-300">—</span>
                         )}
                       </td>
                       <td>{formatDay(invoice.issue_date)}</td>

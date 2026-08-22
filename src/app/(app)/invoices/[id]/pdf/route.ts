@@ -120,6 +120,9 @@ export async function GET(
       }
     }),
     showDiscount: invoice.show_discount,
+    // Void owes nothing because nobody owes anything on a withdrawn
+    // document, which is not the same as having been paid.
+    paidInFull: invoice.status !== 'void' && totals.total > 0 && totals.balance <= 0,
     subtotal: totals.subtotal,
     discount: totals.discount,
     discountLabel: documentRevisionLabel(

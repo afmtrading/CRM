@@ -91,6 +91,14 @@ export interface DocumentModel {
   total: number
   paid: number
   balance: number
+  /**
+   * Nothing left owing on a document that asked for something.
+   *
+   * A flag rather than a `balance === 0` check in the renderer, because zero
+   * has two meanings here: a settled invoice, and one raised for nothing. Only
+   * the first should say so.
+   */
+  paidInFull: boolean
 
   payments: DocumentPayment[]
   paymentsTitle: string
