@@ -301,3 +301,24 @@ in order:
 - `select count(*) from sales_orders where discount_rate is not null` → 0
 - `select count(*) from invoices where discount_rate is not null` → 0
 - every stored `invoices.total` equal to `subtotal + shipping_charge`, as before
+
+## 2026-08-22 — document_history added
+
+`20260272000000_document_history.sql` creates `document_history` and puts an
+AFTER INSERT OR UPDATE trigger on `sales_orders` and `invoices`. Nothing
+existing is altered or destroyed: no column changes, no value is rewritten.
+
+The one write against existing data is the backfill — one `created` row per
+sales order and per invoice, marked `source = 'backfill'`, stamped with the
+document's own `created_at` and `created_by`. It asserts only "this existed by
+then". The changes those documents went through before this table existed were
+never recorded and are not invented.
+
+Counted before applying, on production:
+
+- 12 sales orders, 6 invoices → 18 backfill rows expected
+- `document_history` did not previously exist, so no rows could be overwritten
+
+The table grants INSERT to nobody and has no update or delete policy, so the
+definer trigger is the only writer. Verified in `19_sales_orders.sql`: a
+manager's hand-written insert, update and delete are all refused.

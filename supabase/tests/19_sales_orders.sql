@@ -1071,6 +1071,155 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- The audit trail.
+--
+-- What the Record history card could not say before: every change, not just the
+-- last one. The table grants INSERT to nobody, so the assertions below are as
+-- much about who *cannot* write here as about what the trigger records.
+-- =============================================================================
+do $$
+declare
+  v_org   uuid := (select id from fixture where key = 'org');
+  v_order uuid;
+  v_rows  integer;
+begin
+  raise notice 'A document''s history:';
+
+  perform sign_in_as('mgr_auth');
+
+  v_order := public.create_sales_order(
+    (select id from fixture where key = 'acme'), null, null, 'USD'
+  );
+
+  perform test_assert(
+    (select count(*) from document_history
+     where entity = 'sales_order' and entity_id = v_order and action = 'created') = 1,
+    'creating an order writes one created row'
+  );
+
+  -- One save, two fields: two rows, and nothing for the fields left alone.
+  update sales_orders
+  set payment_terms = 'Net 30', shipping_method = 'Truck'
+  where id = v_order;
+
+  select count(*) into v_rows
+  from document_history
+  where entity_id = v_order and action = 'updated';
+  perform test_assert(v_rows = 2, 'a save of two fields writes two rows');
+
+  perform test_assert(
+    exists (
+      select 1 from document_history
+      where entity_id = v_order and field = 'payment_terms'
+        and old_value is null and new_value = 'Net 30'
+    ),
+    'and each says what the field was and what it became'
+  );
+
+  -- A save that changes nothing says nothing.
+  update sales_orders set payment_terms = 'Net 30' where id = v_order;
+  perform test_assert(
+    (select count(*) from document_history where entity_id = v_order and action = 'updated') = 2,
+    'a save that changes nothing writes nothing'
+  );
+
+  -- The bookkeeping columns are not history. updated_at moves on every save and
+  -- is the fact this table replaces.
+  perform test_assert(
+    not exists (
+      select 1 from document_history
+      where entity_id = v_order and field in ('updated_at', 'updated_by', 'organization_id', 'id')
+    ),
+    'and the bookkeeping columns are not recorded as changes'
+  );
+
+  -- Who did it.
+  perform test_assert(
+    (select changed_by from document_history
+     where entity_id = v_order and field = 'payment_terms')
+    = (select id from fixture where key = 'mgr'),
+    'the change is attributed to whoever made it'
+  );
+
+  -- Ordering. Two rows written in one statement share a timestamp, which is
+  -- why seq exists.
+  perform test_assert(
+    (select count(distinct seq) from document_history where entity_id = v_order) =
+    (select count(*) from document_history where entity_id = v_order),
+    'every row has its own place in the order'
+  );
+
+  -- Nobody writes history by hand. No insert, update or delete policy exists,
+  -- so all three are refused even to the manager who owns the order.
+  begin
+    insert into document_history (organization_id, entity, entity_id, action, changed_by)
+    values (v_org, 'sales_order', v_order, 'created', (select id from fixture where key = 'mgr'));
+    perform test_assert(false, 'a hand-written history row should be refused');
+  exception when insufficient_privilege then
+    perform test_assert(true, 'a hand-written history row is refused');
+  end;
+
+  begin
+    update document_history set new_value = 'Net 90' where entity_id = v_order;
+    perform test_assert(false, 'editing history should be refused');
+  exception when insufficient_privilege then
+    perform test_assert(true, 'editing history is refused');
+  end;
+
+  begin
+    delete from document_history where entity_id = v_order;
+    perform test_assert(false, 'deleting history should be refused');
+  exception when insufficient_privilege then
+    perform test_assert(true, 'and so is deleting it');
+  end;
+end;
+$$;
+
+-- =============================================================================
+-- History is only visible to somebody who can see the document.
+-- =============================================================================
+do $$
+declare
+  v_order uuid;
+begin
+  raise notice 'Who can read a history:';
+
+  perform sign_in_as('rep_auth');
+  v_order := public.create_sales_order(
+    (select id from fixture where key = 'acme'), null, null, 'USD'
+  );
+  update sales_orders set payment_terms = 'COD' where id = v_order;
+
+  perform test_assert(
+    (select count(*) from document_history where entity_id = v_order) >= 2,
+    'the rep sees the history of their own order'
+  );
+
+  /*
+   * A rep who cannot see the order sees none of what was done to it. This is
+   * the whole point of stating the policy through `exists` on the parent rather
+   * than as its own copy of the visibility rule: reporting on history must not
+   * become a way around who can see which orders.
+   */
+  perform sign_in_as('rep2_auth');
+  perform test_assert(
+    (select count(*) from sales_orders where id = v_order) = 0,
+    'another rep cannot see the order'
+  );
+  perform test_assert(
+    (select count(*) from document_history where entity_id = v_order) = 0,
+    'and sees none of its history either'
+  );
+
+  perform sign_in_as('mgr_auth');
+  perform test_assert(
+    (select count(*) from document_history where entity_id = v_order) >= 2,
+    'while a manager sees the whole organization'
+  );
+end;
+$$;
+
 reset role;
 
 rollback;

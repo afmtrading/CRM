@@ -6,7 +6,6 @@ import {
   CURRENCIES,
   currencySymbol,
   formatDate,
-  formatDateTime,
   formatNumber,
   formatPrice,
 } from '@/lib/format'
@@ -23,6 +22,7 @@ import {
   nextStatuses,
 } from '@/lib/sales'
 import type {
+  DocumentHistoryRow,
   InvoiceRow,
   SalesOrderLineRow,
   SalesOrderPaymentRow,
@@ -56,6 +56,8 @@ import { SalesOrderLines } from '@/components/sales-order-lines'
 import { derivePricing } from '@/lib/products'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
+import { RecordHistory } from '@/components/record-history'
+import type { HistoryLookups } from '@/lib/document-history'
 
 import {
   convertToInvoice,
@@ -75,6 +77,15 @@ export const dynamic = 'force-dynamic'
  * few hundred entries of a dropdown anyway.
  */
 const PICKER_LIMIT = 500
+
+/**
+ * How much of a document's history the card holds.
+ *
+ * Bounded for the reason the pickers are: an order edited every day for a year
+ * would turn one page load into a growing table scan. The card says when it is
+ * showing a slice.
+ */
+const HISTORY_LIMIT = 200
 
 export default async function SalesOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -99,6 +110,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     { data: products },
     { data: invoiceRow },
     { data: stampRows },
+    { data: historyRows },
   ] = await Promise.all([
     scoped(context, 'sales_order_lines')
       .select('*')
@@ -138,15 +150,24 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'invoices').select('*').eq('sales_order_id', id).maybeSingle(),
-    /* The two people the Record history card names. Disabled users included. */
-    scoped(context, 'users')
-      .select('id, name, email')
-      .in('id', [salesOrder.created_by, salesOrder.updated_by].filter(Boolean) as string[]),
+    /*
+     * Everyone who has ever touched this order, disabled users included — the
+     * history names them, and somebody since disabled still made the change
+     * they made. Bounded: a card in a sidebar is for the recent past.
+     */
+    scoped(context, 'users').select('id, name, email'),
+    scoped(context, 'document_history')
+      .select('*')
+      .eq('entity', 'sales_order')
+      .eq('entity_id', id)
+      .order('seq', { ascending: false })
+      .limit(HISTORY_LIMIT),
   ])
 
   const stamps = new Map(
     ((stampRows ?? []) as PickerUser[]).map((user) => [user.id, user.name || user.email]),
   )
+  const history = (historyRows ?? []) as DocumentHistoryRow[]
 
   const lines = (lineRows ?? []) as SalesOrderLineRow[]
   const payments = (paymentRows ?? []) as SalesOrderPaymentRow[]
@@ -210,10 +231,19 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
    * is active users only, and somebody who has since been disabled still
    * created the orders they created.
    */
-  const nameOf = (id: string | null) =>
-    id ? (stamps.get(id) ?? 'Unknown') : 'Unassigned'
-  const createdBy = nameOf(salesOrder.created_by)
-  const updatedBy = nameOf(salesOrder.updated_by)
+  const lookups: HistoryLookups = {
+    users: stamps,
+    companies: new Map(companyList.map((one) => [one.id, one.name])),
+    contacts: new Map(
+      contactList.map((one) => [
+        one.id,
+        [one.first_name, one.last_name].filter(Boolean).join(' ') || (one.email ?? 'Unnamed'),
+      ]),
+    ),
+    locations: new Map(
+      ((locations ?? []) as PickerLocation[]).map((one) => [one.id, one.name]),
+    ),
+  }
 
   return (
     <>
@@ -244,17 +274,34 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
               only while no invoice exists: an order that has been billed is
               referenced by one, and the invoice is the record that matters.
             */}
-            {context.canWrite && !invoice && (
-              <form action={deleteSalesOrder}>
-                <input type="hidden" name="id" value={id} />
+            {context.canWrite &&
+              (invoice ? (
+                /*
+                  Shown rather than hidden, and disabled rather than a trap.
+                  soft_delete_sales_order refuses an invoiced order — it is the
+                  evidence behind a document somebody has been sent — so the
+                  button that cannot work says why instead of vanishing and
+                  leaving the reader wondering where it went.
+                */
                 <button
-                  type="submit"
-                  className="btn-secondary text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                  type="button"
+                  disabled
+                  className="btn-secondary cursor-not-allowed text-slate-400 opacity-60"
+                  title={`Invoiced as ${invoice.number}. Void or delete the invoice first.`}
                 >
                   Delete this order
                 </button>
-              </form>
-            )}
+              ) : (
+                <ActionForm action={deleteSalesOrder}>
+                  <input type="hidden" name="id" value={id} />
+                  <SubmitButton
+                    className="btn-secondary text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    pendingLabel="Deleting…"
+                  >
+                    Delete this order
+                  </SubmitButton>
+                </ActionForm>
+              ))}
 
             {invoice ? (
               <Link href={`/invoices/${invoice.id}`} className="btn-secondary">
@@ -922,24 +969,16 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             out of two columns would be a history that quietly skips every
             change but the last.
           */}
-          <Section title="Record history">
-            <div className="space-y-4 text-sm">
-              <div>
-                <p className="text-slate-500">Created by</p>
-                <p className="font-medium text-slate-900">{createdBy}</p>
-                <p className="text-xs text-slate-400">
-                  {formatDateTime(salesOrder.created_at, context.organization.timezone)}
-                </p>
-              </div>
+          {/*
+            Every change, not just the last one.
 
-              <div className="border-t border-slate-100 pt-4">
-                <p className="text-slate-500">Updated by</p>
-                <p className="font-medium text-slate-900">{updatedBy}</p>
-                <p className="text-xs text-slate-400">
-                  {formatDateTime(salesOrder.updated_at, context.organization.timezone)}
-                </p>
-              </div>
-            </div>
+            This card used to show created_by and updated_by, which is all the
+            row stores — edit an order five times and it showed the fifth. The
+            four before it were never anywhere. document_history records each
+            change as it happens; see 20260272000000.
+          */}
+          <Section title="Record history">
+            <RecordHistory rows={history} currency={salesOrder.currency} lookups={lookups} />
           </Section>
         </div>
       </div>

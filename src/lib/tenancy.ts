@@ -205,6 +205,7 @@ export type TenantTable =
   | 'sales_order_payments'
   | 'invoices'
   | 'invoice_lines'
+  | 'document_history'
   | 'invoice_payments'
   | 'stock_locations'
   | 'stock_bins'

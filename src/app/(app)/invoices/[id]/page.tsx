@@ -7,7 +7,6 @@ import {
   CURRENCIES,
   currencySymbol,
   formatDate,
-  formatDateTime,
   formatDay,
   formatNumber,
   formatPrice,
@@ -22,6 +21,7 @@ import {
 } from '@/lib/sales'
 import type {
   CompanyRow,
+  DocumentHistoryRow,
   ContactRow,
   InvoiceLineRow,
   InvoicePaymentRow,
@@ -31,6 +31,8 @@ import type {
 import { Empty } from '@/components/contact-cards'
 import { InvoiceStatusBadge, PageHeader, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
+import { RecordHistory } from '@/components/record-history'
+import type { HistoryLookups } from '@/lib/document-history'
 
 import {
   addInvoiceLine,
@@ -43,6 +45,9 @@ import {
 } from '../actions'
 
 export const dynamic = 'force-dynamic'
+
+/** How much of a document's history the card holds. See the sales order page. */
+const HISTORY_LIMIT = 200
 
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -61,7 +66,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     { data: order },
     { data: products },
     { data: channelRows },
-    { data: raisedBy },
+    { data: people },
+    { data: historyRows },
   ] =
     await Promise.all([
       scoped(context, 'invoice_lines').select('*').eq('invoice_id', id).order('position'),
@@ -93,11 +99,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       scoped(context, 'marketplace_profiles')
         .select('company_id, companies(name)')
         .eq('sells_through', true),
-      /* Whoever raised it, by their own query rather than the picker list —
-         somebody since disabled still raised the invoices they raised. */
-      invoice.created_by
-        ? scoped(context, 'users').select('name, email').eq('id', invoice.created_by).maybeSingle()
-        : Promise.resolve({ data: null }),
+      /* Everyone the history might name, disabled users included — somebody
+         since disabled still made the change they made. */
+      scoped(context, 'users').select('id, name, email'),
+      scoped(context, 'document_history')
+        .select('*')
+        .eq('entity', 'invoice')
+        .eq('entity_id', id)
+        .order('seq', { ascending: false })
+        .limit(HISTORY_LIMIT),
     ])
 
   const lines = (lineRows ?? []) as InvoiceLineRow[]
@@ -141,10 +151,31 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     invoice.discount_rate === null ? null : Number(invoice.discount_rate),
   )
 
-  const stamp = raisedBy as { name: string | null; email: string } | null
-  const createdBy = stamp ? stamp.name || stamp.email : 'Unknown'
+  const history = (historyRows ?? []) as DocumentHistoryRow[]
+  const lookups: HistoryLookups = {
+    users: new Map(
+      ((people ?? []) as { id: string; name: string | null; email: string }[]).map((user) => [
+        user.id,
+        user.name || user.email,
+      ]),
+    ),
+    companies: new Map(
+      customer && invoice.company_id ? [[invoice.company_id, customer.name]] : [],
+    ),
+    contacts: new Map(billToName && invoice.contact_id ? [[invoice.contact_id, billToName]] : []),
+    locations: new Map(),
+  }
 
   const owed = Number(invoice.total) - Number(invoice.amount_paid)
+  /*
+   * Settled, and said so.
+   *
+   * Read off the money rather than off the status: an invoice with nothing owed
+   * is paid in full whether or not the ledger has moved it to Paid yet, and a
+   * void one owes nothing because nobody owes anything on a document that was
+   * withdrawn.
+   */
+  const paidInFull = invoice.status !== 'void' && Number(invoice.total) > 0 && owed <= 0
   const late = daysOverdue(invoice.due_date, today)
 
   // Draft and unpaid is a correction; anything else would be restating a
@@ -892,6 +923,23 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               </Row>
             </dl>
 
+            {/*
+              Said outright, under the figure it follows from. "Owed $0.00" is
+              arithmetic somebody has to read; "Paid in full" is the answer they
+              were reading it for. Green because it is good news and the only
+              green on the card.
+            */}
+            {paidInFull && (
+              <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-center text-sm font-semibold text-emerald-700">
+                Paid in full
+                {owed < 0 && (
+                  <span className="block text-xs font-normal text-emerald-600">
+                    Overpaid by {formatPrice(-owed, invoice.currency)}
+                  </span>
+                )}
+              </p>
+            )}
+
             <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
               Paid comes from the ledger and nowhere else — there is no way to mark this settled
               without a payment on it.
@@ -901,40 +949,10 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           {/* The order's Record card, and the same two facts on it. */}
           {/* The same card a sales order carries, saying what an invoice
               stores: it has a created_by and no updated_by of its own. */}
+          {/* Every change, not just the last one — the same card a sales
+              order carries. See 20260272000000. */}
           <Section title="Record history">
-            <div className="space-y-4 text-sm">
-              <div>
-                <p className="text-slate-500">Created by</p>
-                <p className="font-medium text-slate-900">{createdBy}</p>
-                <p className="text-xs text-slate-400">
-                  {formatDateTime(invoice.created_at, context.organization.timezone)}
-                </p>
-              </div>
-
-              <div className="border-t border-slate-100 pt-4">
-                <p className="text-slate-500">Updated</p>
-                <p className="font-medium text-slate-900">{invoice.owner_name ?? 'Unassigned'}</p>
-                <p className="text-xs text-slate-400">
-                  {formatDateTime(invoice.updated_at, context.organization.timezone)}
-                </p>
-              </div>
-
-              <div className="border-t border-slate-100 pt-4">
-                <p className="text-slate-500">From order</p>
-                <p className="font-medium text-slate-900">
-                  {salesOrder ? (
-                    <Link
-                      href={`/sales-orders/${salesOrder.id}`}
-                      className="text-brand-700 hover:underline"
-                    >
-                      {salesOrder.number}
-                    </Link>
-                  ) : (
-                    'Raised on its own'
-                  )}
-                </p>
-              </div>
-            </div>
+            <RecordHistory rows={history} currency={invoice.currency} lookups={lookups} />
           </Section>
         </div>
       </div>
