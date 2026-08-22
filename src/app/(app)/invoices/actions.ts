@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 import { assertCanWrite, requireSession, scoped } from '@/lib/tenancy'
 import type { ActionState } from '@/components/action-form'
-import { CURRENCIES } from '@/lib/format'
+import { headerPatch, headerSchema } from '@/lib/invoice-header'
 import { settableInvoiceStatuses } from '@/lib/sales'
 import type { InvoiceStatus, RevisedRateType } from '@/lib/database.types'
 
@@ -21,43 +21,6 @@ import type { InvoiceStatus, RevisedRateType } from '@/lib/database.types'
 
 const text = (max: number) => z.string().trim().max(max).default('')
 
-const headerSchema = z.object({
-  due_date: z
-    .string()
-    .trim()
-    .transform((value) => (value === '' ? null : value))
-    .nullable()
-    .default(null),
-  payment_terms: text(200),
-  notes: z.string().max(20_000).default(''),
-  /* A checkbox, sent as a hidden-false-then-checkbox pair. */
-  show_discount: z
-    .string()
-    .trim()
-    .transform((value) => value === 'true' || value === 'on')
-    .default('true'),
-  /*
-   * Absent when the field was not rendered — a sent or part-paid invoice shows
-   * the currency rather than offering it — and absent means "leave it alone"
-   * rather than "clear it". The database has the last word either way: a
-   * trigger refuses the change on anything but an unpaid draft.
-   */
-  currency: z
-    .enum(CURRENCIES)
-    .optional()
-    .catch(undefined),
-  /*
-   * Absent when the field was not rendered — an invoice from an order shows the
-   * channel rather than offering it — and absent means "leave it alone". Blank
-   * is a different answer: it means direct, and has to reach null.
-   */
-  marketplace_id: z
-    .string()
-    .trim()
-    .optional()
-    .transform((value) => (value === undefined ? undefined : value || null)),
-})
-
 export async function updateInvoice(
   _state: ActionState,
   formData: FormData,
@@ -71,18 +34,16 @@ export async function updateInvoice(
     return { error: parsed.error.issues[0]?.message ?? 'Those details are not valid' }
   }
 
-  const { error } = await scoped(context, 'invoices')
-    .update({
-      due_date: parsed.data.due_date,
-      payment_terms: parsed.data.payment_terms || null,
-      notes: parsed.data.notes || null,
-      show_discount: parsed.data.show_discount,
-      ...(parsed.data.currency ? { currency: parsed.data.currency } : {}),
-      ...(parsed.data.marketplace_id === undefined
-        ? {}
-        : { marketplace_id: parsed.data.marketplace_id }),
-    })
-    .eq('id', id)
+  /*
+   * Only the fields this card actually asked about. The header is spread
+   * across Invoice Detail and Notes now, and every field parses to null or ''
+   * when it is absent — so writing the whole schema would let saving the notes
+   * clear the payment terms. See lib/invoice-header.
+   */
+  const patch = headerPatch(parsed.data, formData)
+  if (Object.keys(patch).length === 0) return { ok: 'Nothing to save.' }
+
+  const { error } = await scoped(context, 'invoices').update(patch).eq('id', id)
 
   if (error) throw new Error(error.message)
 

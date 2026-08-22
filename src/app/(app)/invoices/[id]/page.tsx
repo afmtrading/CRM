@@ -18,6 +18,7 @@ import type {
   InvoiceRow,
   SalesOrderRow,
 } from '@/lib/database.types'
+import { Empty } from '@/components/contact-cards'
 import { Money } from '@/components/money'
 import { InvoiceStatusBadge, PageHeader, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
@@ -109,6 +110,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     .map((row) => ({ id: row.company_id, name: row.companies?.name ?? 'Unnamed' }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
+  const customer = company as CompanyRow | null
+  const billTo = contact as ContactRow | null
+  const billToName = billTo
+    ? [billTo.first_name, billTo.last_name].filter(Boolean).join(' ') || billTo.email
+    : null
+
+  /* What the lines add up to in units, which the printed document leads with. */
+  const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity), 0)
+
   const owed = Number(invoice.total) - Number(invoice.amount_paid)
   const late = daysOverdue(invoice.due_date, today)
 
@@ -121,8 +131,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       <PageHeader
         title={invoice.number}
         description={
-          (company as CompanyRow | null)?.name
-            ? `${(company as CompanyRow).name} · issued ${formatDay(invoice.issue_date)}`
+          customer?.name
+            ? `${customer.name} · issued ${formatDay(invoice.issue_date)}`
             : `Issued ${formatDay(invoice.issue_date)}`
         }
         actions={
@@ -173,6 +183,273 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
+          {/* ---------------------------------------------------------------- */}
+          {/*
+            Who it is for, and where it went.
+
+            The same card a sales order opens with, read rather than edited: an
+            invoice's customer is a snapshot taken when it was raised, and the
+            document has already been sent. Correcting one means voiding it and
+            raising another, which is why there is nothing here to change.
+          */}
+          <Section title="Customer & Shipping">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  Bill to
+                </h3>
+                <dl className="space-y-1 text-sm">
+                  <Row label="Company">
+                    {invoice.company_id ? (
+                      <Link
+                        href={`/companies/${invoice.company_id}`}
+                        className="text-brand-700 hover:underline"
+                      >
+                        {customer?.name ?? 'Unknown'}
+                      </Link>
+                    ) : (
+                      <Empty />
+                    )}
+                  </Row>
+                  <Row label="Contact">{billToName ?? <Empty />}</Row>
+                  <Row label="Customer ID">{customer?.code ?? <Empty />}</Row>
+                  <Row label="Contact email">{billTo?.email ?? <Empty />}</Row>
+                  <Row label="Contact phone">{billTo?.phone ?? <Empty />}</Row>
+                </dl>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  Ship to
+                </h3>
+                {/*
+                  Carried from the order rather than stored again. An invoice
+                  has no shipping columns of its own, and adding them would be
+                  a second copy of an address that can disagree with the first.
+                */}
+                {salesOrder ? (
+                  <>
+                    <dl className="space-y-1 text-sm">
+                      <Row label="Shipping">{salesOrder.shipping_responsibility ?? <Empty />}</Row>
+                      <Row label="Shipping method">{salesOrder.shipping_method ?? <Empty />}</Row>
+                    </dl>
+                    <div>
+                      <span className="label">Shipping address</span>
+                      {salesOrder.shipping_address ? (
+                        <p className="text-sm whitespace-pre-line text-slate-700">
+                          {salesOrder.shipping_address}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-slate-400">
+                          The same as bill to.
+                        </p>
+                      )}
+                    </div>
+                    <p className="border-t border-slate-100 pt-3 text-xs text-slate-400">
+                      From {salesOrder.number}. Change it there.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    Raised on its own, so there is no order carrying a delivery address.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
+          {/*
+            The Sales Order Detail card, as an invoice states it — same
+            two-column grid, same field order, same rules underneath. Three
+            differences, and each is a fact about invoices rather than a
+            difference in taste: the date is frozen once the document has been
+            sent, the representative is a snapshot, and the slot a sales order
+            gives to "Fulfilling from" is where an invoice's due date goes.
+          */}
+          <Section title="Invoice Detail">
+            <ActionForm action={updateInvoice} className="space-y-3">
+              <input type="hidden" name="id" value={id} />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label">Invoice #</label>
+                  {/* Allocated once and never reissued, which is why it is
+                      shown rather than offered. Voiding keeps it in the
+                      sequence where an audit expects to find it. */}
+                  <p className="input bg-slate-50 font-medium text-slate-900">{invoice.number}</p>
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="issue_date">
+                    Invoice date
+                  </label>
+                  {/*
+                    Editable only while this is a draft with no money on it —
+                    the same rule the currency follows, for the same reason.
+                    Redating a document somebody has already received is
+                    restating history rather than correcting it.
+                  */}
+                  {currencyFixed ? (
+                    <>
+                      <p className="input bg-slate-50 text-slate-600">
+                        {formatDay(invoice.issue_date)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {invoice.status === 'draft'
+                          ? 'Fixed once a payment has been recorded.'
+                          : 'Fixed once the invoice has been sent.'}
+                      </p>
+                    </>
+                  ) : (
+                    <input
+                      id="issue_date"
+                      name="issue_date"
+                      type="date"
+                      className="input"
+                      defaultValue={invoice.issue_date}
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="label">Representative</label>
+                  {/* A snapshot: the document does not change when somebody
+                      leaves, and it is the order's representative rather than
+                      whoever raised the invoice. */}
+                  <p className="input bg-slate-50 text-slate-600">
+                    {invoice.owner_name ?? 'Unassigned'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="payment_terms">
+                    Payment terms
+                  </label>
+                  <input
+                    id="payment_terms"
+                    name="payment_terms"
+                    className="input"
+                    defaultValue={invoice.payment_terms ?? ''}
+                    placeholder="Net 30, COD, Prepaid"
+                  />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="currency">
+                    Currency
+                  </label>
+                  {/*
+                    Frozen once the invoice is sent or part paid, because
+                    changing it converts nothing: every stored figure keeps its
+                    number and quietly acquires a new label. The database
+                    refuses the same cases.
+                  */}
+                  {currencyFixed ? (
+                    <>
+                      <p className="input bg-slate-50 text-slate-600">{invoice.currency}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {invoice.status === 'draft'
+                          ? 'Fixed once a payment has been recorded.'
+                          : 'Fixed once the invoice has been sent.'}
+                      </p>
+                    </>
+                  ) : (
+                    <select
+                      id="currency"
+                      name="currency"
+                      className="input"
+                      defaultValue={invoice.currency}
+                    >
+                      {CURRENCIES.map((code) => (
+                        <option key={code} value={code}>
+                          {code}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="due_date">
+                    Due date
+                  </label>
+                  <input
+                    id="due_date"
+                    name="due_date"
+                    type="date"
+                    className="input"
+                    defaultValue={invoice.due_date ?? ''}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                {/*
+                  A checkbox posts nothing when it is clear, which is
+                  indistinguishable from a card that never asked. The hidden
+                  false in front of it means the key is always sent; the
+                  checkbox overrides it when ticked, because the last value of
+                  a repeated name is the one that wins.
+                */}
+                <input type="hidden" name="show_discount" value="false" />
+                <label className="mb-2 flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="show_discount"
+                    value="true"
+                    defaultChecked={invoice.show_discount}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Show the discount column on the document
+                </label>
+
+                <div className="mt-3">
+                  <label className="label" htmlFor="marketplace_id">
+                    Sold through
+                  </label>
+                  {/*
+                    Carried from the sales order when there was one, and
+                    settable directly on an invoice raised on its own. Locked
+                    where it came from an order: that is where the fact
+                    belongs, and two places to change one thing is how they end
+                    up disagreeing.
+                  */}
+                  {invoice.sales_order_id ? (
+                    <>
+                      <p className="input bg-slate-50 text-slate-600">
+                        {channels.find((channel) => channel.id === invoice.marketplace_id)?.name ??
+                          'Direct — no marketplace'}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">Set on the sales order.</p>
+                    </>
+                  ) : (
+                    <select
+                      id="marketplace_id"
+                      name="marketplace_id"
+                      className="input"
+                      defaultValue={invoice.marketplace_id ?? ''}
+                    >
+                      <option value="">Direct — no marketplace</option>
+                      {channels.map((channel) => (
+                        <option key={channel.id} value={channel.id}>
+                          {channel.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {context.canWrite && (
+                <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                  Save detail
+                </SubmitButton>
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
           <Section title="Billed">
             <div className="-mx-5 overflow-x-auto">
               <table className="table">
@@ -340,6 +617,40 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             </p>
           </Section>
 
+          {/* ---------------------------------------------------------------- */}
+          {/*
+            Notes, and only notes — its own card, posting on its own, exactly
+            as a sales order's does. Which is why the header now goes through
+            lib/invoice-header: a form that does not ask about the payment
+            terms must not answer for them.
+          */}
+          <Section title="Notes">
+            <ActionForm action={updateInvoice} className="space-y-3">
+              <input type="hidden" name="id" value={id} />
+
+              <div>
+                <label className="label" htmlFor="notes">
+                  Customer notes
+                </label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  rows={5}
+                  className="input"
+                  defaultValue={invoice.notes ?? ''}
+                  placeholder="Anything the customer should see on the invoice…"
+                />
+              </div>
+
+              {context.canWrite && (
+                <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                  Save notes
+                </SubmitButton>
+              )}
+            </ActionForm>
+          </Section>
+
+          {/* ---------------------------------------------------------------- */}
           <Section title="Payments">
             {payments.length === 0 ? (
               <p className="text-sm text-slate-500">Nothing received yet.</p>
@@ -377,7 +688,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             {context.canWrite && invoice.status !== 'void' && (
               <ActionForm
                 action={recordPayment}
-                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4"
+                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-5"
               >
                 <input type="hidden" name="invoice_id" value={id} />
 
@@ -403,7 +714,21 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                   <input id="paid_at" name="paid_at" type="date" className="input" />
                 </div>
 
-                <div className="flex items-end">
+                {/* Same gap the deposit ledger had: a Note column with no way
+                    to write one. The action has always taken it. */}
+                <div>
+                  <label className="label" htmlFor="note">
+                    Note
+                  </label>
+                  <input
+                    id="note"
+                    name="note"
+                    className="input"
+                    placeholder="Cheque 1042, or why"
+                  />
+                </div>
+
+                <div className="flex items-end sm:col-span-5">
                   <SubmitButton className="btn-secondary" pendingLabel="Recording…">
                     Record payment
                   </SubmitButton>
@@ -414,10 +739,18 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="space-y-5">
-          <Section title="Totals">
+          {/*
+            Summary, laid out the way a sales order's is — same rows, same
+            order, same card name. An invoice's version of "Deposits" is what
+            has actually been paid, and its "Balance" is what is still owed.
+          */}
+          <Section title="Summary">
             <dl className="space-y-2 text-sm">
+              {/* The count the document leads with: the lines' quantities
+                  rather than the number of lines. */}
+              <Row label="Total quantity">{formatNumber(totalQuantity)}</Row>
               <Row label="Subtotal">
-                <Money value={Number(invoice.subtotal)} currency={invoice.currency} />
+                <Money value={Number(invoice.subtotal)} currency={invoice.currency} cents />
               </Row>
               <Row label="Shipping">
                 {composable ? (
@@ -440,17 +773,17 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                     </SubmitButton>
                   </ActionForm>
                 ) : (
-                  <Money value={Number(invoice.shipping_charge)} currency={invoice.currency} />
+                  <Money value={Number(invoice.shipping_charge)} currency={invoice.currency} cents />
                 )}
               </Row>
               <Row label="Total" strong>
-                <Money value={Number(invoice.total)} currency={invoice.currency} />
+                <Money value={Number(invoice.total)} currency={invoice.currency} cents />
               </Row>
               <Row label="Paid">
-                <Money value={Number(invoice.amount_paid)} currency={invoice.currency} />
+                <Money value={Number(invoice.amount_paid)} currency={invoice.currency} cents />
               </Row>
               <Row label="Owed" strong>
-                <Money value={owed} currency={invoice.currency} />
+                <Money value={owed} currency={invoice.currency} cents />
               </Row>
             </dl>
 
@@ -460,29 +793,12 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             </p>
           </Section>
 
-          <Section title="Details">
-            <dl className="mb-4 space-y-2 text-sm">
-              <Row label="Company">
-                {invoice.company_id ? (
-                  <Link
-                    href={`/companies/${invoice.company_id}`}
-                    className="text-brand-700 hover:underline"
-                  >
-                    {(company as CompanyRow | null)?.name ?? 'Unknown'}
-                  </Link>
-                ) : (
-                  '—'
-                )}
-              </Row>
-              <Row label="Contact">
-                {contact
-                  ? [(contact as ContactRow).first_name, (contact as ContactRow).last_name]
-                      .filter(Boolean)
-                      .join(' ') || (contact as ContactRow).email
-                  : '—'}
-              </Row>
+          {/* The order's Record card, and the same two facts on it. */}
+          <Section title="Record">
+            <dl className="space-y-2 text-sm">
+              <Row label="Raised">{formatDate(invoice.created_at)}</Row>
               {/* A snapshot: the document does not change when somebody leaves. */}
-              <Row label="Salesperson">{invoice.owner_name ?? '—'}</Row>
+              <Row label="Owner">{invoice.owner_name ?? 'Unassigned'}</Row>
               <Row label="From order">
                 {salesOrder ? (
                   <Link
@@ -496,154 +812,6 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 )}
               </Row>
             </dl>
-
-            <ActionForm action={updateInvoice} className="space-y-3 border-t border-slate-100 pt-4">
-              <input type="hidden" name="id" value={id} />
-
-              {/*
-                There was nowhere to set this at all — an invoice took whatever
-                currency it was raised with and kept it silently. Editable only
-                while the document is still a draft with no money against it,
-                because changing a currency converts nothing: every figure keeps
-                its number and acquires a new label, which on a document already
-                sent is restating history rather than correcting it. The
-                database refuses the same cases; this is the interface agreeing.
-              */}
-              <div>
-                <label className="label" htmlFor="currency">
-                  Currency
-                </label>
-                {currencyFixed ? (
-                  <>
-                    <p className="input bg-slate-50 text-slate-600">{invoice.currency}</p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {invoice.status === 'draft'
-                        ? 'Fixed once a payment has been recorded.'
-                        : 'Fixed once the invoice has been sent.'}
-                    </p>
-                  </>
-                ) : (
-                  <select
-                    id="currency"
-                    name="currency"
-                    className="input"
-                    defaultValue={invoice.currency}
-                  >
-                    {CURRENCIES.map((code) => (
-                      <option key={code} value={code}>
-                        {code}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {/*
-                Carried from the sales order when there was one, and settable
-                directly on an invoice raised on its own. Locked where it came
-                from an order: the order is where that fact belongs, and two
-                places to change one thing is how they end up disagreeing.
-              */}
-              <div>
-                <label className="label" htmlFor="marketplace_id">
-                  Sold through
-                </label>
-                {invoice.sales_order_id ? (
-                  <>
-                    <p className="input bg-slate-50 text-slate-600">
-                      {channels.find((channel) => channel.id === invoice.marketplace_id)?.name ??
-                        'Direct — no marketplace'}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">Set on the sales order.</p>
-                  </>
-                ) : (
-                  <select
-                    id="marketplace_id"
-                    name="marketplace_id"
-                    className="input"
-                    defaultValue={invoice.marketplace_id ?? ''}
-                  >
-                    <option value="">Direct — no marketplace</option>
-                    {channels.map((channel) => (
-                      <option key={channel.id} value={channel.id}>
-                        {channel.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div>
-                <label className="label" htmlFor="due_date">
-                  Due date
-                </label>
-                <input
-                  id="due_date"
-                  name="due_date"
-                  type="date"
-                  className="input"
-                  defaultValue={invoice.due_date ?? ''}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="payment_terms">
-                  Payment terms
-                </label>
-                <input
-                  id="payment_terms"
-                  name="payment_terms"
-                  className="input"
-                  defaultValue={invoice.payment_terms ?? ''}
-                />
-              </div>
-
-              {/*
-                Notes, and only notes.
-
-                Terms and conditions were here and are gone, as they are on a
-                sales order — the desk does not want a per-document terms
-                box on either. The column is untouched: the header action no
-                longer reads or writes it, so anything already stored is still
-                there for anybody who wants it back.
-              */}
-              {/*
-                Hidden false in front of the checkbox, for the reason the
-                sales order's deposit switch gives: a clear checkbox posts
-                nothing, and nothing is indistinguishable from a form that
-                never asked.
-              */}
-              <input type="hidden" name="show_discount" value="false" />
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  name="show_discount"
-                  value="true"
-                  defaultChecked={invoice.show_discount}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Show the discount column on the document
-              </label>
-
-              <div>
-                <label className="label" htmlFor="notes">
-                  Notes
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  className="input"
-                  defaultValue={invoice.notes ?? ''}
-                />
-              </div>
-
-              {context.canWrite && (
-                <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">
-                  Save
-                </SubmitButton>
-              )}
-            </ActionForm>
 
             {/*
               Deleting is the administrator's escape hatch for an invoice raised

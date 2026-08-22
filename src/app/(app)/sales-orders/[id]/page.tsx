@@ -667,7 +667,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             {context.canWrite && !invoice && salesOrder.status !== 'cancelled' && (
               <ActionForm
                 action={recordDeposit}
-                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4"
+                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-5"
               >
                 <input type="hidden" name="sales_order_id" value={id} />
 
@@ -700,7 +700,25 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   <input id="paid_at" name="paid_at" type="date" className="input" />
                 </div>
 
-                <div className="flex items-end">
+                {/*
+                  The Note column above had nothing that could fill it. The
+                  action has always written this field — a deposit's note is
+                  what tells a wire from a cheque number from "against the
+                  March order" months later — and the form simply never asked.
+                */}
+                <div>
+                  <label className="label" htmlFor="note">
+                    Note
+                  </label>
+                  <input
+                    id="note"
+                    name="note"
+                    className="input"
+                    placeholder="Cheque 1042, or why"
+                  />
+                </div>
+
+                <div className="flex items-end sm:col-span-5">
                   <SubmitButton className="btn-secondary" pendingLabel="Recording…">
                     Record deposit
                   </SubmitButton>
