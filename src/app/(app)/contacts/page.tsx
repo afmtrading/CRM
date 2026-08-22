@@ -7,6 +7,7 @@ import {
   filterFromSearchParams,
   groupRows,
   parseFilterConfig,
+  type FilterConfig,
 } from "@/lib/filters";
 import { contactName, formatDate } from "@/lib/format";
 import type {
@@ -57,28 +58,33 @@ export default async function ContactsPage({
   const params = await searchParams;
   const context = await requireSession();
 
-  const [
-    { data: savedFilters },
-    { data: customFields },
-    { data: owners },
-    { data: companies },
-    { data: contactFieldOptions },
-  ] = await Promise.all([
-    scoped(context, "saved_filters").select("*").eq("entity_type", "contact"),
-    scoped(context, "custom_field_definitions")
-      .select("*")
-      .eq("entity_type", "contact"),
-    scoped(context, "users").select("*").order("name"),
-    scoped(context, "companies").select("id, name").order("name"),
-    scoped(context, "field_options")
-      .select("*")
-      .eq("entity_type", "contact")
-      .order("order"),
-  ]);
+  // A ?view=<id> link replays a saved filter; anything else comes from the URL.
+  const viewId = typeof params.view === "string" ? params.view : null;
+
+  /*
+   * The contact list is the slowest query on the page, and it used to start
+   * only after the five filter-metadata queries above it had all come back —
+   * even though it depends on none of them unless the URL names a saved view.
+   * When the filter is readable from the URL alone (the common case) the list
+   * is dispatched in the same wave as the metadata instead of after it.
+   */
+  const urlConfig = viewId ? null : filterFromSearchParams(params);
+
+  const listQuery = (config: FilterConfig) => {
+    const query = scoped(context, "contacts")
+      .select("*, companies(id, name)", { count: "exact" })
+      // Merged-away records stay in the table as tombstones; the list shows survivors.
+      .is("duplicate_of_id", null)
+      .is("deleted_at", null);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (applyFilter(query as any, config, "contact") as any).limit(PAGE_SIZE);
+  };
 
   // Headline counts describe the whole book of contacts, not the filtered view,
-  // so they stay stable while someone narrows the list below. Started here and
-  // awaited after the list query so the two run concurrently.
+  // so they stay stable while someone narrows the list below. Dispatched before
+  // the await below so they share one round trip with everything else rather
+  // than forming a second wave behind it.
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -97,8 +103,31 @@ export default async function ContactsPage({
     live().is("owner_id", null),
   ]);
 
-  // A ?view=<id> link replays a saved filter; anything else comes from the URL.
-  const viewId = typeof params.view === "string" ? params.view : null;
+  const [
+    [
+      { data: savedFilters },
+      { data: customFields },
+      { data: owners },
+      { data: companies },
+      { data: contactFieldOptions },
+    ],
+    earlyList,
+  ] = await Promise.all([
+    Promise.all([
+      scoped(context, "saved_filters").select("*").eq("entity_type", "contact"),
+      scoped(context, "custom_field_definitions")
+        .select("*")
+        .eq("entity_type", "contact"),
+      scoped(context, "users").select("*").order("name"),
+      scoped(context, "companies").select("id, name").order("name"),
+      scoped(context, "field_options")
+        .select("*")
+        .eq("entity_type", "contact")
+        .order("order"),
+    ]),
+    urlConfig ? listQuery(urlConfig) : Promise.resolve(null),
+  ]);
+
   const savedView = viewId
     ? ((savedFilters ?? []) as SavedFilterRow[]).find(
         (filter) => filter.id === viewId,
@@ -107,7 +136,7 @@ export default async function ContactsPage({
 
   const config = savedView
     ? parseFilterConfig(savedView.filter_json)
-    : filterFromSearchParams(params);
+    : (urlConfig ?? filterFromSearchParams(params));
 
   const ownerList = (owners ?? []) as UserRow[];
   const companyList = (companies ?? []) as Pick<CompanyRow, "id" | "name">[];
@@ -138,16 +167,13 @@ export default async function ContactsPage({
     return field;
   });
 
-  let query = scoped(context, "contacts")
-    .select("*, companies(id, name)", { count: "exact" })
-    // Merged-away records stay in the table as tombstones; the list shows survivors.
-    .is("duplicate_of_id", null)
-    .is("deleted_at", null);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query = applyFilter(query as any, config, "contact") as any;
-
-  const { data: contacts, count, error } = await query.limit(PAGE_SIZE);
+  // Already in flight unless the URL named a saved view, whose conditions were
+  // not known until savedFilters came back.
+  const {
+    data: contacts,
+    count,
+    error,
+  } = await (earlyList ?? listQuery(config));
   const [totalStat, newThisMonth, customers, unassigned] = await statsPromise;
 
   const rows = (contacts ?? []) as (ContactRow & {

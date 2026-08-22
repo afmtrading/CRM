@@ -19,9 +19,18 @@ export default async function DealsPage({
 
   const view = params.view === 'list' ? 'list' : 'kanban'
 
-  const [{ data: pipelines }, { data: users }] = await Promise.all([
+  /*
+   * Stages are fetched for the whole organization rather than for the active
+   * pipeline. Which pipeline is active is only known after the pipelines query
+   * returns, so scoping the stage query to it forced three sequential round
+   * trips (pipelines -> stages -> deals) in front of the board. Stages are a
+   * handful of rows per pipeline, so reading all of them and picking the
+   * active pipeline's in memory costs less than the extra trip it removes.
+   */
+  const [{ data: pipelines }, { data: users }, { data: allStages }] = await Promise.all([
     scoped(context, 'pipelines').select('*').order('name'),
     scoped(context, 'users').select('*').order('name'),
+    scoped(context, 'stages').select('*').order('order'),
   ])
 
   const pipelineList = (pipelines ?? []) as PipelineRow[]
@@ -49,12 +58,9 @@ export default async function DealsPage({
     )
   }
 
-  const { data: stages } = await scoped(context, 'stages')
-    .select('*')
-    .eq('pipeline_id', activePipeline.id)
-    .order('order')
-
-  const stageList = (stages ?? []) as StageRow[]
+  const stageList = ((allStages ?? []) as StageRow[]).filter(
+    (stage) => stage.pipeline_id === activePipeline.id,
+  )
   const stageIds = stageList.map((stage) => stage.id)
 
   let dealQuery = scoped(context, 'deals')

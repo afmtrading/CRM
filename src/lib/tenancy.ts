@@ -37,10 +37,18 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
 
   if (!authUser) return null
 
-  // Read through RLS: this returns the caller's own user row only.
+  /*
+   * Read through RLS: this returns the caller's own user row only.
+   *
+   * The organization is embedded rather than fetched afterwards. Both rows are
+   * needed before any page can render, so a second sequential round trip to
+   * Postgres sat in front of every single request; the foreign key on
+   * users.organization_id lets PostgREST join them in one. RLS still applies to
+   * the embedded table exactly as it did to the separate query.
+   */
   const { data: userRow } = await supabase
     .from('users')
-    .select('*')
+    .select('*, organizations(*)')
     .eq('auth_provider_id', authUser.id)
     .eq('status', 'active')
     .order('created_at')
@@ -49,11 +57,10 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
 
   if (!userRow) return null
 
-  const { data: organization } = await supabase
-    .from('organizations')
-    .select('*')
-    .eq('id', userRow.organization_id)
-    .single()
+  const { organizations, ...user } = userRow as UserRow & {
+    organizations: OrganizationRow | null
+  }
+  const organization = organizations
 
   if (!organization) return null
 
@@ -65,16 +72,16 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
    */
   return {
     authUserId: authUser.id,
-    user: userRow,
+    user,
     organization,
     organizationId: organization.id,
-    isAdmin: userRow.role === 'admin',
-    canManage: userRow.role === 'admin' || userRow.role === 'manager',
+    isAdmin: user.role === 'admin',
+    canManage: user.role === 'admin' || user.role === 'manager',
     canBulk:
-      userRow.role === 'admin' ||
-      userRow.role === 'manager' ||
-      userRow.role === 'sales_director',
-    canWrite: userRow.role !== 'readonly',
+      user.role === 'admin' ||
+      user.role === 'manager' ||
+      user.role === 'sales_director',
+    canWrite: user.role !== 'readonly',
     supabase,
   }
 })

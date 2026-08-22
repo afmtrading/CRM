@@ -1,14 +1,16 @@
+import { Suspense } from 'react'
+
 import Link from 'next/link'
 
-import { requireSession, scoped } from '@/lib/tenancy'
+import { requireSession } from '@/lib/tenancy'
 import { initials } from '@/lib/format'
 import { USER_ROLE_LABELS } from '@/lib/field-options'
 
 import { NavLink } from '@/components/nav-link'
+import { NotificationBell, NotificationBellFallback } from './notification-bell'
 import {
   ActivityIcon,
   AssignmentIcon,
-  BellIcon,
   ChevronDownIcon,
   CompaniesIcon,
   ContactsIcon,
@@ -66,11 +68,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const context = await requireSession()
   const { user, organization, isAdmin, canBulk } = context
   const displayName = user.name || user.email
-
-  // Unread count for the bell. Cheap: a partial index covers exactly this.
-  const { count: unread } = await scoped(context, 'notifications')
-    .select('id', { count: 'exact', head: true })
-    .is('read_at', null)
 
   return (
     <div className="flex min-h-screen">
@@ -155,18 +152,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </form>
 
             <div className="ml-auto flex items-center gap-1.5">
-              <Link
-                href="/notifications"
-                aria-label={unread ? `Notifications (${unread} unread)` : 'Notifications'}
-                className="relative rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-              >
-                <BellIcon className="h-5 w-5" />
-                {(unread ?? 0) > 0 && (
-                  <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
-                    {(unread ?? 0) > 9 ? '9+' : unread}
-                  </span>
-                )}
-              </Link>
+              <Suspense fallback={<NotificationBellFallback />}>
+                <NotificationBell />
+              </Suspense>
 
               {/* <details> keeps the menu server-rendered — no client bundle
                   for something this small. */}
