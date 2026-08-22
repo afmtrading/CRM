@@ -76,6 +76,23 @@ export const headerSchema = z.object({
   order_date: z.string().trim().min(1).optional(),
   payment_terms: text(200),
   shipping_charge: z.coerce.number().min(0).default(0),
+  /*
+   * Money off the whole document, as a pair — a kind and a rate, exactly like
+   * a line's revision. The table's CHECK insists on both or neither, which is
+   * why `headerPatch` normalises them together below rather than letting one
+   * arrive without the other.
+   */
+  discount_type: z.enum(['percent', 'fixed']).optional().catch(undefined),
+  discount_rate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => {
+      if (value === undefined) return undefined
+      if (value === '') return null
+      const parsed = Number(value)
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+    }),
   notes: z.string().max(20_000).default(''),
 })
 
@@ -121,6 +138,26 @@ export function headerPatch(
     // A currency the picker disabled arrives as nothing rather than as blank.
     if (key === 'currency' && !value) continue
     patch[key] = HEADER_NULLABLE.has(key) ? (value as string) || null : value
+  }
+
+  /*
+   * The pair is whole or absent.
+   *
+   * A rate cleared takes its kind with it — otherwise a kind sits on the row
+   * with nothing to apply, which the CHECK refuses and which would surface as
+   * a database error on an ordinary save. A rate typed with no kind chosen is
+   * a percent, which is what somebody typing a number into a discount box
+   * means. Done here rather than only in the browser so the constraint cannot
+   * be tripped by a form this file has not seen.
+   */
+  if ('discount_rate' in patch || 'discount_type' in patch) {
+    const rate = patch.discount_rate as number | null | undefined
+    if (rate === null || rate === undefined) {
+      patch.discount_rate = null
+      patch.discount_type = null
+    } else {
+      patch.discount_type = patch.discount_type || 'percent'
+    }
   }
 
   return patch

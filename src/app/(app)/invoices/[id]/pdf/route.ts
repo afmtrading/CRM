@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { documentTotals, ledgerBalance, round2 } from '@/lib/sales'
+import { documentRevisionLabel, documentTotals, ledgerBalance, round2 } from '@/lib/sales'
 import { documentDetails, documentFilename } from '@/lib/document'
 import type { DocumentModel } from '@/lib/document'
 import { loadOrganizationLogo } from '@/lib/document-logo'
@@ -62,7 +62,10 @@ export async function GET(
   const productById = new Map(((productRows ?? []) as ProductRow[]).map((p) => [p.id, p]))
 
   const paid = ledgerBalance(payments)
-  const totals = documentTotals(lines, Number(invoice.shipping_charge), paid)
+  const totals = documentTotals(lines, Number(invoice.shipping_charge), paid, {
+    rateType: invoice.discount_type,
+    rate: invoice.discount_rate === null ? null : Number(invoice.discount_rate),
+  })
 
   const buyer = company as CompanyRow | null
   const person = contact as ContactRow | null
@@ -118,6 +121,12 @@ export async function GET(
     }),
     showDiscount: invoice.show_discount,
     subtotal: totals.subtotal,
+    discount: totals.discount,
+    discountLabel: documentRevisionLabel(
+      invoice.discount_type,
+      invoice.discount_rate === null ? null : Number(invoice.discount_rate),
+      invoice.currency,
+    ),
     shipping: totals.shipping,
     total: totals.total,
     paid: totals.paid,

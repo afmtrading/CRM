@@ -84,13 +84,39 @@ export function lineTotal(
   return round2(round2(quantity * unitPrice) - lineDiscount(quantity, unitPrice, rateType, rate))
 }
 
+/**
+ * Money off a whole document, given what its lines came to.
+ *
+ * The twin of `document_discount` in SQL, and clamped at both ends for the same
+ * reasons a line's discount is. Never below zero, because a discount is money
+ * off rather than a surcharge. Never above the subtotal, because 150% off an
+ * order is a free order rather than money owed back to the customer.
+ */
+export function documentDiscount(
+  subtotal: number,
+  rateType: RevisedRateType | null | undefined,
+  rate: number | null | undefined,
+): number {
+  if (!rateType || rate === null || rate === undefined) return 0
+  const off = rateType === 'percent' ? (subtotal * rate) / 100 : rate
+  return round2(Math.min(Math.max(subtotal, 0), Math.max(0, off)))
+}
+
 /** The shape both documents' lines share, as far as arithmetic is concerned. */
 interface Priced {
   line_total: number
 }
 
+/** What the whole document is discounted by, when it is. */
+export interface DocumentRevision {
+  rateType: RevisedRateType | null | undefined
+  rate: number | null | undefined
+}
+
 export interface DocumentTotals {
   subtotal: number
+  /** Money off the whole document. Zero when there is none. */
+  discount: number
   shipping: number
   total: number
   paid: number
@@ -102,10 +128,21 @@ export function documentTotals(
   lines: Priced[],
   shipping: number = 0,
   paid: number = 0,
+  revision?: DocumentRevision,
 ): DocumentTotals {
   const subtotal = round2(lines.reduce((sum, line) => round2(sum + Number(line.line_total)), 0))
-  const total = round2(subtotal + Number(shipping ?? 0))
-  return { subtotal, shipping: round2(Number(shipping ?? 0)), total, paid: round2(paid), balance: round2(total - paid) }
+  const discount = documentDiscount(subtotal, revision?.rateType, revision?.rate)
+  // Off the subtotal, before shipping: carriage is what it costs to send the
+  // goods, and a discount on the goods does not make the truck cheaper.
+  const total = round2(subtotal - discount + Number(shipping ?? 0))
+  return {
+    subtotal,
+    discount,
+    shipping: round2(Number(shipping ?? 0)),
+    total,
+    paid: round2(paid),
+    balance: round2(total - paid),
+  }
 }
 
 /** Nets a payment ledger. Positive rows are money in, negative ones reverse it. */
@@ -321,6 +358,22 @@ export function revisionLabel(
   // "off", not "at": a fixed rate is money taken off a unit now, not the price
   // the unit becomes. See 20260268000000.
   return `${formatPrice(rate, currency)} off`
+}
+
+/**
+ * How a document's discount reads on screen: "5% off" or "$25.00 off".
+ *
+ * The same words a line's revision uses, because it is the same idea one level
+ * up — and a document that says "5% off" beside a line that says "10% off"
+ * should not make the reader wonder whether they mean different things.
+ */
+export function documentRevisionLabel(
+  rateType: RevisedRateType | null | undefined,
+  rate: number | null | undefined,
+  currency: string,
+): string | null {
+  if (!rateType || rate === null || rate === undefined) return null
+  return rateType === 'percent' ? `${rate}% off` : `${formatPrice(rate, currency)} off`
 }
 
 /**

@@ -260,22 +260,33 @@ export function DocumentPdf({ model }: { model: DocumentModel }) {
         </View>
 
         {/* ------------------------------------------------------------- */}
-        {/* Money. Sub-total and shipping only appear when carriage was    */}
-        {/* actually charged — a "$0.00" shipping line invites the         */}
-        {/* question it is trying to answer.                               */}
+        {/* Money. Sub-total, discount and shipping only appear when they  */}
+        {/* say something — a "$0.00" shipping line invites the question   */}
+        {/* it is trying to answer, and so does a discount of nothing.     */}
         <View style={styles.totalsWrap}>
           <View style={styles.totals}>
+            {model.shipping !== 0 || model.discount !== 0 ? (
+              <View style={styles.totalRow}>
+                <Text>Sub-total</Text>
+                <Text>{money(model.subtotal)}</Text>
+              </View>
+            ) : null}
+            {model.discount !== 0 ? (
+              /* Says how it was agreed as well as what it came to: "Discount
+                 (5% off)" is a figure the customer can check, and a bare
+                 "Discount" is one they have to take on trust. */
+              <View style={styles.totalRow}>
+                <Text>
+                  Discount{model.discountLabel ? ` (${model.discountLabel})` : ''}
+                </Text>
+                <Text>-{money(model.discount)}</Text>
+              </View>
+            ) : null}
             {model.shipping !== 0 ? (
-              <>
-                <View style={styles.totalRow}>
-                  <Text>Sub-total</Text>
-                  <Text>{money(model.subtotal)}</Text>
-                </View>
-                <View style={styles.totalRow}>
-                  <Text>Shipping</Text>
-                  <Text>{money(model.shipping)}</Text>
-                </View>
-              </>
+              <View style={styles.totalRow}>
+                <Text>Shipping</Text>
+                <Text>{money(model.shipping)}</Text>
+              </View>
             ) : null}
             <View style={styles.totalRow}>
               <Text>Order total</Text>

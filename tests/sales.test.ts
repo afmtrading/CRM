@@ -47,6 +47,8 @@ function invoice(overrides: Partial<InvoiceRow> = {}): InvoiceRow {
     owner_name: 'Raj',
     status: 'sent',
     currency: 'USD',
+    discount_type: null,
+    discount_rate: null,
     issue_date: '2026-01-10',
     due_date: null,
     subtotal: 1000,

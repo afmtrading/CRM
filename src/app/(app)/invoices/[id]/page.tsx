@@ -7,6 +7,8 @@ import { CURRENCIES, formatDate, formatDay, formatNumber, formatPrice } from '@/
 import {
   INVOICE_STATUS_LABELS,
   daysOverdue,
+  documentDiscount,
+  documentRevisionLabel,
   isOverdue,
   settableInvoiceStatuses,
 } from '@/lib/sales'
@@ -118,6 +120,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
   /* What the lines add up to in units, which the printed document leads with. */
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity), 0)
+
+  /* What the stored total already has taken off it, so the card can show it. */
+  const discount = documentDiscount(
+    Number(invoice.subtotal),
+    invoice.discount_type,
+    invoice.discount_rate === null ? null : Number(invoice.discount_rate),
+  )
 
   const owed = Number(invoice.total) - Number(invoice.amount_paid)
   const late = daysOverdue(invoice.due_date, today)
@@ -752,6 +761,62 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               <Row label="Subtotal">
                 <Money value={Number(invoice.subtotal)} currency={invoice.currency} cents />
               </Row>
+
+              {/*
+                Money off the whole invoice — carried from the order when there
+                was one, and set here on an invoice raised on its own. Read on
+                anything else: the stored total is what the customer received.
+              */}
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-slate-500">Discount</dt>
+                <dd className="text-slate-700">
+                  {composable ? (
+                    <ActionForm action={updateInvoice} className="flex items-center gap-1">
+                      <input type="hidden" name="id" value={id} />
+                      <input
+                        name="discount_rate"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={invoice.discount_rate ?? ''}
+                        placeholder="—"
+                        className="input w-16 px-2 py-1 text-right text-sm"
+                        aria-label="Invoice discount"
+                      />
+                      <select
+                        name="discount_type"
+                        defaultValue={invoice.discount_type ?? 'percent'}
+                        className="input w-14 px-1 py-1 text-sm"
+                        aria-label="Invoice discount kind"
+                      >
+                        <option value="percent">%</option>
+                        <option value="fixed">$</option>
+                      </select>
+                      <SubmitButton
+                        className="text-xs text-slate-500 hover:text-slate-900"
+                        pendingLabel="…"
+                      >
+                        Save
+                      </SubmitButton>
+                    </ActionForm>
+                  ) : (
+                    (documentRevisionLabel(
+                      invoice.discount_type,
+                      invoice.discount_rate,
+                      invoice.currency,
+                    ) ?? <Empty />)
+                  )}
+                </dd>
+              </div>
+
+              {discount > 0 && (
+                <Row label="Less discount">
+                  <span className="text-red-600">
+                    −<Money value={discount} currency={invoice.currency} cents />
+                  </span>
+                </Row>
+              )}
+
               <Row label="Shipping">
                 {composable ? (
                   <ActionForm action={setInvoiceShipping} className="flex items-center gap-1">

@@ -5,6 +5,7 @@ import { formatDay, formatNumber } from '@/lib/format'
 import {
   SALES_ORDER_STATUSES,
   SALES_ORDER_STATUS_LABELS,
+  documentDiscount,
   isSalesOrderFiltered,
   salesOrderFilterFromParams,
   totalsByCurrency,
@@ -78,8 +79,20 @@ export default async function SalesOrdersPage({
     )
   }
 
-  const orderValue = (order: SalesOrderRow) =>
-    (valueByOrder.get(order.id) ?? 0) + Number(order.shipping_charge)
+  /*
+   * What the order is worth, by the same rule the document prints: the lines,
+   * less whatever was taken off the whole order, plus carriage. A list that
+   * ignored the discount would total more than the invoices behind it.
+   */
+  const orderValue = (order: SalesOrderRow) => {
+    const subtotal = valueByOrder.get(order.id) ?? 0
+    const off = documentDiscount(
+      subtotal,
+      order.discount_type,
+      order.discount_rate === null ? null : Number(order.discount_rate),
+    )
+    return subtotal - off + Number(order.shipping_charge)
+  }
 
   const companyList = (companies ?? []) as Pick<CompanyRow, 'id' | 'name'>[]
   const companyName = new Map(companyList.map((company) => [company.id, company.name]))
