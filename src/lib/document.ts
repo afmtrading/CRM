@@ -80,6 +80,13 @@ export interface DocumentModel {
   showDiscount: boolean
 
   subtotal: number
+  /**
+   * Money off the whole document, already worked out. Zero when there is none,
+   * and the renderer prints the row only when there is.
+   */
+  discount: number
+  /** How it was agreed — "5% off", "$25.00 off" — or null when there is none. */
+  discountLabel: string | null
   shipping: number
   total: number
   paid: number

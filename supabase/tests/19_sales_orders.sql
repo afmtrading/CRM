@@ -952,6 +952,125 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- A discount on the whole document, and the total it has to move.
+--
+-- The formula lives in `document_discount` and has a twin in lib/sales, so a
+-- form can show the number before it saves it. What matters here is the part
+-- only the database can get wrong: an invoice's total is *stored*, and it
+-- drives the status and the balance. A discount that moves the screen and not
+-- the stored total is an invoice that says it is paid when it is not.
+-- =============================================================================
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_speaker uuid := (select id from fixture where key = 'speaker');
+  v_order   uuid;
+  v_invoice uuid;
+begin
+  raise notice 'A discount on the whole order:';
+
+  perform sign_in_as('mgr_auth');
+
+  -- The helper, on its own.
+  perform test_assert(public.document_discount(200, 'percent', 5) = 10, '5% off 200 is 10');
+  perform test_assert(public.document_discount(200, 'fixed', 25) = 25, '$25 off is 25');
+  perform test_assert(public.document_discount(200, null, null) = 0, 'no discount is nothing');
+  perform test_assert(public.document_discount(200, 'percent', null) = 0, 'and so is half a pair');
+  -- Both clamps, for the reason a line's discount gives: money off is never a
+  -- surcharge and never turns into money owed back.
+  perform test_assert(public.document_discount(200, 'fixed', 500) = 200, 'never more than the subtotal');
+  perform test_assert(public.document_discount(200, 'percent', 150) = 200, 'nor by percentage');
+  perform test_assert(public.document_discount(0, 'percent', 10) = 0, 'nothing off nothing');
+
+  v_order := public.create_sales_order(
+    (select id from fixture where key = 'acme'), null, null, 'USD'
+  );
+
+  -- Half a pair is refused by the table, not merely discouraged by a form.
+  begin
+    update sales_orders set discount_rate = 5 where id = v_order;
+    perform test_assert(false, 'a rate with no kind should be refused');
+  exception when check_violation then
+    perform test_assert(true, 'a rate with no kind is refused');
+  end;
+
+  begin
+    update sales_orders set discount_type = 'percent' where id = v_order;
+    perform test_assert(false, 'a kind with no rate should be refused');
+  exception when check_violation then
+    perform test_assert(true, 'a kind with no rate is refused');
+  end;
+
+  begin
+    update sales_orders set discount_type = 'fixed', discount_rate = -1 where id = v_order;
+    perform test_assert(false, 'a negative discount should be refused');
+  exception when check_violation then
+    perform test_assert(true, 'and a negative discount is refused');
+  end;
+
+  -- Two lines: 10 x 100 and 5 x 100. Subtotal 1500.
+  insert into sales_order_lines (organization_id, sales_order_id, product_id, quantity, unit_price, unit_cost)
+  values (v_org, v_order, v_speaker, 10, 100, 60),
+         (v_org, v_order, v_speaker, 5, 100, 60);
+
+  update sales_orders
+  set discount_type = 'percent', discount_rate = 10, shipping_charge = 50, status = 'confirmed'
+  where id = v_order;
+
+  perform test_assert(
+    (select coalesce(sum(line_total), 0) from sales_order_lines where sales_order_id = v_order) = 1500,
+    'the lines come to 1500'
+  );
+
+  -- And the invoice raised from it bills 1500 - 150 + 50.
+  v_invoice := public.convert_sales_order_to_invoice(v_order);
+
+  perform test_assert(
+    (select subtotal from invoices where id = v_invoice) = 1500,
+    'the invoice keeps the subtotal the lines came to'
+  );
+  perform test_assert(
+    (select discount_type from invoices where id = v_invoice) = 'percent'
+    and (select discount_rate from invoices where id = v_invoice) = 10,
+    'and carries the order''s discount across'
+  );
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 1400,
+    'so the stored total is the subtotal less the discount, plus shipping'
+  );
+
+  -- Changing it on the invoice has to move the stored total, which is the
+  -- thing `update of` on the trigger decides. Left unlisted, this passes on
+  -- screen and writes nothing.
+  update invoices set discount_type = 'fixed', discount_rate = 500 where id = v_invoice;
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 1050,
+    'a discount changed on the invoice moves the stored total'
+  );
+
+  update invoices set shipping_charge = 0 where id = v_invoice;
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 1000,
+    'and so does the shipping charge, still'
+  );
+
+  -- A discount bigger than the whole invoice leaves shipping owing, not a
+  -- credit note.
+  update invoices set discount_rate = 99999 where id = v_invoice;
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 0,
+    'a discount larger than the invoice makes it free rather than negative'
+  );
+
+  update invoices set discount_type = null, discount_rate = null where id = v_invoice;
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 1500,
+    'and clearing it puts the total back'
+  );
+end;
+$$;
+
 reset role;
 
 rollback;

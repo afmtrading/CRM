@@ -8,6 +8,7 @@ import {
   SALES_ORDER_STATUS_LABELS,
   canInvoice,
   documentMargin,
+  documentRevisionLabel,
   documentTotals,
   invoiceBlockedReason,
   isEditable,
@@ -154,7 +155,10 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
   ].sort((a, b) => a.localeCompare(b))
 
   const deposits = ledgerBalance(payments)
-  const totals = documentTotals(lines, Number(salesOrder.shipping_charge), deposits)
+  const totals = documentTotals(lines, Number(salesOrder.shipping_charge), deposits, {
+    rateType: salesOrder.discount_type,
+    rate: salesOrder.discount_rate === null ? null : Number(salesOrder.discount_rate),
+  })
   const margin = documentMargin(lines)
   const editable = isEditable(salesOrder.status) && context.canWrite
   const blocked = invoiceBlockedReason(salesOrder.status)
@@ -738,9 +742,104 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
               <Row label="Subtotal">
                 <Money value={totals.subtotal} currency={salesOrder.currency} cents />
               </Row>
-              <Row label="Shipping">
-                <Money value={totals.shipping} currency={salesOrder.currency} cents />
-              </Row>
+
+              {/*
+                Money off the whole order, set where its effect is visible.
+
+                A desk that agrees "5% off the job" had to spread it across
+                every line by hand and hope the arithmetic came out — a
+                discount the document could not state and the next person could
+                not check. Taken off the subtotal, before shipping: carriage is
+                what it costs to send the goods, and a discount on the goods
+                does not make the truck cheaper.
+              */}
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-slate-500">Discount</dt>
+                <dd className="text-slate-700">
+                  {editable && context.canWrite ? (
+                    <ActionForm action={updateSalesOrder} className="flex items-center gap-1">
+                      <input type="hidden" name="id" value={id} />
+                      <input
+                        name="discount_rate"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={salesOrder.discount_rate ?? ''}
+                        placeholder="—"
+                        className="input w-16 px-2 py-1 text-right text-sm"
+                        aria-label="Order discount"
+                      />
+                      {/* The pair a line's revision uses, and the same two
+                          choices. Clearing the rate clears the kind with it —
+                          lib/sales-order-header does that, because half a pair
+                          is what the table's CHECK refuses. */}
+                      <select
+                        name="discount_type"
+                        defaultValue={salesOrder.discount_type ?? 'percent'}
+                        className="input w-14 px-1 py-1 text-sm"
+                        aria-label="Order discount kind"
+                      >
+                        <option value="percent">%</option>
+                        <option value="fixed">$</option>
+                      </select>
+                      <SubmitButton
+                        className="text-xs text-slate-500 hover:text-slate-900"
+                        pendingLabel="…"
+                      >
+                        Save
+                      </SubmitButton>
+                    </ActionForm>
+                  ) : (
+                    (documentRevisionLabel(
+                      salesOrder.discount_type,
+                      salesOrder.discount_rate,
+                      salesOrder.currency,
+                    ) ?? <Empty />)
+                  )}
+                </dd>
+              </div>
+
+              {/* What that comes to, only once it comes to something. */}
+              {totals.discount > 0 && (
+                <Row label="Less discount">
+                  <span className="text-red-600">
+                    −<Money value={totals.discount} currency={salesOrder.currency} cents />
+                  </span>
+                </Row>
+              )}
+
+              {/*
+                Shipping had no field anywhere. The column and the header
+                action have always taken one — the Summary simply printed
+                $0.00 with nothing that could change it.
+              */}
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-slate-500">Shipping</dt>
+                <dd className="text-slate-700">
+                  {editable && context.canWrite ? (
+                    <ActionForm action={updateSalesOrder} className="flex items-center gap-1">
+                      <input type="hidden" name="id" value={id} />
+                      <input
+                        name="shipping_charge"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={String(salesOrder.shipping_charge)}
+                        className="input w-24 py-1 text-right text-sm"
+                        aria-label="Shipping charge"
+                      />
+                      <SubmitButton
+                        className="text-xs text-slate-500 hover:text-slate-900"
+                        pendingLabel="…"
+                      >
+                        Save
+                      </SubmitButton>
+                    </ActionForm>
+                  ) : (
+                    <Money value={totals.shipping} currency={salesOrder.currency} cents />
+                  )}
+                </dd>
+              </div>
               <Row label="Total" strong>
                 <Money value={totals.total} currency={salesOrder.currency} cents />
               </Row>
@@ -764,7 +863,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             )}
           </Section>
 
-          <Section title="Record">
+          <Section title="Record History">
             <dl className="space-y-2 text-sm">
               <Row label="Raised">{formatDate(salesOrder.created_at)}</Row>
               {/*

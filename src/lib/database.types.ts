@@ -788,6 +788,16 @@ export type SalesOrderRow = {
   order_date: string
   payment_terms: string | null
   shipping_charge: number
+  /**
+   * Money off the whole document, as a percent or an amount.
+   *
+   * Both null, or both set — the CHECK on the table says so, for the reason a
+   * line's revision pair gives: a kind with no rate applies nothing, and a rate
+   * with no kind cannot be applied. Null is not zero: a discount of nothing
+   * still prints a Discount row, and no discount does not.
+   */
+  discount_type: RevisedRateType | null
+  discount_rate: number | null
   notes: string | null
   terms: string | null
   /** Whether the printed document shows what each line was discounted from. */
@@ -882,6 +892,16 @@ export type InvoiceRow = {
   issue_date: string
   due_date: string | null
   subtotal: number
+  /**
+   * Money off the whole document, as a percent or an amount.
+   *
+   * Both null, or both set — the CHECK on the table says so, for the reason a
+   * line's revision pair gives: a kind with no rate applies nothing, and a rate
+   * with no kind cannot be applied. Null is not zero: a discount of nothing
+   * still prints a Discount row, and no discount does not.
+   */
+  discount_type: RevisedRateType | null
+  discount_rate: number | null
   shipping_charge: number
   total: number
   amount_paid: number

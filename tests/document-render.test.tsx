@@ -56,6 +56,8 @@ function model(overrides: Partial<DocumentModel> = {}): DocumentModel {
     ],
     showDiscount: true,
     subtotal: 134,
+    discount: 0,
+    discountLabel: null,
     shipping: 0,
     total: 134,
     paid: 0,

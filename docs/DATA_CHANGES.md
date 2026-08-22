@@ -281,3 +281,23 @@ to keep editing.
 
 Reverting means setting SO-0007 back to `confirmed`; the rule itself reverts
 by restoring `fulfilled` to nextStatuses and dropping the trigger.
+
+## 2026-08-22 — Discount and shipping columns added
+
+`20260271000000_document_discount.sql` adds `discount_type` and `discount_rate`
+to `sales_orders` and `invoices`. Both nullable, both left null on every
+existing row: no order and no invoice is retroactively discounted, and the
+stored totals are untouched because `document_discount` returns zero for a null
+pair.
+
+Nothing is destroyed here. The one behaviour that changes for existing rows is
+the `invoices_total` trigger's column list, which now also fires on the two new
+columns — an invoice whose discount is edited recomputes its stored total,
+which it could not do before because the columns did not exist.
+
+Verified before applying, against a throwaway Postgres running every migration
+in order:
+
+- `select count(*) from sales_orders where discount_rate is not null` → 0
+- `select count(*) from invoices where discount_rate is not null` → 0
+- every stored `invoices.total` equal to `subtotal + shipping_charge`, as before
