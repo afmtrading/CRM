@@ -3,7 +3,15 @@ import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { todayIn } from '@/lib/timezone'
-import { CURRENCIES, formatDate, formatDay, formatNumber, formatPrice } from '@/lib/format'
+import {
+  CURRENCIES,
+  currencySymbol,
+  formatDate,
+  formatDateTime,
+  formatDay,
+  formatNumber,
+  formatPrice,
+} from '@/lib/format'
 import {
   INVOICE_STATUS_LABELS,
   daysOverdue,
@@ -21,7 +29,6 @@ import type {
   SalesOrderRow,
 } from '@/lib/database.types'
 import { Empty } from '@/components/contact-cards'
-import { Money } from '@/components/money'
 import { InvoiceStatusBadge, PageHeader, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
 
@@ -54,6 +61,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     { data: order },
     { data: products },
     { data: channelRows },
+    { data: raisedBy },
   ] =
     await Promise.all([
       scoped(context, 'invoice_lines').select('*').eq('invoice_id', id).order('position'),
@@ -85,6 +93,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       scoped(context, 'marketplace_profiles')
         .select('company_id, companies(name)')
         .eq('sells_through', true),
+      /* Whoever raised it, by their own query rather than the picker list —
+         somebody since disabled still raised the invoices they raised. */
+      invoice.created_by
+        ? scoped(context, 'users').select('name, email').eq('id', invoice.created_by).maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
 
   const lines = (lineRows ?? []) as InvoiceLineRow[]
@@ -128,6 +141,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     invoice.discount_rate === null ? null : Number(invoice.discount_rate),
   )
 
+  const stamp = raisedBy as { name: string | null; email: string } | null
+  const createdBy = stamp ? stamp.name || stamp.email : 'Unknown'
+
   const owed = Number(invoice.total) - Number(invoice.amount_paid)
   const late = daysOverdue(invoice.due_date, today)
 
@@ -156,6 +172,25 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               <Link href={`/sales-orders/${salesOrder.id}`} className="btn-secondary">
                 {salesOrder.number}
               </Link>
+            )}
+
+            {/*
+              With the other whole-document actions, as on a sales order.
+              Still the administrator's escape hatch for an invoice raised
+              against the wrong order — voiding is the ordinary answer, because
+              it leaves the number in the sequence where an audit expects it.
+            */}
+            {context.isAdmin && (
+              <ActionForm action={deleteInvoice}>
+                <input type="hidden" name="id" value={id} />
+                <SubmitButton
+                  className="btn-secondary text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                  pendingLabel="Deleting…"
+                  title="Void it instead unless the invoice should never have existed."
+                >
+                  Delete this invoice
+                </SubmitButton>
+              </ActionForm>
             )}
           </>
         }
@@ -759,7 +794,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                   rather than the number of lines. */}
               <Row label="Total quantity">{formatNumber(totalQuantity)}</Row>
               <Row label="Subtotal">
-                <Money value={Number(invoice.subtotal)} currency={invoice.currency} cents />
+                {formatPrice(Number(invoice.subtotal), invoice.currency)}
               </Row>
 
               {/*
@@ -812,7 +847,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               {discount > 0 && (
                 <Row label="Less discount">
                   <span className="text-red-600">
-                    −<Money value={discount} currency={invoice.currency} cents />
+                    −{formatPrice(discount, invoice.currency)}
                   </span>
                 </Row>
               )}
@@ -821,15 +856,20 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 {composable ? (
                   <ActionForm action={setInvoiceShipping} className="flex items-center gap-1">
                     <input type="hidden" name="id" value={id} />
-                    <input
-                      name="shipping_charge"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={String(invoice.shipping_charge)}
-                      className="input w-24 py-1 text-right text-sm"
-                      aria-label="Shipping charge"
-                    />
+                    <span className="relative">
+                      <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-sm text-slate-400">
+                        {currencySymbol(invoice.currency)}
+                      </span>
+                      <input
+                        name="shipping_charge"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={String(invoice.shipping_charge)}
+                        className="input w-24 py-1 pl-5 text-right text-sm"
+                        aria-label="Shipping charge"
+                      />
+                    </span>
                     <SubmitButton
                       className="text-xs text-slate-500 hover:text-slate-900"
                       pendingLabel="Saving…"
@@ -838,17 +878,17 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                     </SubmitButton>
                   </ActionForm>
                 ) : (
-                  <Money value={Number(invoice.shipping_charge)} currency={invoice.currency} cents />
+                  formatPrice(Number(invoice.shipping_charge), invoice.currency)
                 )}
               </Row>
               <Row label="Total" strong>
-                <Money value={Number(invoice.total)} currency={invoice.currency} cents />
+                {formatPrice(Number(invoice.total), invoice.currency)}
               </Row>
               <Row label="Paid">
-                <Money value={Number(invoice.amount_paid)} currency={invoice.currency} cents />
+                {formatPrice(Number(invoice.amount_paid), invoice.currency)}
               </Row>
               <Row label="Owed" strong>
-                <Money value={owed} currency={invoice.currency} cents />
+                {formatPrice(owed, invoice.currency)}
               </Row>
             </dl>
 
@@ -859,45 +899,42 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           </Section>
 
           {/* The order's Record card, and the same two facts on it. */}
-          <Section title="Record">
-            <dl className="space-y-2 text-sm">
-              <Row label="Raised">{formatDate(invoice.created_at)}</Row>
-              {/* A snapshot: the document does not change when somebody leaves. */}
-              <Row label="Owner">{invoice.owner_name ?? 'Unassigned'}</Row>
-              <Row label="From order">
-                {salesOrder ? (
-                  <Link
-                    href={`/sales-orders/${salesOrder.id}`}
-                    className="text-brand-700 hover:underline"
-                  >
-                    {salesOrder.number}
-                  </Link>
-                ) : (
-                  'Raised on its own'
-                )}
-              </Row>
-            </dl>
-
-            {/*
-              Deleting is the administrator's escape hatch for an invoice raised
-              against the wrong order — it frees that order to be billed again.
-              Voiding is the ordinary answer, because it leaves the number in
-              the sequence where an audit expects to find it.
-            */}
-            {context.isAdmin && (
-              <ActionForm action={deleteInvoice} className="mt-4 border-t border-slate-100 pt-4">
-                <input type="hidden" name="id" value={id} />
-                <SubmitButton
-                  className="text-sm text-slate-500 hover:text-red-600"
-                  pendingLabel="Deleting…"
-                >
-                  Delete this invoice
-                </SubmitButton>
-                <p className="mt-1 text-xs text-slate-400">
-                  Void it instead unless the invoice should never have existed.
+          {/* The same card a sales order carries, saying what an invoice
+              stores: it has a created_by and no updated_by of its own. */}
+          <Section title="Record history">
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="text-slate-500">Created by</p>
+                <p className="font-medium text-slate-900">{createdBy}</p>
+                <p className="text-xs text-slate-400">
+                  {formatDateTime(invoice.created_at, context.organization.timezone)}
                 </p>
-              </ActionForm>
-            )}
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-slate-500">Updated</p>
+                <p className="font-medium text-slate-900">{invoice.owner_name ?? 'Unassigned'}</p>
+                <p className="text-xs text-slate-400">
+                  {formatDateTime(invoice.updated_at, context.organization.timezone)}
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-slate-500">From order</p>
+                <p className="font-medium text-slate-900">
+                  {salesOrder ? (
+                    <Link
+                      href={`/sales-orders/${salesOrder.id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {salesOrder.number}
+                    </Link>
+                  ) : (
+                    'Raised on its own'
+                  )}
+                </p>
+              </div>
+            </div>
           </Section>
         </div>
       </div>

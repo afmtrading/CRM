@@ -2,7 +2,14 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { requireSession, scoped } from '@/lib/tenancy'
-import { CURRENCIES, formatDate, formatNumber, formatPrice } from '@/lib/format'
+import {
+  CURRENCIES,
+  currencySymbol,
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  formatPrice,
+} from '@/lib/format'
 import {
   SALES_ORDER_STATUS_HINTS,
   SALES_ORDER_STATUS_LABELS,
@@ -43,7 +50,6 @@ type PickerProduct = {
   /** Null means "derive it from retail", which is derivePricing's job. */
   price_wholesale: number | null
 }
-import { Money } from '@/components/money'
 import { Empty } from '@/components/contact-cards'
 import { CompanyContactPickers } from '@/components/party-pickers'
 import { SalesOrderLines } from '@/components/sales-order-lines'
@@ -92,6 +98,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     { data: locations },
     { data: products },
     { data: invoiceRow },
+    { data: stampRows },
   ] = await Promise.all([
     scoped(context, 'sales_order_lines')
       .select('*')
@@ -131,7 +138,15 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
       .order('name')
       .limit(PICKER_LIMIT),
     scoped(context, 'invoices').select('*').eq('sales_order_id', id).maybeSingle(),
+    /* The two people the Record history card names. Disabled users included. */
+    scoped(context, 'users')
+      .select('id, name, email')
+      .in('id', [salesOrder.created_by, salesOrder.updated_by].filter(Boolean) as string[]),
   ])
+
+  const stamps = new Map(
+    ((stampRows ?? []) as PickerUser[]).map((user) => [user.id, user.name || user.email]),
+  )
 
   const lines = (lineRows ?? []) as SalesOrderLineRow[]
   const payments = (paymentRows ?? []) as SalesOrderPaymentRow[]
@@ -188,7 +203,17 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
     companyId: one.company_id,
     companyName: one.company_id ? (companyNames.get(one.company_id) ?? null) : null,
   }))
-  const owner = ((users ?? []) as PickerUser[]).find((u) => u.id === salesOrder.owner_id)
+  /*
+   * Whoever raised it and whoever last touched it.
+   *
+   * Looked up in their own query rather than in the picker list above: that one
+   * is active users only, and somebody who has since been disabled still
+   * created the orders they created.
+   */
+  const nameOf = (id: string | null) =>
+    id ? (stamps.get(id) ?? 'Unknown') : 'Unassigned'
+  const createdBy = nameOf(salesOrder.created_by)
+  const updatedBy = nameOf(salesOrder.updated_by)
 
   return (
     <>
@@ -212,6 +237,24 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             <a href={`/sales-orders/${id}/pdf?download=1`} className="btn-secondary">
               Download PDF
             </a>
+
+            {/*
+              Deleting sits with the other things you do to the whole document
+              rather than at the bottom of a card about who touched it. Offered
+              only while no invoice exists: an order that has been billed is
+              referenced by one, and the invoice is the record that matters.
+            */}
+            {context.canWrite && !invoice && (
+              <form action={deleteSalesOrder}>
+                <input type="hidden" name="id" value={id} />
+                <button
+                  type="submit"
+                  className="btn-secondary text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                >
+                  Delete this order
+                </button>
+              </form>
+            )}
 
             {invoice ? (
               <Link href={`/invoices/${invoice.id}`} className="btn-secondary">
@@ -740,7 +783,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   rather than the number of lines. */}
               <Row label="Total quantity">{formatNumber(totalQuantity)}</Row>
               <Row label="Subtotal">
-                <Money value={totals.subtotal} currency={salesOrder.currency} cents />
+                {formatPrice(totals.subtotal, salesOrder.currency)}
               </Row>
 
               {/*
@@ -803,7 +846,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
               {totals.discount > 0 && (
                 <Row label="Less discount">
                   <span className="text-red-600">
-                    −<Money value={totals.discount} currency={salesOrder.currency} cents />
+                    −{formatPrice(totals.discount, salesOrder.currency)}
                   </span>
                 </Row>
               )}
@@ -819,15 +862,22 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                   {editable && context.canWrite ? (
                     <ActionForm action={updateSalesOrder} className="flex items-center gap-1">
                       <input type="hidden" name="id" value={id} />
-                      <input
-                        name="shipping_charge"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        defaultValue={String(salesOrder.shipping_charge)}
-                        className="input w-24 py-1 text-right text-sm"
-                        aria-label="Shipping charge"
-                      />
+                      {/* The symbol in front, because a bare "2000" in a box
+                          beside "$2,600.00" reads as a quantity. */}
+                      <span className="relative">
+                        <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-sm text-slate-400">
+                          {currencySymbol(salesOrder.currency)}
+                        </span>
+                        <input
+                          name="shipping_charge"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={String(salesOrder.shipping_charge)}
+                          className="input w-24 py-1 pl-5 text-right text-sm"
+                          aria-label="Shipping charge"
+                        />
+                      </span>
                       <SubmitButton
                         className="text-xs text-slate-500 hover:text-slate-900"
                         pendingLabel="…"
@@ -836,18 +886,18 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
                       </SubmitButton>
                     </ActionForm>
                   ) : (
-                    <Money value={totals.shipping} currency={salesOrder.currency} cents />
+                    formatPrice(totals.shipping, salesOrder.currency)
                   )}
                 </dd>
               </div>
               <Row label="Total" strong>
-                <Money value={totals.total} currency={salesOrder.currency} cents />
+                {formatPrice(totals.total, salesOrder.currency)}
               </Row>
               <Row label="Deposits">
-                <Money value={totals.paid} currency={salesOrder.currency} cents />
+                {formatPrice(totals.paid, salesOrder.currency)}
               </Row>
               <Row label="Balance" strong>
-                <Money value={totals.balance} currency={salesOrder.currency} cents />
+                {formatPrice(totals.balance, salesOrder.currency)}
               </Row>
             </dl>
 
@@ -863,28 +913,33 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             )}
           </Section>
 
-          <Section title="Record History">
-            <dl className="space-y-2 text-sm">
-              <Row label="Raised">{formatDate(salesOrder.created_at)}</Row>
-              {/*
-                "Signed" is gone. signed_at is stamped when an order is
-                reserved, which is not the same as anybody signing anything —
-                so the row asserted something the data does not know. The
-                column is untouched; nothing here reads it now.
-              */}
-              <Row label="Owner">{owner ? owner.name || owner.email : 'Unassigned'}</Row>
-            </dl>
+          {/*
+            Who touched it, and when.
 
-            {/* No link to a deal, by design. The two are separate concepts and
-                docs/SALES_ORDERS_INVOICES.md says why. */}
-            {context.canWrite && !invoice && (
-              <form action={deleteSalesOrder} className="mt-4 border-t border-slate-100 pt-4">
-                <input type="hidden" name="id" value={id} />
-                <button type="submit" className="text-sm text-slate-500 hover:text-red-600">
-                  Delete this order
-                </button>
-              </form>
-            )}
+            Two facts rather than a list: the row carries created_by and
+            updated_by and nothing else, so this says exactly what is stored.
+            A real audit trail would need a table of its own, and inventing one
+            out of two columns would be a history that quietly skips every
+            change but the last.
+          */}
+          <Section title="Record history">
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="text-slate-500">Created by</p>
+                <p className="font-medium text-slate-900">{createdBy}</p>
+                <p className="text-xs text-slate-400">
+                  {formatDateTime(salesOrder.created_at, context.organization.timezone)}
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-slate-500">Updated by</p>
+                <p className="font-medium text-slate-900">{updatedBy}</p>
+                <p className="text-xs text-slate-400">
+                  {formatDateTime(salesOrder.updated_at, context.organization.timezone)}
+                </p>
+              </div>
+            </div>
           </Section>
         </div>
       </div>
