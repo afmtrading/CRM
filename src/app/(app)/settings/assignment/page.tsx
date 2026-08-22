@@ -2,15 +2,10 @@ import { requireAdmin, scoped } from '@/lib/tenancy'
 import type { AssignmentRuleRow, UserRow } from '@/lib/database.types'
 import { PageHeader, Section } from '@/components/ui'
 
-import { createAssignmentRule, deleteAssignmentRule } from '../actions'
+import { createAssignmentRule } from '../actions'
+import { AssignmentRuleRows } from './rule-rows'
 
 export const metadata = { title: 'Assignment rules · FLO CRM' }
-
-const STRATEGY_LABELS: Record<string, string> = {
-  round_robin: 'Round-robin across active users',
-  by_source: 'By contact source',
-  fixed_user: 'Always this user',
-}
 
 export default async function AssignmentSettingsPage() {
   const context = await requireAdmin()
@@ -22,7 +17,7 @@ export default async function AssignmentSettingsPage() {
 
   const ruleList = (rules ?? []) as AssignmentRuleRow[]
   const userList = (users ?? []) as UserRow[]
-  const userNames = new Map(userList.map((user) => [user.id, user.name || user.email]))
+  const named = userList.map((user) => ({ id: user.id, name: user.name || user.email }))
 
   return (
     <>
@@ -46,37 +41,7 @@ export default async function AssignmentSettingsPage() {
                     <th />
                   </tr>
                 </thead>
-                <tbody>
-                  {ruleList.map((rule) => (
-                    <tr key={rule.id}>
-                      <td className="text-slate-500">{rule.priority}</td>
-                      <td className="font-medium text-slate-800">{rule.name}</td>
-                      <td className="text-slate-600">{STRATEGY_LABELS[rule.strategy]}</td>
-                      <td className="text-slate-600">
-                        {rule.strategy === 'by_source' && (
-                          <>
-                            source = <code className="rounded bg-slate-100 px-1">{rule.source_match}</code>{' '}
-                            → {rule.fixed_user_id ? (userNames.get(rule.fixed_user_id) ?? '—') : '—'}
-                          </>
-                        )}
-                        {rule.strategy === 'fixed_user' &&
-                          (rule.fixed_user_id ? (userNames.get(rule.fixed_user_id) ?? '—') : '—')}
-                        {rule.strategy === 'round_robin' &&
-                          (rule.last_assigned_id
-                            ? `last: ${userNames.get(rule.last_assigned_id) ?? '—'}`
-                            : 'not started')}
-                      </td>
-                      <td className="text-right">
-                        <form action={deleteAssignmentRule}>
-                          <input type="hidden" name="id" value={rule.id} />
-                          <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                            Delete
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                <AssignmentRuleRows rules={ruleList} users={named} />
               </table>
             )}
           </Section>

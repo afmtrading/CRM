@@ -79,8 +79,18 @@ export default async function UserSettingsPage({
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+      {/*
+        Invite first, then the list. The list is the wide thing on this page —
+        seven columns, one of them a name somebody is meant to be able to read —
+        and it spent its life in two thirds of the width so that a four-field
+        form could sit beside it. The form is the same form in a row.
+      */}
+      <div className="space-y-5">
+        <Section title="Invite someone">
+          <InviteUserForm />
+        </Section>
+
+        <div>
           <Section title="Users">
             <div className="-mx-5 overflow-x-auto px-5">
               <table className="table min-w-[46rem]">
@@ -257,10 +267,6 @@ export default async function UserSettingsPage({
             </p>
           </Section>
         </div>
-
-        <Section title="Invite someone">
-          <InviteUserForm />
-        </Section>
       </div>
     </>
   )

@@ -2,7 +2,8 @@ import { requireAdmin, scoped } from '@/lib/tenancy'
 import type { CustomFieldDefinitionRow, LeadScoreRuleRow } from '@/lib/database.types'
 import { PageHeader, Section } from '@/components/ui'
 
-import { createLeadScoreRule, deleteLeadScoreRule, recalculateScores } from '../actions'
+import { createLeadScoreRule, recalculateScores } from '../actions'
+import { LeadScoreRuleRows } from './rule-rows'
 
 export const metadata = { title: 'Lead scoring · FLO CRM' }
 
@@ -43,8 +44,7 @@ export default async function LeadScoringPage() {
     })),
   ]
 
-  const fieldLabels = new Map(fields.map((field) => [field.key, field.label]))
-  const conditionLabels = new Map(CONDITIONS.map((condition) => [condition.value, condition.label]))
+  const choices = fields.map((field) => ({ value: field.key, label: field.label }))
 
   return (
     <>
@@ -77,30 +77,7 @@ export default async function LeadScoringPage() {
                     <th />
                   </tr>
                 </thead>
-                <tbody>
-                  {ruleList.map((rule) => (
-                    <tr key={rule.id}>
-                      <td className="font-medium text-slate-800">
-                        {fieldLabels.get(rule.field) ?? rule.field}
-                      </td>
-                      <td className="text-slate-600">
-                        {conditionLabels.get(rule.condition) ?? rule.condition}
-                      </td>
-                      <td className="text-slate-600">{rule.value ?? '—'}</td>
-                      <td className="text-right font-medium">
-                        {rule.points > 0 ? `+${rule.points}` : rule.points}
-                      </td>
-                      <td className="text-right">
-                        <form action={deleteLeadScoreRule}>
-                          <input type="hidden" name="id" value={rule.id} />
-                          <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                            Delete
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                <LeadScoreRuleRows rules={ruleList} fields={choices} conditions={CONDITIONS} />
               </table>
             )}
             <p className="mt-3 text-xs text-slate-400">
