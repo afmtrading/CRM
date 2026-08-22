@@ -19,6 +19,14 @@ import { CURRENCIES } from '@/lib/format'
 
 const text = (max: number) => z.string().trim().max(max).default('')
 
+/** Blank means "nobody", which is a real answer and has to reach null. */
+const optionalId = z
+  .string()
+  .trim()
+  .transform((value) => (value === '' ? null : value))
+  .nullable()
+  .default(null)
+
 export const headerSchema = z.object({
   /*
    * Present only on the Invoice Detail card, and only while the invoice is a
@@ -35,6 +43,19 @@ export const headerSchema = z.object({
     .nullable()
     .default(null),
   payment_terms: text(200),
+  /*
+   * Who it is for and where it goes, on an invoice raised on its own. Absent
+   * from every other card, so the `has` walk leaves them alone — and absent
+   * from a sent invoice's page entirely, which is what keeps a snapshot a
+   * snapshot.
+   */
+  company_id: optionalId,
+  contact_id: optionalId,
+  ship_to_company_id: optionalId,
+  ship_to_contact_id: optionalId,
+  shipping_address: z.string().max(2_000).default(''),
+  shipping_method: text(120),
+  shipping_responsibility: text(120),
   /*
    * Money off the whole document, as a pair — a kind and a rate, exactly like
    * a line's revision. The table's CHECK insists on both or neither, which is
@@ -82,7 +103,13 @@ export const headerSchema = z.object({
  * transforms already turn '' into null — putting them here would be a second
  * opinion that happens to agree.
  */
-export const HEADER_NULLABLE = new Set(['payment_terms', 'notes'])
+export const HEADER_NULLABLE = new Set([
+  'payment_terms',
+  'notes',
+  'shipping_address',
+  'shipping_method',
+  'shipping_responsibility',
+])
 
 /**
  * What one card's save should change, and nothing else.

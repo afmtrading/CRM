@@ -31,6 +31,9 @@ import type {
 import { Empty } from '@/components/contact-cards'
 import { InvoiceStatusBadge, PageHeader, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
+import { CompanyContactPickers } from '@/components/party-pickers'
+import { DocumentLines } from '@/components/document-lines'
+import { derivePricing } from '@/lib/products'
 import { RecordHistory } from '@/components/record-history'
 import type { HistoryLookups } from '@/lib/document-history'
 
@@ -39,6 +42,7 @@ import {
   deleteInvoice,
   recordPayment,
   removeInvoiceLine,
+  updateInvoiceLine,
   setInvoiceShipping,
   setInvoiceStatus,
   updateInvoice,
@@ -48,6 +52,9 @@ export const dynamic = 'force-dynamic'
 
 /** How much of a document's history the card holds. See the sales order page. */
 const HISTORY_LIMIT = 200
+
+/** How many options a picker will hold. Same bound the sales order uses. */
+const PICKER_LIMIT = 500
 
 export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -66,6 +73,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     { data: order },
     { data: products },
     { data: people },
+    { data: pickCompanies },
+    { data: pickContacts },
     { data: historyRows },
   ] =
     await Promise.all([
@@ -96,6 +105,26 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       /* Everyone the history might name, disabled users included — somebody
          since disabled still made the change they made. */
       scoped(context, 'users').select('id, name, email'),
+      /*
+       * The two pickers, and only for the invoice that can use them. A sent
+       * invoice shows its customer rather than offering one, so fetching three
+       * hundred companies to render a name nobody may change is a page's worth
+       * of transfer for nothing.
+       */
+      invoice.sales_order_id === null && invoice.status === 'draft'
+        ? scoped(context, 'companies')
+            .select('id, name')
+            .is('deleted_at', null)
+            .order('name')
+            .limit(PICKER_LIMIT)
+        : Promise.resolve({ data: [] }),
+      invoice.sales_order_id === null && invoice.status === 'draft'
+        ? scoped(context, 'contacts')
+            .select('id, first_name, last_name, company_id')
+            .is('deleted_at', null)
+            .order('last_name')
+            .limit(PICKER_LIMIT)
+        : Promise.resolve({ data: [] }),
       scoped(context, 'document_history')
         .select('*')
         .eq('entity', 'invoice')
@@ -139,6 +168,40 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     invoice.discount_type,
     invoice.discount_rate === null ? null : Number(invoice.discount_rate),
   )
+
+  /*
+   * What a line may be counted in: whatever the catalogue already uses, plus
+   * the three every warehouse has. The same list the sales order builds, from
+   * the same reasoning — drawn from the data rather than from a settings screen.
+   */
+  const units = [
+    ...new Set(
+      ['Unit', 'Case', 'Pallet']
+        .concat(catalogue.map((product) => product.unit ?? ''))
+        .concat(lines.map((line) => line.unit ?? ''))
+        .map((unit) => unit.trim())
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b))
+
+  const companyOptions = ((pickCompanies ?? []) as { id: string; name: string }[]).map((one) => ({
+    id: one.id,
+    name: one.name,
+  }))
+  const pickedCompanyName = new Map(companyOptions.map((one) => [one.id, one.name]))
+  const contactOptions = (
+    (pickContacts ?? []) as {
+      id: string
+      first_name: string
+      last_name: string
+      company_id: string | null
+    }[]
+  ).map((one) => ({
+    id: one.id,
+    label: [one.first_name, one.last_name].filter(Boolean).join(' ') || 'Unnamed',
+    companyId: one.company_id,
+    companyName: one.company_id ? (pickedCompanyName.get(one.company_id) ?? null) : null,
+  }))
 
   const history = (historyRows ?? []) as DocumentHistoryRow[]
   const lookups: HistoryLookups = {
@@ -257,69 +320,153 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             raising another, which is why there is nothing here to change.
           */}
           <Section title="Customer & Shipping">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-3">
-                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                  Bill to
-                </h3>
-                <dl className="space-y-1 text-sm">
-                  <Row label="Company">
-                    {invoice.company_id ? (
-                      <Link
-                        href={`/companies/${invoice.company_id}`}
-                        className="text-brand-700 hover:underline"
-                      >
-                        {customer?.name ?? 'Unknown'}
-                      </Link>
-                    ) : (
-                      <Empty />
-                    )}
-                  </Row>
-                  <Row label="Contact">{billToName ?? <Empty />}</Row>
-                  <Row label="Customer ID">{customer?.code ?? <Empty />}</Row>
-                  <Row label="Contact email">{billTo?.email ?? <Empty />}</Row>
-                  <Row label="Contact phone">{billTo?.phone ?? <Empty />}</Row>
-                </dl>
-              </div>
+            {composable ? (
+              /*
+                An invoice raised on its own has no order to carry a customer
+                from, and this card was read on every invoice — which meant the
+                only way to name a customer was to go and create a sales order
+                for one. It is the order's card now, on the invoice that has
+                nowhere else to say these things.
+              */
+              <ActionForm action={updateInvoice} className="grid gap-5 sm:grid-cols-2">
+                <input type="hidden" name="id" value={id} />
 
-              <div className="space-y-3">
-                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                  Ship to
-                </h3>
-                {/*
-                  Carried from the order rather than stored again. An invoice
-                  has no shipping columns of its own, and adding them would be
-                  a second copy of an address that can disagree with the first.
-                */}
-                {salesOrder ? (
-                  <>
-                    <dl className="space-y-1 text-sm">
-                      <Row label="Shipping">{salesOrder.shipping_responsibility ?? <Empty />}</Row>
-                      <Row label="Shipping method">{salesOrder.shipping_method ?? <Empty />}</Row>
-                    </dl>
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                    Bill to
+                  </h3>
+                  <CompanyContactPickers
+                    idPrefix="bill-to"
+                    companies={companyOptions}
+                    contacts={contactOptions}
+                    defaultCompanyId={invoice.company_id ?? ''}
+                    defaultContactId={invoice.contact_id ?? ''}
+                  />
+                  <dl className="space-y-1 border-t border-slate-100 pt-3 text-sm">
+                    <Row label="Customer ID">{customer?.code ?? <Empty />}</Row>
+                    <Row label="Contact email">{billTo?.email ?? <Empty />}</Row>
+                    <Row label="Contact phone">{billTo?.phone ?? <Empty />}</Row>
+                  </dl>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                    Ship to
+                  </h3>
+                  <CompanyContactPickers
+                    idPrefix="ship-to"
+                    companyName="ship_to_company_id"
+                    contactName="ship_to_contact_id"
+                    companies={companyOptions}
+                    contacts={contactOptions}
+                    defaultCompanyId={invoice.ship_to_company_id ?? ''}
+                    defaultContactId={invoice.ship_to_contact_id ?? ''}
+                  />
+                  <div>
+                    <label className="label" htmlFor="shipping_address">
+                      Shipping address
+                    </label>
+                    <textarea
+                      id="shipping_address"
+                      name="shipping_address"
+                      rows={3}
+                      className="input"
+                      defaultValue={invoice.shipping_address ?? ''}
+                      placeholder="Where the goods go"
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <span className="label">Shipping address</span>
-                      {salesOrder.shipping_address ? (
-                        <p className="text-sm whitespace-pre-line text-slate-700">
-                          {salesOrder.shipping_address}
-                        </p>
-                      ) : (
-                        <p className="text-sm text-slate-400">
-                          The same as bill to.
-                        </p>
-                      )}
+                      <label className="label" htmlFor="shipping_responsibility">
+                        Shipping
+                      </label>
+                      <input
+                        id="shipping_responsibility"
+                        name="shipping_responsibility"
+                        className="input"
+                        defaultValue={invoice.shipping_responsibility ?? ''}
+                        placeholder="Buyer Pick Up or Seller Delivery"
+                      />
                     </div>
+                    <div>
+                      <label className="label" htmlFor="shipping_method">
+                        Shipping method
+                      </label>
+                      <input
+                        id="shipping_method"
+                        name="shipping_method"
+                        className="input"
+                        defaultValue={invoice.shipping_method ?? ''}
+                        placeholder="Truck, Plane, Car, etc."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                    Save customer &amp; shipping
+                  </SubmitButton>
+                </div>
+              </ActionForm>
+            ) : (
+              /*
+                Read, once the invoice is sent or came from an order. It is a
+                snapshot of what the customer received — correcting one means
+                voiding it and raising another, which is why there is nothing
+                here to change.
+              */
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                    Bill to
+                  </h3>
+                  <dl className="space-y-1 text-sm">
+                    <Row label="Company">
+                      {invoice.company_id ? (
+                        <Link
+                          href={`/companies/${invoice.company_id}`}
+                          className="text-brand-700 hover:underline"
+                        >
+                          {customer?.name ?? 'Unknown'}
+                        </Link>
+                      ) : (
+                        <Empty />
+                      )}
+                    </Row>
+                    <Row label="Contact">{billToName ?? <Empty />}</Row>
+                    <Row label="Customer ID">{customer?.code ?? <Empty />}</Row>
+                    <Row label="Contact email">{billTo?.email ?? <Empty />}</Row>
+                    <Row label="Contact phone">{billTo?.phone ?? <Empty />}</Row>
+                  </dl>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                    Ship to
+                  </h3>
+                  <dl className="space-y-1 text-sm">
+                    <Row label="Shipping">{invoice.shipping_responsibility ?? <Empty />}</Row>
+                    <Row label="Shipping method">{invoice.shipping_method ?? <Empty />}</Row>
+                  </dl>
+                  <div>
+                    <span className="label">Shipping address</span>
+                    {invoice.shipping_address ? (
+                      <p className="text-sm whitespace-pre-line text-slate-700">
+                        {invoice.shipping_address}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-400">The same as bill to.</p>
+                    )}
+                  </div>
+                  {salesOrder && (
                     <p className="border-t border-slate-100 pt-3 text-xs text-slate-400">
-                      From {salesOrder.number}. Change it there.
+                      Taken from {salesOrder.number} when the invoice was raised.
                     </p>
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-400">
-                    Raised on its own, so there is no order carrying a delivery address.
-                  </p>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </Section>
 
           {/* ---------------------------------------------------------------- */}
@@ -489,165 +636,51 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           </Section>
 
           {/* ---------------------------------------------------------------- */}
-          <Section title="Billed">
-            <div className="-mx-5 overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th className="text-right">Qty</th>
-                    <th className="text-right">Price</th>
-                    <th className="text-right">Discount</th>
-                    <th className="text-right">Total</th>
-                    {composable && <th />}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((line) => (
-                    <tr key={line.id}>
-                      <td>
-                        <span className="font-medium text-slate-800">{line.name}</span>
-                        {line.sku && (
-                          <span className="ml-1.5 text-xs text-slate-400">{line.sku}</span>
-                        )}
-                        {line.notes && (
-                          <span className="block text-xs text-slate-500">{line.notes}</span>
-                        )}
-                      </td>
-                      <td className="text-right">{formatNumber(Number(line.quantity))}</td>
-                      <td className="text-right">
-                        {formatPrice(Number(line.unit_price), invoice.currency)}
-                      </td>
-                      <td className="text-right">
-                        {Number(line.discount) > 0 ? (
-                          formatPrice(Number(line.discount), invoice.currency)
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                      <td className="text-right font-medium">
-                        {formatPrice(Number(line.line_total), invoice.currency)}
-                      </td>
-                      {composable && (
-                        <td className="text-right">
-                          <form action={removeInvoiceLine}>
-                            <input type="hidden" name="id" value={line.id} />
-                            <input type="hidden" name="invoice_id" value={id} />
-                            <button
-                              type="submit"
-                              className="text-xs text-slate-400 hover:text-red-600"
-                            >
-                              Remove
-                            </button>
-                          </form>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {/* ---------------------------------------------------------------- */}
+          {/*
+            The same Items card a sales order has, and the same component
+            drawing it. This was a read-only table with a six-column add form
+            underneath — two shapes for one job, and no way to correct a line
+            short of removing it and typing it again.
 
-            {composable && (
-              <ActionForm
-                action={addInvoiceLine}
-                className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-6"
-              >
-                <input type="hidden" name="invoice_id" value={id} />
-
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="product_id">
-                    Product
-                  </label>
-                  <select id="product_id" name="product_id" className="input">
-                    <option value="">A line of my own</option>
-                    {catalogue.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                        {product.sku ? ` · ${product.sku}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="name">
-                    Or a description
-                  </label>
-                  <input id="name" name="name" className="input" placeholder="Consultancy" />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="quantity">
-                    Quantity
-                  </label>
-                  <input
-                    id="quantity"
-                    name="quantity"
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    defaultValue="1"
-                    className="input"
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="unit_price">
-                    Unit price
-                  </label>
-                  <input
-                    id="unit_price"
-                    name="unit_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue="0"
-                    className="input"
-                  />
-                </div>
-
-                {/* Same pair as a sales order line, and the same rule behind it:
-                    the discount is computed from these, never typed. */}
-                <div>
-                  <label className="label" htmlFor="revised_rate_type">
-                    Revise by
-                  </label>
-                  <select id="revised_rate_type" name="revised_rate_type" className="input">
-                    <option value="">List price</option>
-                    <option value="percent">% off</option>
-                    <option value="fixed">Fixed price</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="revised_rate">
-                    Rate
-                  </label>
-                  <input
-                    id="revised_rate"
-                    name="revised_rate"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="input"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="notes">
-                    Line note
-                  </label>
-                  <input id="notes" name="notes" className="input" />
-                </div>
-
-                <div className="flex items-end sm:col-span-6">
-                  <SubmitButton className="btn-primary" pendingLabel="Adding…">
-                    Add line
-                  </SubmitButton>
-                </div>
-              </ActionForm>
-            )}
+            Editable only while the invoice is still a draft raised on its own.
+            Everything else is a snapshot of what the customer received, and
+            the database refuses it through assert_invoice_editable whatever
+            this page decides to draw.
+          */}
+          <Section title="Items">
+            <DocumentLines
+              parentKey="invoice_id"
+              parentId={id}
+              actions={{
+                add: addInvoiceLine,
+                update: updateInvoiceLine,
+                remove: removeInvoiceLine,
+              }}
+              currency={invoice.currency}
+              editable={composable}
+              products={catalogue.map((product) => ({
+                id: product.id,
+                name: product.name,
+                sku: product.sku,
+                unit: product.unit,
+                wholesale: derivePricing(product).unit.wholesale.value,
+              }))}
+              units={units}
+              lines={lines.map((line) => ({
+                id: line.id,
+                productId: line.product_id,
+                description: line.name,
+                unit: line.unit,
+                quantity: Number(line.quantity),
+                unitPrice: Number(line.unit_price),
+                unitCost: Number(line.unit_cost),
+                revisedRateType: line.revised_rate_type,
+                revisedRate: line.revised_rate === null ? null : Number(line.revised_rate),
+                notes: line.notes,
+                lineTotal: Number(line.line_total),
+              }))}
+            />
 
             <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
               {composable

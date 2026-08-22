@@ -1220,6 +1220,116 @@ begin
 end;
 $$;
 
+-- =============================================================================
+-- An invoice raised on its own.
+--
+-- The point of this one is what did NOT change: the lines became editable, and
+-- a sent invoice's lines must still be frozen. Every write goes through a
+-- definer function that calls assert_invoice_editable, because invoice_lines
+-- grants SELECT and nothing else.
+-- =============================================================================
+do $$
+declare
+  v_org     uuid := (select id from fixture where key = 'org');
+  v_speaker uuid := (select id from fixture where key = 'speaker');
+  v_invoice uuid;
+  v_line    uuid;
+begin
+  raise notice 'An invoice on its own:';
+
+  perform sign_in_as('mgr_auth');
+
+  v_invoice := public.create_invoice((select id from fixture where key = 'acme'), null, null, 'USD');
+
+  -- Where the goods go, said on the invoice rather than borrowed from an order.
+  update invoices
+  set shipping_responsibility = 'Seller Delivery',
+      shipping_method = 'Truck',
+      shipping_address = '12 Dock Road'
+  where id = v_invoice;
+
+  perform test_assert(
+    (select shipping_responsibility from invoices where id = v_invoice) = 'Seller Delivery',
+    'an invoice can say who moves the goods without a sales order'
+  );
+
+  -- A line, with the rate that priced it kept alongside what it came to.
+  v_line := public.add_invoice_line(
+    v_invoice, v_speaker, null, 10, 100, 60, 'percent', 10, null, 'Case'
+  );
+
+  perform test_assert(
+    (select revised_rate_type from invoice_lines where id = v_line) = 'percent'
+    and (select revised_rate from invoice_lines where id = v_line) = 10,
+    'a line keeps the rate it was priced by'
+  );
+  perform test_assert(
+    (select unit from invoice_lines where id = v_line) = 'Case',
+    'and what it is counted in'
+  );
+  perform test_assert(
+    (select discount from invoice_lines where id = v_line) = 100
+    and (select line_total from invoice_lines where id = v_line) = 900,
+    'priced by the same function a sales order line uses'
+  );
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 900,
+    'and the invoice total follows it'
+  );
+
+  -- Editing one. This is new: the lines could be added and removed and not
+  -- changed, so fixing a quantity meant retyping the line.
+  perform public.update_invoice_line(
+    v_line, v_speaker, null, 5, 100, 60, 'percent', 10, null, 'Case'
+  );
+  perform test_assert(
+    (select quantity from invoice_lines where id = v_line) = 5
+    and (select line_total from invoice_lines where id = v_line) = 450,
+    'a line can be changed, and the money follows'
+  );
+  perform test_assert(
+    (select total from invoices where id = v_invoice) = 450,
+    'and so does the invoice total'
+  );
+
+  -- Clearing the rate prices the line back to list, rather than leaving half
+  -- a pair behind.
+  perform public.update_invoice_line(v_line, v_speaker, null, 5, 100, 60, null, null, null, null);
+  perform test_assert(
+    (select revised_rate_type from invoice_lines where id = v_line) is null
+    and (select discount from invoice_lines where id = v_line) = 0
+    and (select line_total from invoice_lines where id = v_line) = 500,
+    'clearing the rate prices the line back to list'
+  );
+
+  -- And nobody edits invoice_lines directly, whatever the invoice's state.
+  begin
+    update invoice_lines set quantity = 999 where id = v_line;
+    perform test_assert(false, 'a direct write to a line should be refused');
+  exception when insufficient_privilege then
+    perform test_assert(true, 'a direct write to a line is refused');
+  end;
+
+  -- The rule that had to survive all of this.
+  update invoices set status = 'sent' where id = v_invoice;
+
+  begin
+    perform public.update_invoice_line(v_line, v_speaker, null, 1, 100, 60, null, null, null, null);
+    perform test_assert(false, 'editing a sent invoice''s line should be refused');
+  exception when others then
+    perform test_assert(true, 'a sent invoice''s lines are still frozen');
+  end;
+
+  begin
+    perform public.add_invoice_line(v_invoice, v_speaker, null, 1, 100, 60, null, null, null, null);
+    perform test_assert(false, 'adding to a sent invoice should be refused');
+  exception when others then
+    perform test_assert(true, 'and nothing can be added to it'
+    );
+  end;
+end;
+$$;
+
 reset role;
 
 rollback;

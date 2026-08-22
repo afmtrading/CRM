@@ -200,7 +200,11 @@ const lineSchema = z
       .transform((value) => (value === '' ? null : value))
       .nullable()
       .default(null),
+    /* The card sends both: an order's line calls this `description`, an
+       invoice's calls it `name`. Whichever arrives filled is the name. */
     name: text(200),
+    description: text(200),
+    unit: text(40),
     notes: text(500),
     quantity: z.coerce.number().min(0).default(1),
     unit_price: z.coerce.number().min(0).default(0),
@@ -224,7 +228,7 @@ const lineSchema = z
       .nullable()
       .default(null),
   })
-  .refine((line) => Boolean(line.product_id) || Boolean(line.name), {
+  .refine((line) => Boolean(line.product_id) || Boolean(line.name) || Boolean(line.description), {
     message: 'Each line needs a product or a description',
   })
   .refine((line) => (line.revised_rate_type === null) === (line.revised_rate === null), {
@@ -247,10 +251,11 @@ export async function addInvoiceLine(
   // No discount is sent. The function computes it from the rate with the same
   // SQL the sales order lines use, so the two documents cannot price a line
   // differently.
-  const { error } = await context.supabase.rpc('add_invoice_line', {
+  const { data, error } = await context.supabase.rpc('add_invoice_line', {
     p_invoice_id: invoiceId,
     p_product_id: parsed.data.product_id,
-    p_name: parsed.data.name || null,
+    p_name: parsed.data.name || parsed.data.description || null,
+    p_unit: parsed.data.unit || null,
     p_quantity: parsed.data.quantity,
     p_unit_price: parsed.data.unit_price,
     p_unit_cost: parsed.data.unit_cost,
@@ -259,13 +264,64 @@ export async function addInvoiceLine(
     p_notes: parsed.data.notes || null,
   })
 
-  if (error) throw new Error(error.message)
+  /*
+   * Returned rather than thrown, like the sales order's. The database refuses
+   * a sent or converted invoice through assert_invoice_editable, and that is an
+   * answer to show beside the line rather than an error page — reached the way
+   * it actually happens, two tabs with the invoice sent in one of them.
+   */
+  if (error) return { error: error.message }
 
   revalidatePath(`/invoices/${invoiceId}`)
-  return { ok: 'Line added.' }
+  // The id goes back so the card can tell its own blank row from the saved one.
+  return { ok: 'Line added.', id: (data as string | null) ?? undefined }
 }
 
-export async function removeInvoiceLine(formData: FormData) {
+/**
+ * Changes one line of an invoice that is still being built.
+ *
+ * New alongside the card that needed it: the lines could be added and removed
+ * and not edited, which on a document somebody is composing means retyping a
+ * whole line to fix a quantity. The refusal still lives in SQL — invoice_lines
+ * grants SELECT and nothing else, and every write goes through a definer
+ * function that calls assert_invoice_editable first.
+ */
+export async function updateInvoiceLine(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireSession()
+  assertCanWrite(context)
+
+  const invoiceId = formData.get('invoice_id') as string
+  const parsed = lineSchema.safeParse(Object.fromEntries(formData))
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'That line is not valid' }
+  }
+
+  const { error } = await context.supabase.rpc('update_invoice_line', {
+    p_line_id: formData.get('id') as string,
+    p_product_id: parsed.data.product_id,
+    p_name: parsed.data.name || parsed.data.description || null,
+    p_unit: parsed.data.unit || null,
+    p_quantity: parsed.data.quantity,
+    p_unit_price: parsed.data.unit_price,
+    p_unit_cost: parsed.data.unit_cost,
+    p_rate_type: parsed.data.revised_rate_type as RevisedRateType | null,
+    p_rate: parsed.data.revised_rate,
+    p_notes: parsed.data.notes || null,
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/invoices/${invoiceId}`)
+  return { ok: 'Saved.' }
+}
+
+export async function removeInvoiceLine(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   assertCanWrite(context)
 
@@ -275,9 +331,10 @@ export async function removeInvoiceLine(formData: FormData) {
     p_line_id: formData.get('id') as string,
   })
 
-  if (error) throw new Error(error.message)
+  if (error) return { error: error.message }
 
   revalidatePath(`/invoices/${invoiceId}`)
+  return { ok: 'Line removed.' }
 }
 
 /** Shipping is a header field, but it moves the total, so it lives with the lines. */
