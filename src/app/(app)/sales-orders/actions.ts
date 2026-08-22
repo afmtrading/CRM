@@ -127,14 +127,24 @@ export async function setSalesOrderStatus(
   return { ok: `Marked ${next}.` }
 }
 
-export async function deleteSalesOrder(formData: FormData) {
+export async function deleteSalesOrder(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireSession()
   const id = formData.get('id') as string
 
   const { error } = await context.supabase.rpc('soft_delete_sales_order', {
     p_sales_order_id: id,
   })
-  if (error) throw new Error(error.message)
+  /*
+   * Returned rather than thrown. The database refuses an order that has been
+   * invoiced — "Void the invoice first" — and that is an answer somebody should
+   * read beside the button, not an error page they have to navigate back from.
+   * The screen makes the same check and disables the button; this is what
+   * catches the case where an invoice is raised while somebody is looking.
+   */
+  if (error) return { error: error.message }
 
   revalidatePath('/sales-orders')
   redirect('/sales-orders')

@@ -752,6 +752,31 @@ export type DealProductRow = {
  * records that we did and what it consisted of. See
  * docs/SALES_ORDERS_INVOICES.md.
  */
+/**
+ * One change to a sales order or an invoice.
+ *
+ * Written only by `record_document_history`, which is a definer trigger over a
+ * table that grants INSERT to nobody. There is no update or delete policy
+ * either: a history somebody can edit is not a history.
+ */
+export type DocumentHistoryRow = {
+  id: string
+  /** The total order of events. Two changes in one save share a timestamp. */
+  seq: number
+  organization_id: string
+  entity: 'sales_order' | 'invoice'
+  entity_id: string
+  action: 'created' | 'updated'
+  /** The column that changed. Null on a 'created' row. */
+  field: string | null
+  old_value: string | null
+  new_value: string | null
+  changed_by: string | null
+  changed_at: string
+  /** 'trigger' is an observed change; 'backfill' predates this table. */
+  source: 'trigger' | 'backfill'
+}
+
 export type SalesOrderRow = {
   id: string
   organization_id: string
@@ -1424,6 +1449,18 @@ export interface Database {
         | 'position'
         | 'created_at'
         | 'updated_at'
+      >
+      /* Select only. The trigger is the sole writer — see the row type. */
+      document_history: TableDef<
+        DocumentHistoryRow,
+        | 'id'
+        | 'seq'
+        | 'field'
+        | 'old_value'
+        | 'new_value'
+        | 'changed_by'
+        | 'changed_at'
+        | 'source'
       >
       sales_order_payments: TableDef<
         SalesOrderPaymentRow,
