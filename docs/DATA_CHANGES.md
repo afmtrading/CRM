@@ -322,3 +322,30 @@ Counted before applying, on production:
 The table grants INSERT to nobody and has no update or delete policy, so the
 definer trigger is the only writer. Verified in `19_sales_orders.sql`: a
 manager's hand-written insert, update and delete are all refused.
+
+## 2026-08-22 — invoices and invoice_lines gain columns
+
+`20260273000000_an_invoice_on_its_own.sql`.
+
+`invoices` gains five nullable shipping columns; `invoice_lines` gains `unit`,
+`revised_rate_type` and `revised_rate`. All nullable, all null on every existing
+row. No stored money is recomputed: `discount` and `line_total` are untouched
+everywhere.
+
+The one write against existing data is the rate backfill on `invoice_lines`.
+For a line with a discount, `sales_line_discount` for a fixed rate is
+quantity × rate, so a stored discount D over Q units came from a rate of D/Q.
+It is written **only where it round-trips to the cent** — the update carries its
+own `sales_line_discount(...) = discount` guard, so a line that would come back
+a penny different keeps no rate at all rather than one that quietly restates it.
+Percent is not recoverable and is not invented; those lines come back as the
+equivalent money off each unit, which prices identically.
+
+Counted on production before applying:
+
+- 12 invoice lines, 11 with a discount, all 11 with quantity > 0
+- every `invoices.total` equal to `subtotal - discount + shipping_charge`
+
+`add_invoice_line` is dropped and recreated rather than replaced: a new
+parameter is a new signature, and `create or replace` leaves the old function
+standing beside it. The SQL suite caught that as "function is not unique".

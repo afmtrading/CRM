@@ -52,7 +52,7 @@ type PickerProduct = {
 }
 import { Empty } from '@/components/contact-cards'
 import { CompanyContactPickers } from '@/components/party-pickers'
-import { SalesOrderLines } from '@/components/sales-order-lines'
+import { DocumentLines } from '@/components/document-lines'
 import { derivePricing } from '@/lib/products'
 import { PageHeader, SalesOrderStatusBadge, Section } from '@/components/ui'
 import { ActionForm, SubmitButton } from '@/components/action-form'
@@ -60,8 +60,11 @@ import { RecordHistory } from '@/components/record-history'
 import type { HistoryLookups } from '@/lib/document-history'
 
 import {
+  addSalesOrderLine,
   convertToInvoice,
   deleteSalesOrder,
+  removeSalesOrderLine,
+  updateSalesOrderLine,
   recordDeposit,
   setSalesOrderStatus,
   updateSalesOrder,
@@ -599,8 +602,14 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
               lines, which also holds the item field that tells a catalogue
               product from a line somebody typed.
             */}
-            <SalesOrderLines
-              orderId={id}
+            <DocumentLines
+              parentKey="sales_order_id"
+              parentId={id}
+              actions={{
+                add: addSalesOrderLine,
+                update: updateSalesOrderLine,
+                remove: removeSalesOrderLine,
+              }}
               currency={salesOrder.currency}
               editable={editable && context.canWrite}
               products={catalogue.map((product) => ({

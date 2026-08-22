@@ -935,6 +935,18 @@ export type InvoiceRow = {
   terms: string | null
   /** Whether the printed document shows what each line was discounted from. */
   show_discount: boolean
+  /**
+   * Where the goods go, on an invoice raised on its own.
+   *
+   * Copied from the order when there was one rather than read through it: an
+   * invoice is what the customer received, and the order's address changing
+   * next month must not rewrite it.
+   */
+  ship_to_company_id: string | null
+  ship_to_contact_id: string | null
+  shipping_address: string | null
+  shipping_method: string | null
+  shipping_responsibility: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -949,6 +961,17 @@ export type InvoiceLineRow = {
   name: string
   sku: string | null
   notes: string | null
+  /** What it is counted in. Falls back to the product's own unit. */
+  unit: string | null
+  /**
+   * How the line was priced, kept alongside what that came to.
+   *
+   * `discount` is derived; these two are the answer somebody gave. Without
+   * them an editable line opens with an empty discount box and saving prices
+   * it back up. Both null, or both set — invoice_lines_rate_pair says so.
+   */
+  revised_rate_type: RevisedRateType | null
+  revised_rate: number | null
   quantity: number
   unit_price: number
   unit_cost: number

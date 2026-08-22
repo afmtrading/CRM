@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { requireSession, scoped } from '@/lib/tenancy'
 import { documentRevisionLabel, documentTotals, ledgerBalance, round2 } from '@/lib/sales'
-import { documentDetails, documentFilename } from '@/lib/document'
+import { documentDetails, documentFilename, shipToWorthPrinting } from '@/lib/document'
 import type { DocumentModel } from '@/lib/document'
 import { loadOrganizationLogo } from '@/lib/document-logo'
 import { renderDocumentPdf } from '@/components/document-pdf'
@@ -31,7 +31,15 @@ export async function GET(
   if (!data) return new NextResponse('Not found', { status: 404 })
   const invoice = data as InvoiceRow
 
-  const [{ data: lineRows }, { data: paymentRows }, { data: company }, { data: contact }, { data: owner }] =
+  const [
+    { data: lineRows },
+    { data: paymentRows },
+    { data: company },
+    { data: contact },
+    { data: owner },
+    { data: shipCompany },
+    { data: shipContact },
+  ] =
     await Promise.all([
       scoped(context, 'invoice_lines').select('*').eq('invoice_id', id).order('position'),
       scoped(context, 'invoice_payments').select('*').eq('invoice_id', id).order('paid_at'),
@@ -44,7 +52,27 @@ export async function GET(
       invoice.owner_id
         ? scoped(context, 'users').select('*').eq('id', invoice.owner_id).maybeSingle()
         : Promise.resolve({ data: null }),
+      /* Where the goods went, now that an invoice carries it itself. */
+      invoice.ship_to_company_id
+        ? scoped(context, 'companies')
+            .select('name')
+            .eq('id', invoice.ship_to_company_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      invoice.ship_to_contact_id
+        ? scoped(context, 'contacts')
+            .select('first_name, last_name, email, phone')
+            .eq('id', invoice.ship_to_contact_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
+
+  const shipReceiver = shipContact as {
+    first_name: string
+    last_name: string
+    email: string | null
+    phone: string | null
+  } | null
 
   const lines = (lineRows ?? []) as InvoiceLineRow[]
   const payments = (paymentRows ?? []) as InvoicePaymentRow[]
@@ -98,11 +126,32 @@ export async function GET(
       phone: person?.phone ?? buyer?.phone ?? null,
       email: person?.email ?? null,
     },
-    shipTo: null,
+    /*
+     * Printed only when it says something the bill-to box does not — same
+     * ship, same person and no address of its own is the ordinary case, and a
+     * second box repeating the first is noise in a warehouse.
+     */
+    shipTo: shipToWorthPrinting(
+      {
+        company: buyer?.name ?? null,
+        contact: person ? contactName(person) : null,
+        phone: person?.phone ?? buyer?.phone ?? null,
+        email: person?.email ?? null,
+      },
+      {
+        company: (shipCompany as { name: string } | null)?.name ?? buyer?.name ?? null,
+        contact: shipReceiver ? contactName(shipReceiver) : (person ? contactName(person) : null),
+        phone: shipReceiver?.phone ?? null,
+        email: shipReceiver?.email ?? null,
+        address: invoice.shipping_address,
+      },
+    ),
     details: documentDetails([
       { label: 'Representative', value: invoice.owner_name ?? (rep ? rep.name || rep.email : null) },
       { label: 'Payment Terms', value: invoice.payment_terms },
       { label: 'Currency', value: invoice.currency },
+      { label: 'Shipping', value: invoice.shipping_responsibility },
+      { label: 'Shipping method', value: invoice.shipping_method },
     ]),
     lines: lines.map((line) => {
       const product = line.product_id ? productById.get(line.product_id) : null
@@ -110,7 +159,7 @@ export async function GET(
       return {
         name: line.name,
         sku: line.sku,
-        unit: product?.unit || null,
+        unit: line.unit || product?.unit || null,
         quantity,
         unitPrice: Number(line.unit_price),
         // What one actually came to. The order's revision is already baked into

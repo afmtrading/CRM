@@ -6,11 +6,22 @@ import type { RevisedRateType } from '@/lib/database.types'
 import { isNamed, lineTotal } from '@/lib/sales'
 import { formatPrice } from '@/lib/format'
 import { TrashIcon } from '@/components/icons'
-import {
-  addSalesOrderLine,
-  removeSalesOrderLine,
-  updateSalesOrderLine,
-} from '@/app/(app)/sales-orders/actions'
+import type { ActionState } from '@/components/action-form'
+
+/**
+ * The three writes a lines card needs, handed in rather than imported.
+ *
+ * Both documents have their own — a sales order writes its lines through
+ * PostgREST, an invoice through definer functions that refuse a sent one — and
+ * the card does not care which. Server actions are passed by reference, so this
+ * costs nothing at the boundary and saves a second copy of eight fields, a
+ * blank-row protocol and an item search.
+ */
+export interface LineActions {
+  add: (state: ActionState, form: FormData) => Promise<ActionState>
+  update: (state: ActionState, form: FormData) => Promise<ActionState>
+  remove: (state: ActionState, form: FormData) => Promise<ActionState>
+}
 
 /**
  * The lines of a sales order, edited where they are read.
@@ -87,12 +98,15 @@ function draftOf(line: EditableLine): Draft {
 }
 
 /** The draft as the action wants it — one line, whole, every time. */
-function formOf(draft: Draft, orderId: string, id?: string): FormData {
+function formOf(draft: Draft, parentKey: string, parentId: string, id?: string): FormData {
   const form = new FormData()
   if (id) form.set('id', id)
-  form.set('sales_order_id', orderId)
+  form.set(parentKey, parentId)
   form.set('product_id', draft.productId)
+  /* An order's line calls this `description` and an invoice's calls it
+     `name`. Both are sent; each action's schema reads the one it knows. */
   form.set('description', draft.description)
+  form.set('name', draft.description)
   form.set('unit', draft.unit)
   form.set('quantity', draft.quantity || '0')
   form.set('unit_price', draft.unitPrice || '0')
@@ -247,7 +261,9 @@ function ItemField({
 
 function LineBlock({
   line,
-  orderId,
+  parentKey,
+  parentId,
+  actions,
   currency,
   products,
   units,
@@ -256,7 +272,10 @@ function LineBlock({
   onSaved,
 }: {
   line: EditableLine
-  orderId: string
+  /** 'sales_order_id' or 'invoice_id' — which parent the write names. */
+  parentKey: string
+  parentId: string
+  actions: LineActions
   currency: string
   products: LineProduct[]
   units: string[]
@@ -300,7 +319,7 @@ function LineBlock({
       // Still nothing to call it. Keep what has been typed and wait.
       if (!isNamed(next)) return
       startTransition(async () => {
-        const result = await addSalesOrderLine({}, formOf(next, orderId))
+        const result = await actions.add({}, formOf(next, parentKey, parentId))
         if (result.error) {
           setError(result.error)
           return
@@ -311,7 +330,7 @@ function LineBlock({
     }
 
     startTransition(async () => {
-      const result = await updateSalesOrderLine({}, formOf(next, orderId, line.id))
+      const result = await actions.update({}, formOf(next, parentKey, parentId, line.id))
       if (result.error) setError(result.error)
     })
   }
@@ -481,9 +500,9 @@ function LineBlock({
             onClick={() => {
               const form = new FormData()
               form.set('id', line.id)
-              form.set('sales_order_id', orderId)
+              form.set(parentKey, parentId)
               startTransition(async () => {
-                const result = await removeSalesOrderLine({}, form)
+                const result = await actions.remove({}, form)
                 if (result.error) setError(result.error)
               })
             }}
@@ -561,15 +580,19 @@ function blankLine(id: string): EditableLine {
 
 /* -------------------------------------------------------------------------- */
 
-export function SalesOrderLines({
-  orderId,
+export function DocumentLines({
+  parentKey,
+  parentId,
+  actions,
   currency,
   lines,
   products,
   units,
   editable,
 }: {
-  orderId: string
+  parentKey: string
+  parentId: string
+  actions: LineActions
   currency: string
   lines: EditableLine[]
   products: LineProduct[]
@@ -608,7 +631,9 @@ export function SalesOrderLines({
         <LineBlock
           key={line.id}
           line={line}
-          orderId={orderId}
+          parentKey={parentKey}
+          parentId={parentId}
+          actions={actions}
           currency={currency}
           products={products}
           units={units}
@@ -620,7 +645,9 @@ export function SalesOrderLines({
         <LineBlock
           key={`blank-${blank.key}`}
           line={blankLine(`blank-${blank.key}`)}
-          orderId={orderId}
+          parentKey={parentKey}
+          parentId={parentId}
+          actions={actions}
           currency={currency}
           products={products}
           units={units}

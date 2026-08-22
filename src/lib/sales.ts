@@ -401,15 +401,31 @@ export function renumber<T>(lines: T[]): (T & { position: number })[] {
 export function previewInvoiceLine(
   line: Pick<
     SalesOrderLineRow,
-    'product_id' | 'description' | 'notes' | 'quantity' | 'unit_price' | 'unit_cost' | 'discount' | 'line_total' | 'position'
+    | 'product_id'
+    | 'description'
+    | 'notes'
+    | 'unit'
+    | 'quantity'
+    | 'unit_price'
+    | 'unit_cost'
+    | 'revised_rate_type'
+    | 'revised_rate'
+    | 'discount'
+    | 'line_total'
+    | 'position'
   >,
-  product?: { name: string; sku: string | null } | null,
+  product?: { name: string; sku: string | null; unit?: string | null } | null,
 ): Omit<InvoiceLineRow, 'id' | 'organization_id' | 'invoice_id' | 'created_at'> {
   return {
     product_id: line.product_id,
     name: lineName(line, product?.name),
     sku: product?.sku ?? null,
     notes: line.notes,
+    unit: line.unit ?? product?.unit ?? null,
+    /* Carried across, not recomputed: the invoice should show the same "10%
+       off" the order showed rather than a bare figure. */
+    revised_rate_type: line.revised_rate_type,
+    revised_rate: line.revised_rate,
     quantity: line.quantity,
     unit_price: line.unit_price,
     unit_cost: line.unit_cost,
