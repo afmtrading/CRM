@@ -235,7 +235,9 @@ describe('a sales order status', () => {
   it('moves forward or to cancelled', () => {
     expect(nextStatuses('draft')).toEqual(['reserved', 'confirmed', 'cancelled'])
     expect(nextStatuses('reserved')).toEqual(['confirmed', 'cancelled'])
-    expect(nextStatuses('confirmed')).toEqual(['fulfilled', 'cancelled'])
+    // Invoiced is not offered from anywhere: raising the invoice sets it, and
+    // 20260270000000 refuses it otherwise. See the block below.
+    expect(nextStatuses('confirmed')).toEqual(['cancelled'])
   })
 
   /*
@@ -514,5 +516,30 @@ describe('sales orders and deals stay apart', () => {
     for (const dealStatus of ['open', 'won', 'lost']) {
       expect(SALES_ORDER_STATUSES as string[]).not.toContain(dealStatus)
     }
+  })
+})
+
+describe('Invoiced is not a status anybody sets', () => {
+  /*
+   * It used to be reachable by hand from Confirmed, which was honest while it
+   * read "Fulfilled" and meant delivered. It means an invoice exists now, so
+   * offering it as a button would let somebody claim one that is not there.
+   */
+  it('is offered from nowhere', () => {
+    for (const status of SALES_ORDER_STATUSES) {
+      expect(nextStatuses(status)).not.toContain('fulfilled')
+      expect(canTransition(status, 'fulfilled')).toBe(false)
+    }
+  })
+
+  it('is still terminal once reached', () => {
+    expect(nextStatuses('fulfilled')).toEqual([])
+  })
+
+  it('still bills, and still freezes the lines', () => {
+    // Reaching it through conversion rather than by hand changes nothing about
+    // what it means for an order that is already there.
+    expect(canInvoice('fulfilled')).toBe(true)
+    expect(isEditable('fulfilled')).toBe(false)
   })
 })

@@ -648,11 +648,23 @@ begin
   select * into v_row from public.product_stock_summary(v_speaker);
   perform test_assert(v_row.committed_orders = 45, 'a confirmed order still holds it');
 
-  -- Fulfilled means the goods have gone. Holding stock that is no longer in the
-  -- building would double-count it against whatever movement records it leaving.
-  update sales_orders set status = 'fulfilled' where id = v_order;
+  /*
+   * Invoiced means the order has been billed for, and the goods with it.
+   * Holding stock against it would double-count against whatever movement
+   * records it leaving.
+   *
+   * Reached by raising the invoice rather than by setting the column, because
+   * since 20260270000000 that is the only way to reach it — which this also
+   * proves in passing.
+   */
+  perform public.convert_sales_order_to_invoice(v_order);
+  perform test_assert(
+    (select status from sales_orders where id = v_order) = 'fulfilled',
+    'raising the invoice marks the order invoiced'
+  );
+
   select * into v_row from public.product_stock_summary(v_speaker);
-  perform test_assert(v_row.committed_orders = 0, 'a fulfilled order holds nothing');
+  perform test_assert(v_row.committed_orders = 0, 'an invoiced order holds nothing');
 
   update sales_orders set status = 'confirmed' where id = v_order;
   update sales_orders set status = 'cancelled' where id = v_order;
@@ -661,6 +673,51 @@ begin
   perform test_assert(v_row.available = 100, 'and the stock comes straight back');
 
   insert into fixture values ('stock_order', v_order), ('stock_loc', v_loc), ('amp', v_speaker);
+end;
+$$;
+
+-- =============================================================================
+-- Invoiced is not a status anybody sets.
+--
+-- The screen stops offering the transition, which is enough for the screen and
+-- not enough for the database: a session lives in a browser and PostgREST
+-- takes a status like any other column.
+-- =============================================================================
+do $$
+declare
+  v_org    uuid := (select id from fixture where key = 'org');
+  v_order  uuid;
+  v_raised boolean;
+begin
+  raise notice 'Invoiced means an invoice exists:';
+
+  perform sign_in_as('mgr_auth');
+
+  v_order := public.create_sales_order((select id from fixture where key = 'acme'), null, null, 'USD');
+  update sales_orders set status = 'confirmed' where id = v_order;
+
+  begin
+    update sales_orders set status = 'fulfilled' where id = v_order;
+    v_raised := false;
+  exception when others then
+    v_raised := true;
+  end;
+  perform test_assert(v_raised, 'an order with no invoice cannot be marked invoiced');
+
+  perform test_assert(
+    (select status from sales_orders where id = v_order) = 'confirmed',
+    'and the refusal left the status where it was'
+  );
+
+  -- The same column, the same statement, once there is an invoice behind it.
+  insert into sales_order_lines (organization_id, sales_order_id, description, quantity, unit_price)
+  values (v_org, v_order, 'A thing', 1, 10);
+  perform public.convert_sales_order_to_invoice(v_order);
+
+  perform test_assert(
+    (select status from sales_orders where id = v_order) = 'fulfilled',
+    'the conversion is what sets it'
+  );
 end;
 $$;
 
