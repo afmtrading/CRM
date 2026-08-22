@@ -157,17 +157,23 @@ export const SALES_ORDER_STATUS_HINTS: Record<SalesOrderStatus, string> = {
   draft: 'Being written. Commits to nothing.',
   reserved: 'Signed, or a deposit taken.',
   confirmed: 'Committed and ready to invoice.',
-  fulfilled: 'Billed and done.',
+  fulfilled: 'An invoice has been raised for it.',
   cancelled: 'Did not happen.',
 }
 
 /**
- * Where an order can go from here.
+ * Where an order can go from here, by hand.
  *
  * Forward, or cancelled, and nothing goes back. An order that has been signed
  * cannot become a draft again: the deposit on it is a fact, and a status that
  * can walk backwards makes every report over it a question of when you looked.
- * Fulfilled and cancelled are terminal.
+ * Invoiced and cancelled are terminal.
+ *
+ * Invoiced is not offered from anywhere, and that is the point of it. It used
+ * to be reachable from Confirmed, which was honest while it read "Fulfilled"
+ * and meant delivered — a fact only a person knows. It means an invoice
+ * exists now, which is a fact the database knows, so raising the invoice sets
+ * it and 20260270000000 refuses it in every other circumstance.
  */
 export function nextStatuses(status: SalesOrderStatus): SalesOrderStatus[] {
   switch (status) {
@@ -176,7 +182,7 @@ export function nextStatuses(status: SalesOrderStatus): SalesOrderStatus[] {
     case 'reserved':
       return ['confirmed', 'cancelled']
     case 'confirmed':
-      return ['fulfilled', 'cancelled']
+      return ['cancelled']
     case 'fulfilled':
     case 'cancelled':
       return []

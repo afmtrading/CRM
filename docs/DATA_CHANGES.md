@@ -252,3 +252,32 @@ renamed, and `INV-` has meant one thing throughout.
 
 Reverting means swapping the two strings, which is what 20260265000000 did in
 the other direction.
+
+
+## 2026-08-22 — one order marked Invoiced because its invoice exists
+
+Invoiced stops being something anybody can set by hand. An order reaches it
+when `convert_sales_order_to_invoice` raises the invoice, and not otherwise —
+so the status now means "there is an invoice", which is what the desk read it
+as all along.
+
+That leaves one row disagreeing with the new rule. Read out of production
+before the change:
+
+```sql
+-- sales_orders, orders that have an invoice
+SO-0007  status = confirmed   invoice INV-0003   → fulfilled
+SO-0008  status = fulfilled   invoice INV-0004   → unchanged
+```
+
+SO-0007 was invoiced in fact and not in status, which is the gap this closes
+from the other side. Nothing was marked Invoiced *without* an invoice, so no
+row is being demoted and no status is being taken away from anybody.
+
+Worth knowing rather than discovering: `isEditable` is false for this status,
+so SO-0007's lines are frozen from now on. That was already true of SO-0008
+and is the point of the status — an order somebody has billed for is not one
+to keep editing.
+
+Reverting means setting SO-0007 back to `confirmed`; the rule itself reverts
+by restoring `fulfilled` to nextStatuses and dropping the trigger.
