@@ -20,12 +20,18 @@ import {
 } from '@/components/ui'
 
 import {
+  purgeCompany,
+  purgeContact,
+  purgeDeal,
+  purgeProduct,
+  purgeSalesOrder,
   restoreCompany,
   restoreContact,
   restoreDeal,
   restoreProduct,
   restoreSalesOrder,
 } from '../actions'
+import { PurgeButton } from './purge-button'
 
 export const metadata = { title: 'Deleted records · FLO CRM' }
 
@@ -98,7 +104,10 @@ export default async function DeletedRecordsPage() {
 
   return (
     <>
-      <PageHeader title="Deleted records" />
+      <PageHeader
+        title="Deleted records"
+        description="Restore puts a record back where it was. Delete removes it from the database for good — refused while a sales order or an invoice still refers to it, since a document that names a record has to keep working."
+      />
 
       {total === 0 ? (
         <EmptyState
@@ -117,7 +126,7 @@ export default async function DeletedRecordsPage() {
                       <th>Email</th>
                       <th>Deleted by</th>
                       <th>Deleted</th>
-                      <th className="text-right">Restore</th>
+                      <th className="text-right">Restore or delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -138,13 +147,16 @@ export default async function DeletedRecordsPage() {
                           <td className="text-slate-600">{contact.email ?? '—'}</td>
                           <td className="text-slate-600">{deleterName(contact.deleted_by)}</td>
                           <td className="text-slate-500"><DateTime value={contact.deleted_at} /></td>
-                          <td className="text-right">
-                            <form action={restoreContact}>
-                              <input type="hidden" name="id" value={contact.id} />
-                              <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
-                                Restore
-                              </button>
-                            </form>
+                          <td>
+                            <div className="flex items-center justify-end gap-3">
+                              <form action={restoreContact}>
+                                <input type="hidden" name="id" value={contact.id} />
+                                <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                                  Restore
+                                </button>
+                              </form>
+                              <PurgeButton action={purgeContact} id={contact.id} label={name} what="contact" />
+                            </div>
                           </td>
                         </tr>
                       )
@@ -165,7 +177,7 @@ export default async function DeletedRecordsPage() {
                       <th>Website</th>
                       <th>Deleted by</th>
                       <th>Deleted</th>
-                      <th className="text-right">Restore</th>
+                      <th className="text-right">Restore or delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -184,13 +196,16 @@ export default async function DeletedRecordsPage() {
                         <td className="text-slate-600">{company.domain ?? '—'}</td>
                         <td className="text-slate-600">{deleterName(company.deleted_by)}</td>
                         <td className="text-slate-500"><DateTime value={company.deleted_at} /></td>
-                        <td className="text-right">
-                          <form action={restoreCompany}>
-                            <input type="hidden" name="id" value={company.id} />
-                            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
-                              Restore
-                            </button>
-                          </form>
+                        <td>
+                          <div className="flex items-center justify-end gap-3">
+                            <form action={restoreCompany}>
+                              <input type="hidden" name="id" value={company.id} />
+                              <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                                Restore
+                              </button>
+                            </form>
+                            <PurgeButton action={purgeCompany} id={company.id} label={company.name} what="company" />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -217,7 +232,7 @@ export default async function DeletedRecordsPage() {
                       <th>Expected close</th>
                       <th>Deleted by</th>
                       <th>Deleted</th>
-                      <th className="text-right">Restore</th>
+                      <th className="text-right">Restore or delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -241,13 +256,16 @@ export default async function DeletedRecordsPage() {
                         <td className="text-slate-500">{formatDay(deal.expected_close_date)}</td>
                         <td className="text-slate-600">{deleterName(deal.deleted_by)}</td>
                         <td className="text-slate-500"><DateTime value={deal.deleted_at} /></td>
-                        <td className="text-right">
-                          <form action={restoreDeal}>
-                            <input type="hidden" name="id" value={deal.id} />
-                            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
-                              Restore
-                            </button>
-                          </form>
+                        <td>
+                          <div className="flex items-center justify-end gap-3">
+                            <form action={restoreDeal}>
+                              <input type="hidden" name="id" value={deal.id} />
+                              <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                                Restore
+                              </button>
+                            </form>
+                            <PurgeButton action={purgeDeal} id={deal.id} label={deal.name} what="deal" />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -268,7 +286,7 @@ export default async function DeletedRecordsPage() {
                       <th className="text-right">Price</th>
                       <th>Deleted by</th>
                       <th>Deleted</th>
-                      <th className="text-right">Restore</th>
+                      <th className="text-right">Restore or delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -288,13 +306,16 @@ export default async function DeletedRecordsPage() {
                         </td>
                         <td className="text-slate-600">{deleterName(product.deleted_by)}</td>
                         <td className="text-slate-500"><DateTime value={product.deleted_at} /></td>
-                        <td className="text-right">
-                          <form action={restoreProduct}>
-                            <input type="hidden" name="id" value={product.id} />
-                            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
-                              Restore
-                            </button>
-                          </form>
+                        <td>
+                          <div className="flex items-center justify-end gap-3">
+                            <form action={restoreProduct}>
+                              <input type="hidden" name="id" value={product.id} />
+                              <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                                Restore
+                              </button>
+                            </form>
+                            <PurgeButton action={purgeProduct} id={product.id} label={product.name} what="product" />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -315,7 +336,7 @@ export default async function DeletedRecordsPage() {
                       <th>Date</th>
                       <th>Deleted by</th>
                       <th>Deleted</th>
-                      <th className="text-right">Restore</th>
+                      <th className="text-right">Restore or delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -335,13 +356,16 @@ export default async function DeletedRecordsPage() {
                         <td className="text-slate-600">{formatDay(order.order_date)}</td>
                         <td className="text-slate-600">{deleterName(order.deleted_by)}</td>
                         <td className="text-slate-500"><DateTime value={order.deleted_at} /></td>
-                        <td className="text-right">
-                          <form action={restoreSalesOrder}>
-                            <input type="hidden" name="id" value={order.id} />
-                            <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
-                              Restore
-                            </button>
-                          </form>
+                        <td>
+                          <div className="flex items-center justify-end gap-3">
+                            <form action={restoreSalesOrder}>
+                              <input type="hidden" name="id" value={order.id} />
+                              <button type="submit" className="btn-secondary px-2.5 py-1 text-xs">
+                                Restore
+                              </button>
+                            </form>
+                            <PurgeButton action={purgeSalesOrder} id={order.id} label={order.number} what="sales order" />
+                          </div>
                         </td>
                       </tr>
                     ))}

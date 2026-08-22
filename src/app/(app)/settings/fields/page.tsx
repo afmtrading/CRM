@@ -20,9 +20,8 @@ import {
   createCustomField,
   createFieldOption,
   deleteCustomField,
-  deleteFieldOption,
-  updateFieldOptionColor,
 } from '../actions'
+import { FieldOptionRows } from './option-rows'
 
 export const metadata = { title: 'Fields · FLO CRM' }
 
@@ -188,51 +187,7 @@ export default async function FieldsPage({
                 </span>
               }
             >
-              {selectedOptions.length === 0 ? (
-                <p className="mb-4 text-sm text-slate-500">
-                  No values yet. Add the first one below.
-                </p>
-              ) : (
-                <ul className="mb-4 space-y-2">
-                  {selectedOptions.map((option) => (
-                    <li key={option.id} className="flex flex-wrap items-center gap-2">
-                      <span className={`badge ${OPTION_COLOR_CLASSES[option.color]}`}>
-                        {option.value}
-                      </span>
-
-                      <form action={updateFieldOptionColor} className="flex items-center gap-1.5">
-                        <input type="hidden" name="id" value={option.id} />
-                        <select
-                          name="color"
-                          defaultValue={option.color}
-                          className="input max-w-32 py-1 text-xs"
-                          aria-label={`Colour for ${option.value}`}
-                        >
-                          {OPTION_COLORS.map((color) => (
-                            <option key={color} value={color}>
-                              {color}
-                            </option>
-                          ))}
-                        </select>
-                        <button type="submit" className="btn-secondary px-2 py-1 text-xs">
-                          Apply
-                        </button>
-                      </form>
-
-                      <form action={deleteFieldOption} className="ml-auto">
-                        <input type="hidden" name="id" value={option.id} />
-                        <button
-                          type="submit"
-                          className="px-1.5 text-sm text-slate-300 hover:text-red-600"
-                          aria-label={`Delete ${option.value}`}
-                        >
-                          ✕
-                        </button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <FieldOptionRows options={selectedOptions} />
 
               <ActionForm
                 action={createFieldOption}

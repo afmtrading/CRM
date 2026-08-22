@@ -4,17 +4,30 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { assertCanManage, requireAdmin, requireSession, scoped, firstRow } from '@/lib/tenancy'
+import {
+  assertCanManage,
+  requireAdmin,
+  requireSession,
+  scoped,
+  firstRow,
+  type SessionContext,
+} from '@/lib/tenancy'
 import type { ActionState } from '@/components/action-form'
 import { safeTimeZone } from '@/lib/timezone'
 import { CURRENCIES } from '@/lib/format'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
-import { OPTION_COLORS, OPTION_FIELDS } from '@/lib/field-options'
+import { OPTION_COLORS, OPTION_FIELDS, OPTION_VALUE_COLUMNS } from '@/lib/field-options'
 import { visibilityColumns } from '@/lib/permissions'
 import { LOGO_BUCKET, LOGO_MAX_BYTES, LOGO_TYPES, logoObjectKey, logoObjectPath } from '@/lib/logo'
 import { resolveStatus, wouldRemoveLastAdmin, type UserSnapshot } from '@/lib/users'
-import type { OptionColor, StageOutcome } from '@/lib/database.types'
+import type {
+  CustomFieldDefinitionRow,
+  FieldOptionRow,
+  OptionColor,
+  StageOutcome,
+  StockLocationRow,
+} from '@/lib/database.types'
 
 // -----------------------------------------------------------------------------
 // Pipelines and stages (PRD 6.3)
@@ -621,6 +634,47 @@ export async function createLeadScoreRule(formData: FormData) {
   revalidatePath('/contacts')
 }
 
+/**
+ * Corrects a rule instead of replacing it.
+ *
+ * Changing a threshold used to mean deleting the rule and typing it again, and
+ * those are not the same operation: rules are listed in the order they were
+ * created, so the corrected one arrived at the bottom of a list somebody had
+ * arranged. The row does not move here.
+ */
+export async function updateLeadScoreRule(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireAdmin()
+
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '').trim()
+  if (!id || !field) return { error: 'A rule needs a field' }
+
+  const points = Number(formData.get('points') ?? 0)
+  if (!Number.isFinite(points)) return { error: 'Points has to be a number' }
+
+  const { error } = await scoped(context, 'lead_score_rules')
+    .update({
+      field,
+      condition: String(formData.get('condition') ?? 'equals') as never,
+      value: String(formData.get('value') ?? '').trim() || null,
+      points,
+    })
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  // Same reason createLeadScoreRule recomputes: an edited rule that leaves the
+  // old scores standing is a rule nobody can tell took effect.
+  await context.supabase.rpc('recalculate_lead_scores')
+
+  revalidatePath('/settings/lead-scoring')
+  revalidatePath('/contacts')
+  return { ok: 'Rule saved.' }
+}
+
 export async function deleteLeadScoreRule(formData: FormData) {
   const context = await requireAdmin()
   const id = String(formData.get('id') ?? '')
@@ -662,6 +716,47 @@ export async function createAssignmentRule(formData: FormData) {
 
   if (error) throw new Error(error.message)
   revalidatePath('/settings/assignment')
+}
+
+/**
+ * Edits a routing rule in place.
+ *
+ * Priority is the reason this matters more here than elsewhere: rules are
+ * evaluated lowest number first, so "make this one run before that one" is a
+ * single number, and it should not cost the rule its identity to change it.
+ */
+export async function updateAssignmentRule(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireAdmin()
+
+  const id = String(formData.get('id') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  if (!id || !name) return { error: 'A rule needs a name' }
+
+  const strategy = String(formData.get('strategy') ?? 'round_robin')
+  const priority = Number(formData.get('priority') ?? 0)
+  if (!Number.isFinite(priority)) return { error: 'Priority has to be a number' }
+
+  const { error } = await scoped(context, 'assignment_rules')
+    .update({
+      name,
+      strategy: strategy as never,
+      // Cleared rather than carried: a rule switched to round-robin that keeps
+      // a stale user in its target column reads as though it still routes there.
+      source_match:
+        strategy === 'by_source' ? String(formData.get('source_match') ?? '').trim() || null : null,
+      fixed_user_id:
+        strategy === 'round_robin' ? null : String(formData.get('fixed_user_id') ?? '') || null,
+      priority,
+    })
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/assignment')
+  return { ok: 'Rule saved.' }
 }
 
 export async function deleteAssignmentRule(formData: FormData) {
@@ -1144,19 +1239,146 @@ export async function createFieldOption(
   return { ok: `"${value}" added.` }
 }
 
-export async function updateFieldOptionColor(formData: FormData) {
+/** The record a custom field's values are written on, per entity. */
+const CUSTOM_FIELD_TABLES: Record<string, string> = {
+  contact: 'contacts',
+  company: 'companies',
+  product: 'products',
+  deal: 'deals',
+}
+
+/**
+ * Carries a renamed option onto the records already holding the old value.
+ *
+ * An option is a list entry; what a record stores is the text. Nothing joins
+ * the two, which is why deleteFieldOption can say the records keep the value —
+ * and why a rename that stopped at the list would leave every one of them
+ * spelling the field's own vocabulary the old way, beside a list that no longer
+ * contains it.
+ *
+ * Where the value lives is the only thing that differs between the two paths:
+ * a built-in list writes into a column named by OPTION_VALUE_COLUMNS, a custom
+ * one into the record's `custom_fields` document. Returns how many records
+ * changed.
+ */
+async function carryOptionRename(
+  context: SessionContext,
+  option: FieldOptionRow,
+  value: string,
+): Promise<number> {
+  const builtIn = OPTION_VALUE_COLUMNS.find(
+    (entry) => entry.entity === option.entity_type && entry.key === option.field_key,
+  )
+
+  if (builtIn) {
+    const { data, error } = await context.supabase.rpc('rename_option_value', {
+      p_table: builtIn.table,
+      p_column: builtIn.column,
+      p_multiple: builtIn.multiple,
+      p_old: option.value,
+      p_new: value,
+    })
+    if (error) throw new Error(error.message)
+    return Number(data ?? 0)
+  }
+
+  const definition = await firstRow<CustomFieldDefinitionRow>(
+    scoped(context, 'custom_field_definitions')
+      .select('*')
+      .eq('entity_type', option.entity_type)
+      .eq('key', option.field_key)
+      .maybeSingle(),
+  )
+
+  const table = CUSTOM_FIELD_TABLES[option.entity_type]
+  if (!definition || !table) return 0
+
+  const { data, error } = await context.supabase.rpc('rename_custom_field_value', {
+    p_table: table,
+    p_key: option.field_key,
+    p_multiple: definition.field_type === 'multiselect',
+    p_old: option.value,
+    p_new: value,
+  })
+  if (error) throw new Error(error.message)
+  return Number(data ?? 0)
+}
+
+/**
+ * Edits an option: its value, its colour, or both.
+ *
+ * Correcting a typo was delete-and-retype before this, which is the one thing
+ * an option list cannot survive — the deleted value stays on every record that
+ * carried it, so the list ends up with the correct spelling and the records
+ * with the wrong one. A rename here goes to the records too.
+ */
+export async function updateFieldOption(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const context = await requireAdmin()
 
   const id = String(formData.get('id') ?? '')
-  const color = String(formData.get('color') ?? '')
-  if (!OPTION_COLORS.includes(color as OptionColor)) throw new Error('Unknown colour')
+  const value = String(formData.get('value') ?? '').trim()
+  const color = String(formData.get('color') ?? 'slate')
+
+  if (!value) return { error: 'An option needs a value' }
+  if (!OPTION_COLORS.includes(color as OptionColor)) return { error: 'Unknown colour' }
+
+  const option = await firstRow<FieldOptionRow>(
+    scoped(context, 'field_options').select('*').eq('id', id).maybeSingle(),
+  )
+  if (!option) return { error: 'That option no longer exists — reload the page.' }
+
+  if (option.value === value && option.color === color) return { ok: 'Nothing to change.' }
+
+  /*
+   * The same case-folded check createFieldOption makes, minus this option
+   * itself: correcting "kenya" to "Kenya" is a rename, and the database's
+   * case-folding unique index would otherwise read it as a collision with the
+   * row being renamed.
+   */
+  const { data: siblings } = await scoped(context, 'field_options')
+    .select('id, value')
+    .eq('field_key', option.field_key)
+    .eq('entity_type', option.entity_type)
+
+  const clash = ((siblings ?? []) as { id: string; value: string }[]).find(
+    (sibling) => sibling.id !== option.id && sibling.value.toLowerCase() === value.toLowerCase(),
+  )
+  if (clash) return { error: `"${clash.value}" is already an option for that field.` }
 
   const { error } = await scoped(context, 'field_options')
-    .update({ color: color as never })
+    .update({ value, color: color as never })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    return {
+      error: error.message.includes('duplicate key')
+        ? `"${value}" is already an option for that field.`
+        : error.message,
+    }
+  }
+
+  // The list first, the records second. A refused rename then leaves both where
+  // they were, rather than records spelling a value their list never accepted.
+  const renamed = option.value === value ? 0 : await carryOptionRename(context, option, value)
+
   revalidatePath('/settings/fields')
+  if (renamed > 0) {
+    revalidatePath('/contacts')
+    revalidatePath('/companies')
+    revalidatePath('/products')
+    revalidatePath('/deals')
+  }
+
+  if (option.value === value) return { ok: `"${value}" recoloured.` }
+
+  return {
+    ok:
+      `"${option.value}" is now "${value}".` +
+      (renamed > 0 ? ` Renamed on ${renamed} record${renamed === 1 ? '' : 's'}.` : ''),
+  }
 }
 
 /**
@@ -1285,6 +1507,57 @@ export async function setStockLocationActive(formData: FormData) {
   revalidatePath('/settings/locations')
 }
 
+/**
+ * Deletes a location outright.
+ *
+ * Retiring is still the kinder of the two and still the one to reach for on a
+ * warehouse that ever held anything — it keeps the count of what was in it. But
+ * a location typed wrong, or opened and never used, had no way out at all: it
+ * sat in the list forever wearing a "retired" badge, which says something false
+ * about a place that never existed.
+ *
+ * So this refuses exactly the case retiring exists for. `stock_levels`
+ * references the location `on delete restrict`, and rather than let the
+ * database answer with a constraint name, the count is read first and the
+ * refusal names the number of products standing in the way. Bins go with it —
+ * they cascade — and any adjustment recorded there keeps its history and simply
+ * stops naming a place.
+ */
+export async function deleteStockLocation(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const context = await requireSession()
+  assertCanManage(context)
+
+  const id = String(formData.get('id') ?? '')
+  const location = await firstRow<StockLocationRow>(
+    scoped(context, 'stock_locations').select('*').eq('id', id).maybeSingle(),
+  )
+  if (!location) return { error: 'That location no longer exists — reload the page.' }
+
+  const { count } = await scoped(context, 'stock_levels')
+    .select('id', { count: 'exact', head: true })
+    .eq('location_id', id)
+
+  const counted = count ?? 0
+  if (counted > 0) {
+    return {
+      error:
+        `${location.name} still holds a count for ${counted} product${counted === 1 ? '' : 's'}. ` +
+        'Move that stock elsewhere first, or retire the location instead — retiring keeps the ' +
+        'record of what was counted here.',
+    }
+  }
+
+  const { error } = await scoped(context, 'stock_locations').delete().eq('id', id)
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/locations')
+  revalidatePath('/products')
+  return { ok: `${location.name} deleted.` }
+}
+
 export async function createStockBin(
   _state: ActionState,
   formData: FormData,
@@ -1344,4 +1617,122 @@ export async function restoreSalesOrder(formData: FormData) {
 
   revalidatePath('/settings/deleted')
   revalidatePath('/sales-orders')
+}
+
+// -----------------------------------------------------------------------------
+// Emptying the bin
+//
+// The other half of the recycle bin. Restoring puts something back; this is the
+// only way anything ever leaves — until now a deleted record sat in the bin for
+// good, so "delete" meant "hide from everyone but the administrators", and an
+// organization that deleted a thousand imported contacts by mistake had a
+// thousand rows it could not get rid of.
+//
+// Every one of these refuses a record that is not already in the bin. Deleting
+// for real is the second of two steps on purpose: the first one is undoable and
+// the person doing it knows that, so this one is reached only by somebody
+// standing in the bin looking at what they deleted.
+// -----------------------------------------------------------------------------
+
+/**
+ * The tables that still point at a record, said in English.
+ *
+ * A sales order references its company `on delete restrict`, a line its product
+ * the same way — deliberately, so a paper trail can never lose what it was
+ * about. Postgres answers that with a constraint name, and the person reading
+ * it wants to know which document to go and look at.
+ */
+const STILL_REFERENCED: Record<string, string> = {
+  sales_orders: 'a sales order',
+  sales_order_lines: 'a sales order line',
+  invoices: 'an invoice',
+  invoice_lines: 'an invoice line',
+  deal_products: 'a deal line',
+  stock_levels: 'a stock count',
+  stock_adjustments: 'a stock adjustment',
+  marketplace_profiles: 'a marketplace profile',
+}
+
+const PURGE_LABELS: Record<string, string> = {
+  contacts: 'contact',
+  companies: 'company',
+  deals: 'deal',
+  products: 'product',
+  sales_orders: 'sales order',
+}
+
+function purgeRefusal(error: { message: string; details?: string | null }, label: string): string {
+  /*
+   * Two shapes for the same refusal. The message is Postgres's — "… violates
+   * foreign key constraint "x_fkey" on table "sales_orders"", where the table
+   * named after the constraint is the one holding on, not the one going — and
+   * the detail is the row-level version PostgREST sometimes leads with.
+   */
+  const referenced =
+    /constraint "[^"]+" on table "([a-z_]+)"/.exec(error.message)?.[1] ??
+    /still referenced from table "([a-z_]+)"/.exec(error.details ?? '')?.[1]
+
+  const named = referenced ? STILL_REFERENCED[referenced] : undefined
+
+  if (named) {
+    return (
+      `${label} cannot be deleted for good: ${named} still refers to it, and a document ` +
+      'that names it has to keep working. It stays in the bin, where it is out of everyone ' +
+      "else's way."
+    )
+  }
+
+  if (referenced) {
+    return `${label} cannot be deleted for good — something else in the CRM still refers to it.`
+  }
+
+  return `${label} could not be deleted: ${error.message}`
+}
+
+async function purgeRecord(
+  table: 'contacts' | 'companies' | 'deals' | 'products' | 'sales_orders',
+  formData: FormData,
+  paths: string[],
+): Promise<ActionState> {
+  const context = await requireAdmin()
+
+  const id = String(formData.get('id') ?? '')
+  const label = String(formData.get('label') ?? '').trim() || `That ${PURGE_LABELS[table]}`
+
+  const { error } = await scoped(context, table)
+    .delete()
+    // Only from the bin. A live record is deleted the way it always was, from
+    // its own page, and that one can be undone.
+    .not('deleted_at', 'is', null)
+    .eq('id', id)
+
+  if (error) return { error: purgeRefusal(error, label) }
+
+  revalidatePath('/settings/deleted')
+  for (const path of paths) revalidatePath(path)
+
+  return { ok: `${label} was deleted for good.` }
+}
+
+export async function purgeContact(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return purgeRecord('contacts', formData, ['/contacts'])
+}
+
+export async function purgeCompany(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return purgeRecord('companies', formData, ['/companies'])
+}
+
+export async function purgeDeal(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return purgeRecord('deals', formData, ['/deals', '/products'])
+}
+
+export async function purgeProduct(_state: ActionState, formData: FormData): Promise<ActionState> {
+  return purgeRecord('products', formData, ['/products'])
+}
+
+export async function purgeSalesOrder(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return purgeRecord('sales_orders', formData, ['/sales-orders'])
 }

@@ -10,6 +10,7 @@ import {
   deleteStockBin,
   setStockLocationActive,
 } from '../actions'
+import { DeleteLocationButton } from './delete-location-button'
 
 export const metadata = { title: 'Locations · FLO CRM' }
 
@@ -65,20 +66,27 @@ export default async function LocationsPage() {
                         </div>
 
                         {context.canManage && (
-                          <form action={setStockLocationActive}>
-                            <input type="hidden" name="id" value={location.id} />
-                            <input
-                              type="hidden"
-                              name="active"
-                              value={location.active ? 'false' : 'true'}
+                          <div className="flex flex-wrap items-center justify-end gap-3">
+                            <form action={setStockLocationActive}>
+                              <input type="hidden" name="id" value={location.id} />
+                              <input
+                                type="hidden"
+                                name="active"
+                                value={location.active ? 'false' : 'true'}
+                              />
+                              <button
+                                type="submit"
+                                className="text-xs text-slate-400 hover:text-brand-700"
+                              >
+                                {location.active ? 'Retire' : 'Bring back'}
+                              </button>
+                            </form>
+                            <DeleteLocationButton
+                              id={location.id}
+                              name={location.name}
+                              bins={here.length}
                             />
-                            <button
-                              type="submit"
-                              className="text-xs text-slate-400 hover:text-brand-700"
-                            >
-                              {location.active ? 'Retire' : 'Bring back'}
-                            </button>
-                          </form>
+                          </div>
                         )}
                       </div>
 
@@ -129,8 +137,11 @@ export default async function LocationsPage() {
             )}
 
             <p className="mt-4 text-xs text-slate-400">
-              A location is retired rather than deleted, so the record of what was counted in it
-              survives. Deleting a bin leaves its stock in the location it stood in.
+              <strong>Retire</strong> is the one to reach for on a place that ever held stock: it
+              leaves the pickers and keeps the record of what was counted in it.{' '}
+              <strong>Delete</strong> is for the location that should not exist — it is refused
+              while anything is counted there, and cannot be undone. Deleting a bin leaves its stock
+              in the location it stood in.
             </p>
           </Section>
         </div>
