@@ -49,8 +49,21 @@ export default async function DealsPage({
 
   const view = params.view === 'list' ? 'list' : 'kanban'
 
-  const [{ data: pipelines }, { data: users }, { data: products }, { data: savedViews }] =
-    await Promise.all([
+  /*
+   * Stages come back for every pipeline, not just the active one. Which
+   * pipeline is active is only known once the pipelines query returns, so
+   * scoping the stage query to it forced three sequential round trips
+   * (pipelines -> stages -> deals) in front of the board. Stages number a
+   * handful per pipeline, so reading them all and picking the active
+   * pipeline's in memory costs less than the trip it removes.
+   */
+  const [
+    { data: pipelines },
+    { data: users },
+    { data: products },
+    { data: savedViews },
+    { data: allStages },
+  ] = await Promise.all([
       // The bar above the board runs in the order an admin arranged, not
       // alphabetically — see settings/pipelines. Archived ones are off it:
       // a retired pipeline has no deals on the board by construction, so its
@@ -64,6 +77,7 @@ export default async function DealsPage({
        * it would be a second copy of the rule to keep in step with the first.
        */
       scoped(context, 'saved_filters').select('*').eq('entity_type', 'deal').order('name'),
+      scoped(context, 'stages').select('*').is('archived_at', null).order('order'),
     ])
 
   const pipelineList = (pipelines ?? []) as PipelineRow[]
@@ -91,13 +105,9 @@ export default async function DealsPage({
     )
   }
 
-  const { data: stages } = await scoped(context, 'stages')
-    .select('*')
-    .eq('pipeline_id', activePipeline.id)
-    .is('archived_at', null)
-    .order('order')
-
-  const stageList = (stages ?? []) as StageRow[]
+  const stageList = ((allStages ?? []) as StageRow[]).filter(
+    (stage) => stage.pipeline_id === activePipeline.id,
+  )
   const stageIds = stageList.map((stage) => stage.id)
 
   let dealQuery = scoped(context, 'deals')

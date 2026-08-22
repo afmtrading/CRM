@@ -105,6 +105,13 @@ export default async function ContactsPage({
   const params = await searchParams;
   const context = await requireSession();
 
+  /*
+   * The chosen columns depend on nothing but who is asking, yet this was
+   * awaited after the list came back — a whole round trip on its own, at the
+   * end of the page. Dispatched here it rides along with the queries below.
+   */
+  const columnsPromise = readColumns("contact");
+
   const [
     { data: savedFilters },
     { data: customFields },
@@ -348,7 +355,7 @@ export default async function ContactsPage({
 
   const { data: contacts, count, error } = await query.limit(PAGE_SIZE);
   const [totalStat, newThisMonth, customers, unassigned] = await statsPromise;
-  const savedColumns = await readColumns("contact");
+  const savedColumns = await columnsPromise;
 
   /*
    * Tags ride along on the row so the grouping can read them. They are not a

@@ -61,33 +61,41 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
 
   if (!authUser) return null
 
-  // Read through RLS: this returns the caller's own user row only.
-  const { data: userRow } = await supabase
-    .from('users')
-    .select('*')
-    .eq('auth_provider_id', authUser.id)
-    .eq('status', 'active')
-    .order('created_at')
-    .limit(1)
-    .maybeSingle()
+  /*
+   * The user, their organization and their capabilities, in one wave.
+   *
+   * The organization is embedded rather than fetched afterwards: both rows are
+   * needed before anything renders, and the foreign key on
+   * users.organization_id lets PostgREST join them, so a second sequential
+   * round trip was buying nothing the first could not. RLS applies to the
+   * embedded table exactly as it did to the separate query.
+   *
+   * current_permissions() reads auth.uid() and current_org_id() straight from
+   * the JWT, so it depends on none of this and no longer waits behind the user
+   * row. It is the same function the row-level policies consult, so the
+   * interface and the database read one source rather than two copies of the
+   * same rules — they used to be two copies, and would have parted company the
+   * first time anybody edited a set.
+   */
+  const [{ data: userRow }, { data: permissions }] = await Promise.all([
+    supabase
+      .from('users')
+      // Read through RLS: this returns the caller's own user row only.
+      .select('*, organizations(*)')
+      .eq('auth_provider_id', authUser.id)
+      .eq('status', 'active')
+      .order('created_at')
+      .limit(1)
+      .maybeSingle(),
+    supabase.rpc('current_permissions'),
+  ])
 
   if (!userRow) return null
 
-  /*
-   * The organization and the caller's capabilities, together: the second is a
-   * round trip that would otherwise be a third one in sequence, and neither
-   * depends on the other.
-   *
-   * current_permissions() is the same function the row-level policies consult,
-   * so the interface and the database are reading one source rather than two
-   * copies of the same rules. They used to be two copies — the booleans below
-   * were derived from the role here and from a hardcoded list in the database,
-   * and would have parted company the first time anybody edited a set.
-   */
-  const [{ data: organization }, { data: permissions }] = await Promise.all([
-    supabase.from('organizations').select('*').eq('id', userRow.organization_id).single(),
-    supabase.rpc('current_permissions'),
-  ])
+  const { organizations, ...user } = userRow as UserRow & {
+    organizations: OrganizationRow | null
+  }
+  const organization = organizations
 
   if (!organization) return null
 
@@ -105,20 +113,20 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
    */
   return {
     authUserId: authUser.id,
-    user: userRow,
+    user,
     organization,
     organizationId: organization.id,
-    isAdmin: permissions?.administer ?? userRow.role === 'admin',
+    isAdmin: permissions?.administer ?? user.role === 'admin',
     canManage:
-      permissions?.manage_records ?? (userRow.role === 'admin' || userRow.role === 'manager'),
+      permissions?.manage_records ?? (user.role === 'admin' || user.role === 'manager'),
     canBulk:
       permissions?.bulk_records ??
-      (userRow.role === 'admin' ||
-        userRow.role === 'manager' ||
-        userRow.role === 'sales_director'),
-    canWrite: permissions?.write_records ?? userRow.role !== 'readonly',
-    canDelete: permissions?.delete_records ?? userRow.role !== 'readonly',
-    canManagePermissions: permissions?.manage_permissions ?? userRow.role === 'admin',
+      (user.role === 'admin' ||
+        user.role === 'manager' ||
+        user.role === 'sales_director'),
+    canWrite: permissions?.write_records ?? user.role !== 'readonly',
+    canDelete: permissions?.delete_records ?? user.role !== 'readonly',
+    canManagePermissions: permissions?.manage_permissions ?? user.role === 'admin',
     canSeeHidden: permissions?.see_hidden ?? false,
     supabase,
   }

@@ -73,6 +73,13 @@ export default async function ProductsPage({
   const params = await searchParams
   const context = await requireSession()
 
+  /*
+   * The chosen columns depend on nothing but who is asking, yet this was
+   * awaited after the list came back — a whole round trip on its own, at the
+   * end of the page. Dispatched here it rides along with the queries below.
+   */
+  const columnsPromise = readColumns('product')
+
   // Anything not on offer is hidden by default: the catalogue people work with
   // is the one they can still sell from. `active` is derived from the status, so
   // this one predicate covers inactive, discontinued, quarantined and sold.
@@ -161,7 +168,7 @@ export default async function ProductsPage({
     [TAGS_FIELD_KEY]: tagIdsByProduct.get(product.id) ?? [],
   }))
   const definitions = (definitionRows ?? []) as CustomFieldDefinitionRow[]
-  const savedColumns = await readColumns('product')
+  const savedColumns = await columnsPromise
   const allOptions = (fieldOptions ?? []) as FieldOptionRow[]
   const categoryOptions = allOptions.filter((o) => o.field_key === 'product_category')
   const statusOptions = allOptions.filter((o) => o.field_key === 'product_status')
