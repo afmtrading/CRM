@@ -26,14 +26,17 @@ export default async function DashboardPage({
   // be configured, and a read-only role cannot connect one at all.
   const mailboxOffered = isGoogleConfigured() && isTokenKeyConfigured() && context.canWrite
 
-  const [contacts, openDeals, myTasks, report, mailboxes] = await Promise.all([
+  /*
+   * Open deals are not fetched here. report_pipeline_value already aggregates
+   * deal_count and total_value over exactly these deals — same organization,
+   * same status, same deleted_at filter — in a call this page was making
+   * anyway. The row fetch existed only to take a length and sum one column,
+   * and grew with the pipeline.
+   */
+  const [contacts, myTasks, report, mailboxes] = await Promise.all([
     scoped(context, 'contacts')
       .select('id', { count: 'exact', head: true })
       .is('duplicate_of_id', null)
-      .is('deleted_at', null),
-    scoped(context, 'deals')
-      .select('value, currency')
-      .eq('status', 'open')
       .is('deleted_at', null),
     scoped(context, 'activities')
       .select('*')
@@ -49,11 +52,13 @@ export default async function DashboardPage({
   ])
 
   const currency = context.organization.default_currency
-  const dealRows = (openDeals.data ?? []) as { value: number; currency: string }[]
-  const openValue = dealRows.reduce((sum, deal) => sum + Number(deal.value ?? 0), 0)
 
   const reportRows = (report.data ?? []) as PipelineValueReportRow[]
   const weighted = reportRows.reduce((sum, row) => sum + Number(row.weighted_value), 0)
+  // One row per (stage, owner) over open, undeleted deals, so these are the
+  // same two numbers the per-deal fetch used to produce.
+  const openCount = reportRows.reduce((sum, row) => sum + Number(row.deal_count), 0)
+  const openValue = reportRows.reduce((sum, row) => sum + Number(row.total_value), 0)
 
   const tasks = (myTasks.data ?? []) as ActivityRow[]
 
@@ -99,7 +104,7 @@ export default async function DashboardPage({
         />
         <StatCard
           label="Open deals"
-          value={String(dealRows.length)}
+          value={String(openCount)}
           href="/deals"
           icon={DealsIcon}
           tone="brand"

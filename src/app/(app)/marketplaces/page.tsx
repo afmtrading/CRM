@@ -74,6 +74,13 @@ export default async function MarketplacesPage({
   const context = await requireSession()
 
   /*
+   * The chosen columns depend on nothing but who is asking, yet this was
+   * awaited after the list came back — a whole round trip on its own, at the
+   * end of the page. Dispatched here it rides along with the queries below.
+   */
+  const columnsPromise = readColumns('marketplace')
+
+  /*
    * An inner join spelled as a required embed: `!inner` makes PostgREST drop
    * companies with no profile rather than returning them with a null one.
    *
@@ -215,7 +222,7 @@ export default async function MarketplacesPage({
   const optionsFor = (key: string) => allOptions.filter((option) => option.field_key === key)
   const definitions = (definitionRows ?? []) as CustomFieldDefinitionRow[]
 
-  const savedColumns = await readColumns('marketplace')
+  const savedColumns = await columnsPromise
 
   const catalogue = columnCatalogue('marketplace', definitions)
   const columns = resolveColumns('marketplace', savedColumns, catalogue)
