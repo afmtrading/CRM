@@ -143,7 +143,12 @@ export const SALES_ORDER_STATUS_LABELS: Record<SalesOrderStatus, string> = {
   draft: 'Draft',
   reserved: 'Reserved',
   confirmed: 'Confirmed',
-  fulfilled: 'Fulfilled',
+  /*
+   * The stored value is still `fulfilled` — an enum member is referenced by
+   * policies, by stored rows and by canInvoice, and renaming one to change a
+   * word on screen is a migration that buys nothing. Only the label moved.
+   */
+  fulfilled: 'Invoiced',
   cancelled: 'Cancelled',
 }
 
@@ -152,7 +157,7 @@ export const SALES_ORDER_STATUS_HINTS: Record<SalesOrderStatus, string> = {
   draft: 'Being written. Commits to nothing.',
   reserved: 'Signed, or a deposit taken.',
   confirmed: 'Committed and ready to invoice.',
-  fulfilled: 'Delivered and done.',
+  fulfilled: 'Billed and done.',
   cancelled: 'Did not happen.',
 }
 

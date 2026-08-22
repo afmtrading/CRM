@@ -15,6 +15,7 @@ import { MoneyTotals } from '@/components/money'
 import { EmptyState, ErrorNote, PageHeader, SalesOrderStatusBadge } from '@/components/ui'
 
 import { createSalesOrder } from './actions'
+import { CompanyFilter } from './company-filter'
 
 export const metadata = { title: 'Sales orders · FLO CRM' }
 
@@ -144,7 +145,7 @@ export default async function SalesOrdersPage({
 
       <form className="card mb-5 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
         <Field label="Number" htmlFor="q">
-          <input id="q" name="q" className="input" defaultValue={filter.search} placeholder="PO-" />
+          <input id="q" name="q" className="input" defaultValue={filter.search} placeholder="SO-" />
         </Field>
 
         <Field label="Status" htmlFor="status">
@@ -159,14 +160,7 @@ export default async function SalesOrdersPage({
         </Field>
 
         <Field label="Company" htmlFor="company">
-          <select id="company" name="company" className="input" defaultValue={filter.company}>
-            <option value="">Every company</option>
-            {companyList.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-          </select>
+          <CompanyFilter companies={companyList} selected={filter.company} />
         </Field>
 
         <Field label="From" htmlFor="from">
@@ -203,7 +197,7 @@ export default async function SalesOrdersPage({
                   <th>Number</th>
                   <th>Status</th>
                   <th>Company</th>
-                  <th>Channel</th>
+                  <th>Shipping</th>
                   <th>Owner</th>
                   <th>Date</th>
                   <th className="text-right">Value</th>
@@ -235,18 +229,14 @@ export default async function SalesOrdersPage({
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    {/* A marketplace is a company, so the same lookup names it —
-                        the link goes to the channel rather than the account. */}
+                    {/* Who moves the goods. This column showed the channel an
+                        order sold through, which is on the record for anybody
+                        who needs it and was Direct on almost every row. */}
                     <td>
-                      {order.marketplace_id ? (
-                        <Link
-                          href={`/marketplaces/${order.marketplace_id}`}
-                          className="text-brand-700 hover:underline"
-                        >
-                          {companyName.get(order.marketplace_id) ?? 'Marketplace'}
-                        </Link>
+                      {order.shipping_responsibility ? (
+                        <span className="text-slate-600">{order.shipping_responsibility}</span>
                       ) : (
-                        <span className="text-xs text-slate-400">Direct</span>
+                        <span className="text-slate-300">—</span>
                       )}
                     </td>
                     <td>{order.owner_id ? (ownerName.get(order.owner_id) ?? '—') : '—'}</td>
