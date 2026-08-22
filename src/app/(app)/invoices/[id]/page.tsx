@@ -65,7 +65,6 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     { data: contact },
     { data: order },
     { data: products },
-    { data: channelRows },
     { data: people },
     { data: historyRows },
   ] =
@@ -94,11 +93,6 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             .order('name')
             .limit(500)
         : Promise.resolve({ data: [] }),
-      // Sell-side channels only: the database refuses a source-only one here,
-      // so the picker should not offer it.
-      scoped(context, 'marketplace_profiles')
-        .select('company_id, companies(name)')
-        .eq('sells_through', true),
       /* Everyone the history might name, disabled users included — somebody
          since disabled still made the change they made. */
       scoped(context, 'users').select('id, name, email'),
@@ -129,11 +123,6 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     unit_cost: number
   }[]
 
-  const channels = (
-    (channelRows ?? []) as { company_id: string; companies: { name: string } | null }[]
-  )
-    .map((row) => ({ id: row.company_id, name: row.companies?.name ?? 'Unnamed' }))
-    .sort((a, b) => a.name.localeCompare(b.name))
 
   const customer = company as CompanyRow | null
   const billTo = contact as ContactRow | null
@@ -479,41 +468,16 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                   Show the discount column on the document
                 </label>
 
-                <div className="mt-3">
-                  <label className="label" htmlFor="marketplace_id">
-                    Sold through
-                  </label>
-                  {/*
-                    Carried from the sales order when there was one, and
-                    settable directly on an invoice raised on its own. Locked
-                    where it came from an order: that is where the fact
-                    belongs, and two places to change one thing is how they end
-                    up disagreeing.
-                  */}
-                  {invoice.sales_order_id ? (
-                    <>
-                      <p className="input bg-slate-50 text-slate-600">
-                        {channels.find((channel) => channel.id === invoice.marketplace_id)?.name ??
-                          'Direct — no marketplace'}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">Set on the sales order.</p>
-                    </>
-                  ) : (
-                    <select
-                      id="marketplace_id"
-                      name="marketplace_id"
-                      className="input"
-                      defaultValue={invoice.marketplace_id ?? ''}
-                    >
-                      <option value="">Direct — no marketplace</option>
-                      {channels.map((channel) => (
-                        <option key={channel.id} value={channel.id}>
-                          {channel.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                {/*
+                  "Sold through" was here and is gone. The desk does not want
+                  the field on an invoice: it is carried from the order and
+                  printed nowhere, so it was a read-only box restating a fact
+                  the order already owns.
+
+                  marketplace_id is untouched — channel attribution still reads
+                  it, and nothing on this page posts the key now, so the `has`
+                  walk in lib/invoice-header never writes it.
+                */}
               </div>
 
               {context.canWrite && (

@@ -160,6 +160,8 @@ export async function GET(
       }
     }),
     showDiscount: order.show_discount,
+    // Deposits covering the order in full. Zero out of zero is not paid.
+    paidInFull: totals.total > 0 && totals.balance <= 0,
     subtotal: totals.subtotal,
     discount: totals.discount,
     discountLabel: documentRevisionLabel(

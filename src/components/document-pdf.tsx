@@ -99,6 +99,19 @@ const styles = StyleSheet.create({
   totals: { width: '52%', backgroundColor: BRAND_LIGHT, padding: 8, borderRadius: 3 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
   totalStrong: { fontFamily: 'Helvetica-Bold' },
+  paidStamp: {
+    marginTop: 6,
+    paddingTop: 5,
+    borderTopWidth: 1,
+    borderTopColor: '#c7d7e4',
+    alignItems: 'center',
+  },
+  paidStampText: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: '#15803d',
+  },
 
   // --- sections -----------------------------------------------------------
   section: { marginTop: 16 },
@@ -300,11 +313,22 @@ export function DocumentPdf({ model }: { model: DocumentModel }) {
               <Text style={styles.totalStrong}>Balance due</Text>
               <Text style={styles.totalStrong}>{money(model.balance)}</Text>
             </View>
+
+            {/* Under the figure it follows from. "Balance due $0.00" is
+                arithmetic the reader has to do; this is the answer they were
+                doing it for. */}
+            {model.paidInFull ? (
+              <View style={styles.paidStamp}>
+                <Text style={styles.paidStampText}>PAID IN FULL</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
+        {/* Given room of its own. The payments table sat directly under the
+            totals box and the two read as one block. */}
         {model.payments.length > 0 ? (
-          <View style={styles.section}>
+          <View style={[styles.section, { marginTop: 28 }]}>
             <Text style={styles.sectionLabel}>{model.paymentsTitle.toUpperCase()}</Text>
             <View style={[styles.tr, { borderBottomColor: RULE, paddingHorizontal: 0 }]}>
               <Text style={[styles.thText, { width: '20%', color: MUTED }]}>Date</Text>

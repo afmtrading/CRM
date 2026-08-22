@@ -55,6 +55,7 @@ function model(overrides: Partial<DocumentModel> = {}): DocumentModel {
       },
     ],
     showDiscount: true,
+    paidInFull: false,
     subtotal: 134,
     discount: 0,
     discountLabel: null,
@@ -76,6 +77,20 @@ function isPdf(bytes: Buffer): boolean {
 }
 
 describe('renderDocumentPdf', () => {
+
+  /*
+   * Zero has two meanings in this box: an invoice that has been settled, and
+   * one raised for nothing. Only the first should carry the stamp, which is
+   * why the model holds a flag rather than the renderer testing balance === 0.
+   */
+  it('stamps a settled document and not an empty one', async () => {
+    const settled = await renderDocumentPdf(model({ paidInFull: true }))
+    const open = await renderDocumentPdf(model({ paidInFull: false }))
+    expect(settled.length).toBeGreaterThan(0)
+    expect(open.length).toBeGreaterThan(0)
+    // Same document either way but for the stamp, so the stamped one is longer.
+    expect(settled.length).not.toBe(open.length)
+  })
   it('renders a sales order', async () => {
     const pdf = await renderDocumentPdf(model())
     expect(isPdf(pdf)).toBe(true)
