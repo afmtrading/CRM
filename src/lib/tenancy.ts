@@ -100,6 +100,21 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
   if (!organization) return null
 
   /*
+   * A suspended organization has no session, the same as no membership at all.
+   *
+   * The database says this too — current_org_id() resolves to null for an
+   * inactive organization, so every policy refuses and no row is readable
+   * anyway. This exists so the person meets a sentence explaining it rather
+   * than a CRM that has apparently lost all their records, which is what
+   * relying on the policies alone would look like from the inside.
+   *
+   * Returning null rather than a context with a flag on it is deliberate: a
+   * flag would have to be checked by every caller, and the one that forgot
+   * would be the one that mattered.
+   */
+  if (organization.status !== 'active') return null
+
+  /*
    * The fallbacks mirror the ones inside the database helpers, and fire in the
    * same circumstance: an organization with no permission sets at all, which
    * the seed and its trigger between them should make impossible. Degrading to

@@ -1658,6 +1658,16 @@ export interface Database {
       find_duplicate_groups: { Args: Record<string, never>; Returns: DuplicateGroupRow[] }
       merge_contacts: { Args: { p_target_id: string; p_source_id: string }; Returns: ContactRow }
       next_assignee: { Args: { p_source?: string | null }; Returns: string | null }
+      /** Why a signed-in caller has no session, for the /no-access page. */
+      access_denied_reason: {
+        Args: Record<string, never>
+        Returns:
+          | 'not_signed_in'
+          | 'none'
+          | 'organization_inactive'
+          | 'user_not_active'
+          | 'no_membership'
+      }
       assign_owner_for_org: {
         Args: { p_org: string; p_source?: string | null }
         Returns: string | null
