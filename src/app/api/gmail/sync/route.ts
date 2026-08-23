@@ -69,6 +69,8 @@ type Connection = {
   backfill_until: string | null
   calendar_sync_token: string | null
   calendar_state: string
+  /* Selected only to make the join an inner one; nothing here reads it. */
+  organizations?: { status: string } | { status: string }[] | null
 }
 
 type ConnectionResult = {
@@ -113,13 +115,24 @@ export async function POST(request: Request) {
 
   const supabase = createSupabaseAdminClient()
 
-  // Least-recently-synced first, so a backlog drains evenly instead of the
-  // same few mailboxes being polled every time.
+  /*
+   * Least-recently-synced first, so a backlog drains evenly instead of the same
+   * few mailboxes being polled every time.
+   *
+   * The embedded organizations filter is what keeps a suspended account out.
+   * This runs with the service role and so bypasses RLS entirely — the check
+   * that stops a suspended organization everywhere else does not reach here,
+   * and pulling somebody's mail into a CRM they can no longer open is both
+   * pointless and the wrong thing to be doing with their inbox. It is expressed
+   * as an inner join on the embedded table rather than a second query, so a
+   * connection whose organization is switched off is never returned at all.
+   */
   const { data, error } = await supabase
     .from('mailbox_connections')
     .select(
-      'id, organization_id, email_address, refresh_token, history_id, backfill_days, backfill_until, calendar_sync_token, calendar_state',
+      'id, organization_id, email_address, refresh_token, history_id, backfill_days, backfill_until, calendar_sync_token, calendar_state, organizations!inner(status)',
     )
+    .eq('organizations.status', 'active')
     .eq('status', 'active')
     .eq('provider', 'gmail')
     .order('last_synced_at', { ascending: true, nullsFirst: true })

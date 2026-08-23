@@ -1658,6 +1658,10 @@ export interface Database {
       find_duplicate_groups: { Args: Record<string, never>; Returns: DuplicateGroupRow[] }
       merge_contacts: { Args: { p_target_id: string; p_source_id: string }; Returns: ContactRow }
       next_assignee: { Args: { p_source?: string | null }; Returns: string | null }
+      /** Whether an organization is switched on. For the background jobs, which bypass RLS. */
+      organization_is_active: { Args: { p_org: string }; Returns: boolean }
+      /** Stops a suspended account's campaigns mid-flight, keeping the outbox intact. */
+      pause_suspended_campaigns: { Args: Record<string, never>; Returns: number }
       /** Why a signed-in caller has no session, for the /no-access page. */
       access_denied_reason: {
         Args: Record<string, never>
