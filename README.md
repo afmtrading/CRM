@@ -102,8 +102,16 @@ them has no account and must not need one:
 | `/f/{slug}` | Somebody filling in a marketing form (see `docs/FORMS.md`) |
 
 Neither reads a table. Between them they reach exactly four SECURITY DEFINER
-functions that `anon` may execute, and `anon` holds no grant on any table in the
-schema.
+functions, and those four are the entire list `anon` may execute. The only table
+privilege `anon` holds anywhere in the schema is `select` on `countries`, the
+ISO country list.
+
+That is asserted, not asserted-to. `supabase/tests/32_anon_surface.sql` compares
+the live grants against that list and fails on any addition — because Supabase's
+default privileges hand `anon` execute on every new function and all four
+privileges on every new table, so this closes itself again every time somebody
+writes `create function`. A migration that adds either needs an explicit
+`revoke ... from public, anon`.
 
 ---
 
