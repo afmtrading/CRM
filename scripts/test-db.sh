@@ -121,5 +121,8 @@ psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/31_marketing_fo
 echo "→ the anonymous surface"
 psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/32_anon_surface.sql"
 
+echo "→ inactive organizations"
+psql -q -v ON_ERROR_STOP=1 -d "${DB}" -f "${ROOT}/supabase/tests/33_inactive_organizations.sql"
+
 echo
 echo "All database tests passed."
