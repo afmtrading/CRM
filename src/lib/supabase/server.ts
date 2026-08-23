@@ -62,3 +62,21 @@ export function createSupabaseAdminClient(): AppSupabaseClient {
     auth: { autoRefreshToken: false, persistSession: false },
   }) as unknown as AppSupabaseClient
 }
+
+/**
+ * Sessionless client, running as `anon`.
+ *
+ * For the two places a person with no account has to reach the database: the
+ * unsubscribe link, and a public marketing form. It carries no cookies on
+ * purpose — a signed-in colleague opening a form must not have their JWT
+ * attached to it, because that would quietly change which policies apply and
+ * make the public path behave differently for staff than for everybody else.
+ *
+ * `anon` may execute four functions in total and read no table at all, so what
+ * this client can do is exactly the list in those grants.
+ */
+export function createSupabaseAnonClient(): AppSupabaseClient {
+  return createServerClient(supabaseUrl(), supabaseAnonKey(), {
+    cookies: { getAll: () => [], setAll: () => {} },
+  }) as unknown as AppSupabaseClient
+}

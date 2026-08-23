@@ -242,6 +242,8 @@ export type TenantTable =
   | 'email_list_members'
   | 'campaigns'
   | 'campaign_recipients'
+  | 'marketing_forms'
+  | 'marketing_form_submissions'
   /* A view rather than a table, but it carries organization_id and reads
      through the caller's own policies, so it scopes exactly like one. */
   | 'contact_mailability'

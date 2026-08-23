@@ -340,6 +340,13 @@ export const StoreIcon: IconComponent = (p) => (
 )
 
 /** A tick: what has been chosen, in a list of things that could be. */
+export const FormIcon: IconComponent = (p) => (
+  <Svg {...p}>
+    <rect x="4" y="3" width="16" height="18" rx="2" />
+    <path d="M8 8h8M8 12h8M8 16h4" />
+  </Svg>
+)
+
 export const CheckIcon: IconComponent = (p) => (
   <Svg {...p}>
     <path d="m5 13 4 4L19 7" />

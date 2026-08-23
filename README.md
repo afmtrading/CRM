@@ -68,7 +68,7 @@ flips it to `active`. From then on, admins invite everyone else from
 | 6.2 | Contacts, companies, custom fields, duplicate detection, merge | `src/app/(app)/contacts`, `src/app/(app)/companies` |
 | 6.3 | Pipelines, stages, deals, kanban + list views | `src/app/(app)/deals` |
 | 6.4 | Activity logging, tasks, reminders, mailbox/calendar ingestion | `src/app/(app)/activities`, `src/app/api/activities/ingest` |
-| 6.5 | Lead capture, rule-based scoring, assignment routing | `src/app/(app)/settings/lead-scoring`, `.../assignment` |
+| 6.5 | Lead capture, rule-based scoring, assignment routing | `src/app/(app)/forms`, `src/app/f/[slug]`, `src/app/(app)/settings/lead-scoring`, `.../assignment` |
 | 6.6 | Filtering, grouping, saved views | `src/lib/filters.ts`, `src/components/filter-bar.tsx` |
 | 6.7 | CSV import with mapping + preview, export, deduplication | `src/app/(app)/settings/import`, `src/app/api/export` |
 | 6.8 | Pipeline value report, by stage and by owner | `src/app/(app)/reports/pipeline-value` |
@@ -90,6 +90,20 @@ that need real logic are built here:
 | `POST /api/activities/ingest` | Mailbox/calendar connector drop-off point (see `docs/SYNC.md`) |
 
 Every one of these resolves the caller's organization before it touches data.
+
+### The two public pages
+
+Two paths deliberately sit outside the sign-in gate, because the person using
+them has no account and must not need one:
+
+| Path | Who reaches it |
+|---|---|
+| `/unsubscribe` | Somebody who was sent a campaign and wants it to stop |
+| `/f/{slug}` | Somebody filling in a marketing form (see `docs/FORMS.md`) |
+
+Neither reads a table. Between them they reach exactly four SECURITY DEFINER
+functions that `anon` may execute, and `anon` holds no grant on any table in the
+schema.
 
 ---
 

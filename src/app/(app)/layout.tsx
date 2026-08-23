@@ -21,6 +21,7 @@ import {
   DealsIcon,
   DuplicatesIcon,
   FieldsIcon,
+  FormIcon,
   ImportIcon,
   MailIcon,
   PipelinesIcon,
@@ -90,7 +91,12 @@ const SALES_NAV: NavItem[] = [
   { href: '/invoices', label: 'Invoices', icon: <InvoiceIcon className={ICON} /> },
 ]
 
+/*
+ * Forms sits first because it is the only one of the three that brings people
+ * in; the other two work on people who are already here.
+ */
 const MARKETING_NAV: NavItem[] = [
+  { href: '/forms', label: 'Forms', icon: <FormIcon className={ICON} /> },
   { href: '/lists', label: 'Lists', icon: <MailIcon className={ICON} /> },
   { href: '/campaigns', label: 'Campaigns', icon: <SendIcon className={ICON} /> },
 ]

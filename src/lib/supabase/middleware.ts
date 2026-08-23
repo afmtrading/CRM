@@ -25,6 +25,18 @@ const SCHEDULED_PATHS = [
   '/api/email/webhook',
 ]
 
+/*
+ * '/f' is the public marketing forms. Same argument as '/unsubscribe' and then
+ * some: the whole point of a lead-capture form is that the person filling it in
+ * is not in the CRM yet, so requiring a session would make the feature
+ * impossible rather than merely rude. The page reads and writes through two
+ * SECURITY DEFINER functions that `anon` may execute and nothing else — an
+ * unpublished form returns nothing at all, so this gate opening is not the only
+ * thing standing between a draft and the public.
+ *
+ * The server action the form posts to lands on the same path, so it is covered
+ * by the same entry.
+ */
 const PUBLIC_PATHS = [
   '/login',
   '/auth',
@@ -32,6 +44,7 @@ const PUBLIC_PATHS = [
   '/unsubscribe',
   // The one-click endpoint a mail client POSTs to on the recipient's behalf.
   '/api/unsubscribe',
+  '/f',
   ...SCHEDULED_PATHS,
 ]
 
