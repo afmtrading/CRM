@@ -331,6 +331,81 @@ export type EmailListMemberRow = {
   added_at: string
 }
 
+/** draft is unreachable in public, published is live, closed still answers the link. */
+export type MarketingFormStatus = 'draft' | 'published' | 'closed'
+
+/** What submitting the form does to the contact's marketing consent. */
+export type FormConsentBasis = 'express' | 'implied' | 'none'
+
+/**
+ * A public lead-capture form.
+ *
+ * `slug` is unique across every organization, not just this one: the public
+ * address /f/<slug> carries no tenant.
+ */
+export type MarketingFormRow = {
+  id: string
+  organization_id: string
+  /** Internal. Never shown to a visitor. */
+  name: string
+  slug: string
+  status: MarketingFormStatus
+  headline: string
+  blurb: string | null
+  submit_label: string
+  success_message: string
+  /** Their own thank-you page, instead of success_message. */
+  redirect_url: string | null
+  closed_message: string
+  /** The questions, in order. Read with parseFields() in lib/forms. */
+  fields: Json
+  consent_basis: FormConsentBasis
+  /** The exact words of the tick box, frozen onto every submission. */
+  consent_label: string
+  /** Whether the tick is needed to submit at all. */
+  consent_required: boolean
+  /** Written to contacts.source, and matched by the by-source assignment rules. */
+  source: string | null
+  lifecycle_stage: LifecycleStage
+  list_id: string | null
+  /** Null hands the choice to the assignment rules. */
+  owner_id: string | null
+  /** Null tells whoever ends up owning the contact. */
+  notify_user_id: string | null
+  submission_count: number
+  last_submission_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * What was actually submitted, kept verbatim.
+ *
+ * For an express-consent form this row is the proof of consent: the wording
+ * shown, the moment it was ticked, and the page it was ticked on.
+ */
+export type MarketingFormSubmissionRow = {
+  id: string
+  organization_id: string
+  form_id: string
+  contact_id: string | null
+  /** An array of { key, label, value }; read with parseAnswers() in lib/forms. */
+  answers: Json
+  email: string | null
+  name: string | null
+  consent_given: boolean
+  consent_label: string | null
+  /** They opted in, but the record refuses — unsubscribed, or a suppressed address. */
+  consent_conflict: boolean
+  /** Inside an embedded form this is the customer's own page. */
+  page_url: string | null
+  referrer: string | null
+  utm: Json
+  user_agent: string | null
+  created_at: string
+}
+
 /** One row per live contact; blocked_reason is null when they may be emailed. */
 export type ContactMailabilityRow = {
   contact_id: string
@@ -1583,6 +1658,16 @@ export interface Database {
       find_duplicate_groups: { Args: Record<string, never>; Returns: DuplicateGroupRow[] }
       merge_contacts: { Args: { p_target_id: string; p_source_id: string }; Returns: ContactRow }
       next_assignee: { Args: { p_source?: string | null }; Returns: string | null }
+      assign_owner_for_org: {
+        Args: { p_org: string; p_source?: string | null }
+        Returns: string | null
+      }
+      /** The two functions anon may execute on marketing forms, and the only two. */
+      marketing_form_public: { Args: { p_slug: string }; Returns: Json }
+      submit_marketing_form: {
+        Args: { p_slug: string; p_answers: Json; p_consent?: boolean; p_meta?: Json }
+        Returns: Json
+      }
       report_pipeline_value: {
         Args: { p_pipeline_id?: string | null; p_owner_id?: string | null }
         Returns: PipelineValueReportRow[]

@@ -7,6 +7,30 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: '10mb' },
   },
   /**
+   * The public forms are meant to be framed.
+   *
+   * Which is unusual enough to say out loud. Every other page here would be a
+   * clickjacking target inside somebody else's iframe, and the platform default
+   * of refusing is right for them. A lead-capture form is the exception: an
+   * iframe is how it gets onto a customer's website, and a form that refuses to
+   * be framed is a form that cannot do its job.
+   *
+   * frame-ancestors rather than X-Frame-Options because only the former can say
+   * "anyone", and it is the one modern browsers obey when both are present.
+   * There is nothing to steal by framing this: no session, no authenticated
+   * action, and every submission validated on the server against the form's own
+   * question list.
+   */
+  async headers() {
+    return [
+      {
+        source: '/f/:slug*',
+        headers: [{ key: 'Content-Security-Policy', value: 'frame-ancestors *' }],
+      },
+    ]
+  },
+
+  /**
    * Where the orders briefly lived.
    *
    * They were at /sales-orders, moved to /purchase-orders for an afternoon,
