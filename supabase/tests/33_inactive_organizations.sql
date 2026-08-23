@@ -192,6 +192,119 @@ $$;
 reset role;
 
 -- =============================================================================
+-- The background jobs stop too.
+--
+-- These run as service_role, which bypasses RLS — so none of the enforcement
+-- above reaches them, and each one needs its own check. An account switched off
+-- on Friday must not spend the weekend mailing its customers.
+-- =============================================================================
+do $$
+declare
+  v_shut     uuid := (select id from fixture where key = 'shut');
+  v_live     uuid := (select id from fixture where key = 'live');
+  v_campaign uuid;
+  v_theirs   uuid;
+  v_contact  uuid;
+begin
+  raise notice 'Background jobs:';
+
+  -- Suspend it again, having reactivated nothing yet.
+  update organizations set status = 'inactive' where id = v_shut;
+
+  insert into campaigns (organization_id, name, subject, body, status, scheduled_at)
+  values (v_shut, 'Weekend blast', 'Hello', 'Body', 'scheduled', now() - interval '1 minute')
+  returning id into v_campaign;
+
+  insert into campaigns (organization_id, name, subject, body, status, scheduled_at)
+  values (v_live, 'Legitimate blast', 'Hello', 'Body', 'scheduled', now() - interval '1 minute')
+  returning id into v_theirs;
+
+  perform public.start_due_campaigns();
+
+  perform test_assert(
+    (select status from campaigns where id = v_campaign) = 'scheduled',
+    'a suspended account''s scheduled campaign is not started'
+  );
+  perform test_assert(
+    (select status from campaigns where id = v_theirs) = 'sending',
+    'while a live account''s starts exactly as before'
+  );
+
+  -- One already in flight when the suspension lands.
+  update campaigns set status = 'sending' where id = v_campaign;
+  perform test_assert(public.pause_suspended_campaigns() = 1,
+    'a campaign already sending is paused when its account is suspended');
+  perform test_assert(
+    (select status from campaigns where id = v_campaign) = 'paused',
+    'paused rather than cancelled, so the outbox survives and nobody is half-mailed'
+  );
+  perform test_assert(
+    (select status from campaigns where id = v_theirs) = 'sending',
+    'and the live account''s campaign is untouched by the sweep'
+  );
+
+  -- Birthdays.
+  update contacts set birthday = current_date + 3
+  where organization_id in (v_shut, v_live);
+
+  perform public.create_birthday_reminders(3);
+
+  perform test_assert(
+    not exists (select 1 from activities
+                where organization_id = v_shut and external_source = 'birthday'),
+    'a suspended account files no birthday tasks'
+  );
+  perform test_assert(
+    exists (select 1 from activities
+            where organization_id = v_live and external_source = 'birthday'),
+    'and a live one still does'
+  );
+end;
+$$;
+
+-- =============================================================================
+-- But what already left is still recorded.
+--
+-- The asymmetry that matters. A bounce or a complaint is a fact about mail that
+-- has already gone, and it writes the suppression that stops that address being
+-- mailed ever again. Dropping those while an account is suspended would mean a
+-- complaint is never recorded and the address is mailed again the moment the
+-- account comes back — so suspension must not be a way to lose the record of
+-- somebody asking to be left alone.
+-- =============================================================================
+do $$
+declare
+  v_shut      uuid := (select id from fixture where key = 'shut');
+  v_campaign  uuid;
+  v_contact   uuid;
+  v_recipient uuid;
+begin
+  raise notice 'What already left:';
+
+  select id into v_campaign from campaigns where organization_id = v_shut limit 1;
+  select id into v_contact from contacts where organization_id = v_shut limit 1;
+
+  insert into campaign_recipients (organization_id, campaign_id, contact_id, email,
+                                   status, provider_id, sent_at)
+  values (v_shut, v_campaign, v_contact, 'shut@example.test', 'sent', 'prov-123', now())
+  returning id into v_recipient;
+
+  -- The provider's vocabulary is prefixed: 'email.complained', not 'complained'.
+  perform public.record_email_event('prov-123', 'email.complained', 'shut@example.test', '{}'::jsonb);
+
+  perform test_assert(
+    (select status from campaign_recipients where id = v_recipient) = 'complained',
+    'a complaint about already-sent mail is still recorded for a suspended account'
+  );
+  perform test_assert(
+    exists (select 1 from email_suppressions
+            where organization_id = v_shut and lower(email) = 'shut@example.test'),
+    'and it still writes the suppression, which is the whole point of recording it'
+  );
+end;
+$$;
+
+-- =============================================================================
 -- Nothing was deleted.
 -- =============================================================================
 do $$

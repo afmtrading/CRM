@@ -63,9 +63,24 @@ export async function POST(request: Request) {
 
   const supabase = createSupabaseAdminClient()
 
+  /*
+   * Suspended accounts drop out before anything else happens.
+   *
+   * This runs with the service role, which bypasses RLS — so the enforcement
+   * that stops a suspended organization elsewhere in the app does not reach
+   * here, and without this an account switched off on Friday would spend the
+   * weekend mailing its customers. Anything in flight becomes 'paused', which
+   * keeps the outbox intact: nobody is half-mailed, and coming back is a person
+   * pressing resume rather than a surprise.
+   */
+  const { data: paused, error: pauseError } = await supabase.rpc('pause_suspended_campaigns')
+  if (pauseError) {
+    return NextResponse.json({ error: pauseError.message }, { status: 500 })
+  }
+
   // Anything whose time has come becomes 'sending' first, so this run picks it
   // up rather than the next one. Idempotent: a campaign already sending is not
-  // matched.
+  // matched — and a suspended account's is not started at all.
   const { data: started, error: startError } = await supabase.rpc('start_due_campaigns')
   if (startError) {
     return NextResponse.json({ error: startError.message }, { status: 500 })
@@ -130,6 +145,10 @@ export async function POST(request: Request) {
   const { data: settled } = await supabase.rpc('settle_campaigns')
 
   return NextResponse.json({
+    // Reported rather than silent: a run that pauses campaigns is a run where
+    // an account was switched off, and that should be visible in the cron log
+    // rather than inferred from a send count quietly dropping to zero.
+    paused: paused ?? 0,
     started: started ?? 0,
     claimed: batch.length,
     ...outcome,

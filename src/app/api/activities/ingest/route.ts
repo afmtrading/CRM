@@ -65,12 +65,31 @@ export async function POST(request: Request) {
 
   const { data: organization } = await supabase
     .from('organizations')
-    .select('id')
+    .select('id, status')
     .eq('slug', slug)
     .maybeSingle()
 
   if (!organization) {
     return NextResponse.json({ error: `Unknown organization "${slug}"` }, { status: 404 })
+  }
+
+  /*
+   * A suspended account accepts nothing. This route runs with the service role
+   * and so is not covered by the check in current_org_id() — without this, a
+   * connector would carry on filing activity against records nobody in that
+   * organization can open.
+   *
+   * 409 rather than 404: the organization exists and the caller's credentials
+   * are fine, so telling them it is unknown would send whoever runs the
+   * connector looking for a typo. It is also a state that resolves by itself if
+   * the account comes back, which is what makes a conflict the honest code —
+   * and a well-behaved connector will retry rather than discard its backlog.
+   */
+  if (organization.status !== 'active') {
+    return NextResponse.json(
+      { error: `Organization "${slug}" is not active; nothing was ingested.` },
+      { status: 409 },
+    )
   }
 
   try {
